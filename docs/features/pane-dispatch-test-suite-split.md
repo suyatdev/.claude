@@ -483,7 +483,7 @@ point at nothing, which is the failure mode that is expensive rather than loud.
 - [x] 2. Re-run both suites at the branch base and re-read the output. Record the counts here.
   Do not carry §Baseline forward on trust. **Done 2026-09-09** at `8a26ab5` — 139/0 and 18/0,
   both exit 0, recorded in §Baseline with emission counts.
-- [ ] 3. Write `panes/label-set.py` — the escape-aware **source** extractor of Decision 3,
+- [x] 3. Write `panes/label-set.py` — the escape-aware **source** extractor of Decision 3,
   taking file paths as `sys.argv` and printing one label per line to stdout. Capture
   `SOURCE-SET` before to `panes/.label-baseline` (untracked). Write the **`RUN-SET`** reader
   too: it reads a suite's stdout and strips **both** the `ok   — ` and `FAIL — ` prefixes.
@@ -491,9 +491,55 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   label; feed the run reader a stdout containing one `FAIL — ` line and confirm that label is
   still counted as having run; and run the source extractor against the naive `[^"]*` rule to
   confirm the 138-with-duplicate result it must not reproduce. Record all three outcomes.
-- [ ] 4. **Harden line 45** with a `touch` marker + `-newer`, matching `:140`. Own commit,
+  **Done 2026-09-09.** `panes/label-set.py` (116 lines), `panes/run-set.py` (138 lines),
+  baseline `panes/.label-baseline` = **139 labels, 139 distinct**. All three falsifications
+  were re-run by the main session rather than taken from the worker report:
+
+  | Falsification | Observed |
+  |---|---|
+  | delete `ok "prints RESULT_FILE"` from a copy | extractor drops to 138; the diff names exactly `prints RESULT_FILE` |
+  | feed the run reader a stdout with `FAIL — ` lines | those labels are still emitted as having run, detail suffix stripped |
+  | naive `ok "[^"]*"` rule over the real suite | **139 matches, 138 distinct, duplicate `--model \`** — the false finding reproduced exactly |
+
+  Two rules were decided while building it and are recorded in the files: `ok` is matched only
+  where it is not glued to a preceding identifier character, and the emitted label is the
+  **unescaped** value, so `SOURCE-SET` is directly diffable against `RUN-SET` (bash has already
+  removed the backslashes by the time `ok()` sees `$1`). The `FAIL — ` detail suffix is
+  stripped by a depth-counting scan from the end rather than a regex, because one real `bad()`
+  detail contains nested parentheses. Its stated limit: a bare label that genuinely ends in
+  `)` is indistinguishable from a label plus detail. Checked — no single-argument `bad()` call
+  in the suite has such a label today, so the limit is not live-wrong, only a future risk.
+
+  **⚠️ Task 3 found a hole in Decision 3 that Decision 3 does not name.** `SOURCE-SET` and
+  `RUN-SET` **cannot** be set-equal at the baseline, and the reason is not a defect in either
+  reader. One assertion interpolates a shell variable into its own label:
+
+  ```
+  :570  [ "$pc_panes" -le 2 ] && ok "panes max=2 bounds real panes: 6 workers opened $pc_panes pane(s), never more than 2" \
+  ```
+
+  `SOURCE-SET` necessarily reads the literal `$pc_panes`; `RUN-SET` reads the substituted `2`.
+  Measured at the branch base: the diff is exactly one line, that line, and nothing else —
+  139 vs 139, one substitution. Verified it is the **only** `ok` label in the file containing
+  a `$` (`grep` over the captured baseline: one hit, line 99 of `.label-baseline`).
+  Task 8 step (d) cannot be written as a bare set comparison until this is settled; the
+  resolution is recorded at §Task 8 resolution below.
+- [x] 4. **Harden line 45** with a `touch` marker + `-newer`, matching `:140`. Own commit,
   before any code moves. Re-run: still 139/0. Do **not** touch `:761` — it is safe by its
   content filter, and adding a marker there would be a change with no measured cause.
+  **Done 2026-09-09.** A `touch "$TMP/dispatch-marker"` immediately before the section
+  dispatch, and `-newer "$TMP/dispatch-marker"` on the `find`. Re-run: **139 passed, 0 failed**,
+  exit 0, and `SOURCE-SET` is byte-identical to the task-3 baseline. `:761` untouched.
+
+  **The marker was falsified, not assumed.** A scratch mutant moving the `touch` to *after*
+  the dispatch — so the launcher is no longer newer than the marker — runs **133 passed, 6
+  failed**, failing `launcher created`, `launcher mode 700`, `run dir mode 700`, `launcher runs
+  runner`, `launcher carries agent type` and `prompt copied into run dir`. That is what makes
+  the green run above mean something: the `-newer` clause is load-bearing, not decorative.
+  The mutant was written under a scratch name, run, and deleted; the tree is clean of it.
+
+  **Cost: +6 lines, and every line number in this card below `:41` moved.** 957 → 963. The
+  re-derived mapping is at §Post-task-4 mapping.
 - [x] 5. Create `panes/test-lib.sh` per the Decision 2 contract, including `tl_finish`, the
   `|| exit 1` on `MARKER_ROOT`, and the library-owned EXIT trap. Assert the fail-closed
   behaviour directly: source it from a directory outside any repository and confirm the caller
@@ -511,13 +557,31 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   The mutation row is what makes the first row mean something: it proves the probe can fail.
   The smoke deliberately forced `fail=1` so `tl_finish` would not write a real test marker —
   a grader must not manufacture the receipt it is grading. Neither suite is converted yet.
-- [ ] 6. Convert `panes/run-pane-agent.test.sh` to source it and end with `tl_finish`. Re-run:
+- [x] 6. Convert `panes/run-pane-agent.test.sh` to source it and end with `tl_finish`. Re-run:
   still 18/0. Assert that a caller omitting `tl_finish` writes no marker. This proves the
   skeleton under a second caller before the big file depends on it.
-- [ ] 7. Run the Decision 1 derivation script; all three asserts must pass. Then split
-  `dispatch-pane-agent.test.sh` into the six files by the published header mapping, each
+  **Done 2026-09-09.** 24 insertions, 30 deletions. Stdout captured before and after the edit:
+  the diff is **empty**, `18 passed, 0 failed`, exit 0. `bash -n` clean; `shellcheck` output
+  byte-identical to the pre-edit run once the house `# shellcheck source=/dev/null` directive
+  was added for the dynamically-resolved source path.
+
+  **The no-marker assertion was run, not reasoned.** `hooks/lib/write-test-marker.py` writes
+  under `hooks/state/test-markers/<encoded-subject>`, and is reached only from inside
+  `tl_finish`. A scratch suite that sources the library, calls `ok` once and then just ends
+  leaves that directory listing byte-identical, and prints no summary line.
+
+  **21 of 32 emitting call sites converted to `ok`/`bad`; 11 deliberately left as inline
+  `printf`.** The 11 all interpolate a dynamic detail into the FAIL branch, and `bad` renders
+  an *empty* detail differently from the original — it omits the parentheses where the
+  original always prints `()`. That divergence is invisible today because those branches do
+  not execute on a green run, which is exactly why converting them would be an unmeasured
+  change to an untested path. Leaving them inline is sound: `pass`/`fail` are plain shell
+  variables in the same shell, so an inline `printf` still counts correctly.
+- [ ] 7. Run the Decision 1 derivation script **in its §Post-task-4 mapping form** — the
+  pre-task-4 numbers in Decision 1 no longer resolve. All three asserts must pass. Then split
+  `dispatch-pane-agent.test.sh` into the six files by that mapping, each
   sourcing the library with its own domain fixtures. **Move the `read_policy` wrap case
-  (`:697-703`, the block headed `# NEW-A (pair pin)`) into `policy.test.sh`, not
+  (`:703-709` post-task-4, the block headed `# NEW-A (pair pin)`) into `policy.test.sh`, not
   `routing.test.sh`** — that move is what keeps `RP_DIR` and
   `call_read_policy` from crossing a file boundary. Delete the original. Then grep each new
   file for a variable it uses but never assigns; `set -u` makes any such crossing fatal, and
@@ -545,6 +609,66 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   violations. Re-read at task 13 and correct anything the split proved wrong.
 - [ ] 13. Observability judge (Opus) on the diff; act on findings.
 - [ ] 14. Open the PR. Update this card to `review` when it merges.
+
+## Post-task-4 mapping
+
+Task 4 inserted 6 lines inside the first section (`# --- dispatch happy path`, header `:38`),
+so **`:38` is unmoved and every later section start is +6**. Derived mechanically by zipping
+the ordered `# ---` header list of the pre-task-4 blob against the post-task-4 file — not by
+hand-arithmetic. 31 headers on both sides; the set of observed deltas is exactly `{0, 6}`.
+
+| File | Section headers (post-task-4) | Body |
+|---|---|---|
+| `dispatch` | 38, 66, 78, 157, 173, 742 | 107 |
+| `policy` | 89, 96, 181, 208, 234, 265, 285, 294, 301 **+ `:703-709`** | 162 |
+| `routing` | 322, 339, 370, 388, 404, 418, 441, 481, 539, 680 **− `:703-709`** | 412 |
+| `cleanup` | 102, 872 | 97 |
+| `scratch` | 774, 800, 826, 855 | 98 |
+| `subcommands` | 111, 133 | 46 |
+
+The two non-header section starts move with their neighbours: `768 → 774`, `866 → 872`, and
+the footer boundary `954 → 960`. Only `dispatch` changed size (101 → 107, the +6); the
+`policy` 154 / `routing` 420 pre-move figures and the ±8 wrap delta are unchanged, so the
+`162` / `412` finals are the same numbers Decision 1 published.
+
+Derivation, run against the post-task-4 file with all three asserts passing:
+
+```sh
+python3 - panes/dispatch-pane-agent.test.sh <<'EOF'
+import sys
+lines = open(sys.argv[1]).read().split("\n")
+starts = sorted([i for i,l in enumerate(lines,1) if l.startswith("# ---")] + [774, 872])
+END = 960
+span = {s: (starts[j+1] if j+1 < len(starts) else END) - s for j,s in enumerate(starts)}
+BUCKET = {
+ "dispatch":    [38,66,78,157,173,742],
+ "policy":      [89,96,181,208,234,265,285,294,301],
+ "routing":     [322,339,370,388,404,418,441,481,539,680],
+ "cleanup":     [102,872],
+ "scratch":     [774,800,826,855],
+ "subcommands": [111,133],
+}
+allsec = sorted(x for v in BUCKET.values() for x in v)
+assert allsec == starts, set(starts) ^ set(allsec)   # exactly-once partition
+tot = 0
+for k, secs in BUCKET.items():
+    n = sum(span[s] for s in secs); tot += n
+    print(f"{k:12s} {n:4d} body")
+print("body", tot, "+ 37 preamble + 4 footer =", tot+41)
+assert tot + 41 == 963
+WRAP = 709 - 703 + 1 + 1                  # 7 content + 1 separator blank
+print("after the wrap move -> policy", 154 + WRAP, " routing", 420 - WRAP)
+assert 154 + WRAP == 162 and 420 - WRAP == 412
+EOF
+```
+
+**The pre-task-4 numbers in Decision 1 are kept as written.** They were correct against the
+blob they were measured on and rewriting them would falsify the record of what was measured
+when. This section supersedes them for task 7 and nothing else.
+
+## Task 8 resolution — the one label that cannot be set-compared
+
+*(pending — see the ⚠️ under checklist task 3)*
 
 ## Not in scope
 

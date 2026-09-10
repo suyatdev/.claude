@@ -116,3 +116,7 @@ __pycache__/
 !/coding-memory/compliance-judge/
 /coding-memory/compliance-judge/*
 !/coding-memory/compliance-judge/verdicts.jsonl
+
+# Regenerable from panes/label-set.py; a capture of the pre-split assertion
+# label set, not a source of truth. See docs/features/pane-dispatch-test-suite-split.md
+/panes/.label-baseline

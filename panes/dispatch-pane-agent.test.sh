@@ -36,13 +36,19 @@ ok()   { printf 'ok   — %s\n' "$1"; pass=$((pass+1)); }
 bad()  { printf 'FAIL — %s%s\n' "$1" "${2:+ ($2)}"; fail=$((fail+1)); }
 
 # --- dispatch happy path
+# The launcher lookup below is unscoped `find | head -n1`. It is correct today
+# only because this is the first dispatch in the file, so exactly one launch.sh
+# exists. Splitting the suite reorders execution and would silently break that.
+# A marker touched immediately before the dispatch makes this run the only
+# newer match, the same guard the handoff section already uses.
+touch "$TMP/dispatch-marker"
 out=$(bash "$DISPATCH" dispatch observability-judge --prompt-file "$PROMPT" --result-file "$TMP/r.md" --cwd "$TMP" 2>&1)
 rc=$?
 [ "$rc" -eq 0 ] && ok "dispatch exits 0" || bad "dispatch exits 0" "rc=$rc: $out"
 printf '%s' "$out" | grep -q '^RESULT_FILE: ' && ok "prints RESULT_FILE" || bad "prints RESULT_FILE" "$out"
 printf '%s' "$out" | grep -q '^PANE_REF: surface:99' && ok "prints adapter ref" || bad "prints adapter ref" "$out"
 
-launcher=$(find "$PANE_STATE_DIR/runs" -name launch.sh | head -n 1)
+launcher=$(find "$PANE_STATE_DIR/runs" -name launch.sh -newer "$TMP/dispatch-marker" | head -n 1)
 [ -n "$launcher" ] && ok "launcher created" || bad "launcher created"
 perms=$(stat -f '%Lp' "$launcher")
 [ "$perms" = "700" ] && ok "launcher mode 700" || bad "launcher mode 700" "$perms"
