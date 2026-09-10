@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
 branch: refactor/pane-dispatch-test-suite-split
 ---
@@ -766,7 +766,12 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   card**) and the observation that 139 is ultimately
   the author's count. The second is now weaker than it was: the number is pinned in the runner,
   so a green run asserts it rather than merely reporting it.
-- [ ] 14. Open the PR. Update this card to `review` when it merges.
+- [x] 14. Open the PR. Update this card to `review` when it merges. **PR #99 opened and
+  merged 2026-09-10 as `60190b4`** (`bf3ddc5` confirmed an ancestor of `origin/main`).
+  The merge landed *after* the branch's final commit was pushed, so the phase flip could
+  not ride that branch; it lands here instead, on `chore/test-split-card-to-review` cut
+  from the post-merge `main`. That gap is why `origin/main` briefly advertised an
+  in-flight implementation card for finished work.
 
 ## Post-task-4 mapping
 
