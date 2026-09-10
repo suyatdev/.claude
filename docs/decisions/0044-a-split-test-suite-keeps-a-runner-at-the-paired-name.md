@@ -1,7 +1,7 @@
 # 0044 — A split test suite keeps a runner at the paired name, or the gate it feeds goes silent
 
 - **Status:** Accepted (2026-09-09).
-- **Context:** `panes/dispatch-pane-agent.test.sh` (now a 60-line runner), the six concern
+- **Context:** `panes/dispatch-pane-agent.test.sh` (now a 101-line runner), the six concern
   suites `panes/dispatch-pane-agent.{dispatch,policy,routing,cleanup,scratch,subcommands}.test.sh`,
   and `panes/test-lib.sh`. The pairing rules this decision turns on live in
   `hooks/lib/write-test-marker.py` (`PAIR_SUFFIXES`, `derive_subject`) and
@@ -50,7 +50,7 @@ stderr of — reports the symptom rather than the consequence.
 
 **A test suite that is split into concern files keeps a runner at the original, paired name.**
 
-`panes/dispatch-pane-agent.test.sh` is now a 60-line runner holding no assertions of its own.
+`panes/dispatch-pane-agent.test.sh` is now a 101-line runner holding no assertions of its own.
 It:
 
 - invokes the six by **explicit name**, not by glob — a glob cannot distinguish "this suite was
@@ -58,9 +58,11 @@ It:
 - **re-emits each child's assertion lines verbatim** on its own stdout, so the runner's output
   is the complete RUN-SET and the label-set proof works against it unchanged;
 - **counts those lines itself** rather than trusting a child's summary line;
-- **folds any child's non-zero exit into `fail`**, so `tl_finish` cannot write a marker for a
-  run in which a bucket file died partway — the "receipt for work not done" failure the split
-  exists to avoid;
+- **folds any child's non-zero exit into `fail`**, which catches a child that *crashes*;
+- **requires each child's `N passed, M failed` summary line as a completion sentinel, and
+  reconciles its numbers against the labels the runner counted itself** — this is what catches
+  a child that stops *quietly*, at `rc=0`, which the exit status alone does not (see the
+  Consequences bullet below, where it is measured);
 - emits a label **only on failure**, so a green run is exactly the 139 the proof expects.
 
 Verified after the change: the marker for `panes/dispatch-pane-agent.sh` is written again and
@@ -81,19 +83,38 @@ intact, which is worse than never having had it.
 
 ## Consequences
 
-- The 800-line problem is fixed: 445 / 195 / 140 / 131 / 130 / 79, plus the 60-line runner and
-  a 63-line shared `panes/test-lib.sh`. `routing` at 445 is over the 400 preferred and is a
+- The 800-line problem is fixed: 445 / 195 / 140 / 131 / 130 / 79, plus the 101-line runner and
+  a 66-line shared `panes/test-lib.sh`. `routing` at 445 is over the 400 preferred and is a
   stated residual on the card.
 - One more file exists than a naive split would produce, and adding a seventh concern file
   means editing the runner's `SUITES` list. That is deliberate: the edit is the point at which
   a human notices a suite was added or removed.
-- **Residual, stated rather than discovered later:** the six concern files remain orphan
-  suites that write no marker of their own, exactly as the three pre-existing orphan suites in
-  this repository do. The gate is armed through the runner, not through them. Editing one
-  concern file without touching the dispatcher does not by itself invalidate the marker — the
-  gate's guarantee has always been about the *subject's* bytes — but the narrowing is real and
-  is named here so nobody has to rediscover it.
-- The runner's own `bad` labels (`concern suite present: …`, `concern suite exited 0: …`) are
-  outside the 139-label set by construction, since they are emitted only when something has
-  already gone wrong. A green run's label count is therefore still exactly 139, which is what
-  the task-8 count check asserts.
+- **Residual, stated rather than discovered later, and corrected after the judge read it:**
+  the six concern files remain orphan suites that write no marker of their own, exactly as the
+  three pre-existing orphan suites in this repository do. The gate is armed through the runner,
+  not through them.
+
+  **This narrows the gate, and an earlier draft of this bullet understated how.** It claimed
+  the gate's guarantee "has always been about the subject's bytes". That is false as written:
+  `hooks/lib/decide-commit-gate.py` compares the **test** blob as well as the subject blob, and
+  blocks with `MSG_STALE_TEST` when it has moved. Before the split that check covered all 963
+  lines of assertions; it now covers only the 101-line runner, because the runner is the file
+  the marker names. Editing a concern file therefore no longer invalidates the receipt, where
+  before it would have. Six of the seven test files just left that check's scope. The
+  `X.<concern>.test.sh → X.sh` pairing rule declined above is what would restore it.
+- The runner's own `bad` labels are outside the 139-label set by construction, since every one
+  of them is emitted only when something has already gone wrong. A green run's label count is
+  therefore still exactly 139, which is what the task-8 count check asserts.
+
+- **A non-zero child exit was not sufficient, and the judge measured it.** The first cut of the
+  runner folded only `rc` into `fail`. That catches the crash shapes and misses the quiet one:
+  a child ending normally before it reaches `tl_finish` — an early `exit 0`, or a truncated
+  file — returns 0, leaves its partial green assertions on stdout, and is indistinguishable
+  from a finished suite. Measured on the real runner against a mutated concern file, both
+  shapes reported `130 passed, 0 failed` at `rc=0` and would have written the marker for a run
+  that silently lost 9 assertions — reintroducing, one level up, the exact "receipt for work
+  not done" failure `panes/test-lib.sh` exists to prevent. The runner now requires each child's
+  `N passed, M failed` line as a **completion sentinel** — `tl_finish` is the child's last
+  statement, so the line is present if and only if the child reached the end — and reconciles
+  its numbers against the labels the runner counted itself. Re-measured after the fix: all
+  three shapes are caught at `rc=1`, and the unmutated baseline is still `139 passed, 0 failed`.

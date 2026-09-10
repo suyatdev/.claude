@@ -607,7 +607,37 @@ point at nothing, which is the failure mode that is expensive rather than loud.
 - [x] 12. File `docs/features/oversized-source-files.md`. **Done 2026-09-07 during planning**,
   so the measurement is not lost if this card stalls. Judge round 1 passed it clean, 0
   violations. Re-read at task 13 and correct anything the split proved wrong.
-- [ ] 13. Observability judge (Opus) on the diff; act on findings.
+- [x] 13. Observability judge (Opus) on the diff; act on findings. **Round 1 done 2026-09-09,
+  `risk=low confidence=medium`, four findings acted on, none waived.** The judge independently
+  re-derived the 139-label equality, the six file sizes, and the pairing claim, and then found
+  what the card had missed.
+
+  | Finding | Action |
+  |---|---|
+  | the runner catches a crashing child but not a quiet one — an early `exit 0` or a truncated file exits 0 and the marker is written for a partial run | **fixed** — completion sentinel + count reconciliation; falsified against all three shapes |
+  | the ADR and card both claim the gate "has always been about the subject's bytes"; it compares the test blob too (`MSG_STALE_TEST`) | **fixed** — both sentences corrected, and the real narrowing named |
+  | `TMP="$(mktemp -d)"` in `test-lib.sh` has no `\|\| exit 1` while its sibling `MARKER_ROOT` was hardened for that exact reason | **fixed** |
+  | a concern file added to `panes/` but never added to `SUITES` would silently never run | **fixed** — glob-superset drift check, falsified with a stray file |
+
+  **The quiet-exit finding was reproduced before being fixed, on the real runner:**
+
+  | Mutated child | before the fix | after |
+  |---|---|---|
+  | early `exit 0` partway | `rc=0`, `130 passed, 0 failed` ← green, 9 assertions lost | `rc=1`, 1 failed |
+  | truncated before `tl_finish` | `rc=0`, `130 passed, 0 failed` ← green | `rc=1`, 1 failed |
+  | crash under `set -u` | `rc=1`, 1 failed (already caught) | `rc=1`, 2 failed |
+  | unmutated baseline | `139 passed, 0 failed` | `139 passed, 0 failed` |
+
+  The two new checks were each falsified on their own: a stray `dispatch-pane-agent.bogus.test.sh`
+  is reported by name, and a child emitting a label it does not count is caught as
+  `child reported 11/0, runner counted 12/0`.
+
+  **Not acted on, with reason:** the judge also noted that 139 is pinned in no executable
+  artifact, so a suite that legitimately shrinks to 138 reports green. True, and deliberately
+  left — the pre-split suite had no count pin either, so this is not a regression, and hard-
+  coding 139 inside the runner would make every legitimate new assertion an edit to it. The
+  completion sentinel covers the loss-by-truncation case, which is the one the split created.
+  Task 8's count check remains the place that number is asserted.
 - [ ] 14. Open the PR. Update this card to `review` when it merges.
 
 ## Post-task-4 mapping
@@ -728,8 +758,8 @@ Per-suite emission: dispatch 28, policy 31, routing 47, cleanup 8, scratch 14, s
 | 131 | `panes/dispatch-pane-agent.scratch.test.sh` |
 | 130 | `panes/dispatch-pane-agent.cleanup.test.sh` |
 | 79 | `panes/dispatch-pane-agent.subcommands.test.sh` |
-| 63 | `panes/test-lib.sh` |
-| 60 | `panes/dispatch-pane-agent.test.sh` (runner) |
+| 66 | `panes/test-lib.sh` |
+| 101 | `panes/dispatch-pane-agent.test.sh` (runner) |
 
 `routing` landed at **445**, not the 453 Decision 1 projected. Decision 1 already flagged its
 `+41 with skeleton` column as an upper bound that assumed each file re-carries the whole
@@ -762,21 +792,29 @@ a 545-line production script, and nothing would have reported it — a guard tha
 guarding is indistinguishable from one that is working.
 
 **Closed by the user decision of 2026-09-09: keep a runner at the original name.**
-`panes/dispatch-pane-agent.test.sh` is now a **60-line runner** that invokes the six by
+`panes/dispatch-pane-agent.test.sh` is now a **101-line runner** that invokes the six by
 explicit name, re-emits their assertion lines verbatim as its own stdout, counts them itself
-rather than trusting a child summary line, and folds any child's non-zero exit into `fail` so
-`tl_finish` cannot write a marker for a partial run. Verified: the marker for
+rather than trusting a child summary line, folds any child's non-zero exit into `fail`, and —
+after the judge showed the exit status alone was not enough — **requires each child's summary
+line as a completion sentinel and reconciles its counts**, so `tl_finish` cannot write a marker
+for a partial run whether the child crashed or stopped quietly. Verified: the marker for
 `panes/dispatch-pane-agent.sh` is written again, and its `test.blob` is the runner's blob.
 
 The alternative — teaching `write-test-marker.py` and `decide-commit-gate.py` an
 `X.<concern>.test.sh → X.sh` rule — was considered and declined for this branch: it edits two
 Tier-1 scripts every commit in the repo depends on, which deserves its own card and review.
 
-**Residual, stated:** the six concern files remain orphan suites that write no marker of their
-own, exactly as the three pre-existing orphan suites do. The gate is armed through the runner,
-not through them. Editing one concern file without editing the dispatcher therefore does not
-by itself invalidate the marker — the gate's guarantee is about the *subject's* bytes, which
-is what it has always been, but the narrowing is worth naming rather than discovering later.
+**Residual, stated — and corrected after the judge read it.** The six concern files remain
+orphan suites that write no marker of their own, exactly as the three pre-existing orphan
+suites do. The gate is armed through the runner, not through them.
+
+The first version of this paragraph said the gate's guarantee "is about the *subject's* bytes,
+which is what it has always been". **That is wrong.** `hooks/lib/decide-commit-gate.py`
+compares the **test** blob as well, and blocks with `MSG_STALE_TEST` when it has moved. Before
+the split that check covered all 963 lines of assertions; it now covers only the 101-line
+runner. Editing a concern file no longer invalidates the receipt, where before it would have —
+six of seven test files have left that check's scope. Recorded in ADR 0044 as the cost of
+declining the pairing-rule change.
 
 **Task 11 — references.** One live reference outside documentation:
 `panes/dispatch-pane-agent.sh:225` cited the deleted file by name for the "three panes lost to

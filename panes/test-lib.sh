@@ -23,7 +23,10 @@ MARKER_SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 # calling script's process outright, preserving today's fail-closed behaviour.
 MARKER_ROOT="$(git rev-parse --show-toplevel)" || exit 1
 
-TMP="$(mktemp -d)"
+# `|| exit 1` for the same fail-closed reason as MARKER_ROOT above: without
+# it a failed mktemp leaves TMP empty, every "$TMP/..." path resolves to /,
+# and the suite runs on against the real filesystem.
+TMP="$(mktemp -d)" || exit 1
 # This library creates TMP, so it — and only it — owns the cleanup trap. A
 # second `trap ... EXIT` installed by a caller would replace this one rather
 # than chain with it, leaking $TMP. Callers must not trap EXIT themselves.
