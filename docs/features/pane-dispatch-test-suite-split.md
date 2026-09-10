@@ -308,7 +308,8 @@ method delivers:
 | A body edited to pass unconditionally | **no** |
 | An assertion that goes **vacuous** after the reorder | **no**, and it reports green |
 | One of the six files never invoked by the runner | **no** by `SOURCE-SET`; **yes** by `RUN-SET` |
-| A label **substituted** for another — one deleted, another duplicated in its place | **no**, and this is where the class now sits. 139 emitted, 138 distinct: the count check passes, `RUN-SET` vs `SOURCE-SET` passes because both sides changed together, and only a comparison against the **pre-split** `panes/.label-baseline` catches it. That file is **untracked and gitignored**, so from a clean clone nobody but the author can re-run that comparison. Measured by the round-3 judge. |
+| A label **substituted** for another — one deleted, another duplicated in its place | **no.** 139 emitted, 138 distinct: the count check passes, `RUN-SET` vs `SOURCE-SET` passes because both sides changed together, and only a comparison against the **pre-split** `panes/.label-baseline` catches it. That file is **untracked and gitignored**, so from a clean clone nobody but the author can re-run that comparison. Measured by the round-3 judge. |
+| An assertion **replaced by a different one inside a single suite** | **no, and this is where the class now sits.** That suite still emits its pinned count, the total is still 139, the labels are still 139 distinct, and no duplicate is left behind for anything to notice. **A count cannot see this — it is a count.** The only check that catches it is the `--before/--after` diff against the pre-split `panes/.label-baseline`, which is untracked and gitignored, so it cannot be re-run from a clean clone. Measured by the round-5 judge. It was equally invisible before this branch, so it is a standing limit of the method rather than something the split introduced. |
 | Two suites **cancelling each other** — an assertion deleted from one and added to another | **closed as of round 4, and only by the per-suite pins.** 139 emitted, 139 distinct: it defeats set equality, the distinct count, *and* the 139 total, all three, leaving no duplicate behind for any of them to notice. `expected_labels_for` pins 28/31/47/8/14/11 individually, which is what sees it. Falsified: routing −1 and policy +1 is reported as two failures naming both sides. |
 | A **duplicate** label introduced by the split | **no** — set equality is blind in the opposite direction from the count it warns against: copy-and-delete yields 140 emissions of 139 distinct labels and passes green. Task 8 therefore asserts the emitted **count** is 139 as well as the set. |
 
@@ -746,6 +747,14 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   round-3 concern #9 was itself missing from the accounting table, the second round running
   that an item went absent from the table whose purpose is to stop items going absent.
 
+  **Round-4 concern #7, recorded here rather than dropped:** the phrase "all eight are fixed"
+  introduces task 13b while one of those eight rows was in fact completed a commit later, in
+  `7a3292f`, not in `4db65eb`. The table's own "partly fixed in `f69a327`, completed in round 3"
+  row says so; the summary sentence above it did not. This is **the third round running that an
+  item went missing from the accounting table**, and the second running that the missing item
+  was itself about the table being wrong — which is worth naming as a pattern rather than
+  fixing quietly for a third time.
+
   **Heeded, not "tidied":** the judge warned that moving the `child_total` accumulation above
   the `continue` for a missing suite would make one of the two resulting messages false. It was
   left where it is.
@@ -945,6 +954,34 @@ unedited**: they record what was true when written, and rewriting them would fal
 measurements they exist to preserve. `docs/features/oversized-source-files.md` gets a
 resolution note appended below its dated table for the same reason.
 
+
+### Observability judge round 5 — `8d19d5f`, `risk=low confidence=high`, nothing blocking
+
+Thirteen probes on a synthetic replica. Every placement question on the round-4 fix checked
+out: the `continue` path correctly skips the per-suite check so a missing suite yields its own
+message plus the total and not a spurious third; the check sits above the crash branch so a
+partial run's labels are still compared; and the `-1` unknown-suite path fires exactly when a
+new file has no pin. **Every message in every probe was true.**
+
+**It found where the class finally rests, and it is not closable here.** An assertion replaced
+by a *different* one **inside one suite** leaves that suite's pinned count intact, the total at
+139, the labels 139 distinct, and no duplicate behind. A per-suite count cannot see it, because
+it is a count. Two things keep it off the blocking list: it was equally invisible before this
+branch — not a regression — and `8d19d5f`'s own wording is correctly scoped to the cross-suite
+case. What was wrong was the **table**, which marked the 139/139 shape closed. Fixed above.
+
+**This is the first round whose finding was neither introduced by the previous fix nor closable
+inside this card.** Rounds 1–4 each found a defect this branch created or could remove; round 5
+found a standing limit of counting. That is the convergence signal, and it is why the PR was
+opened against this verdict rather than starting a sixth cycle.
+
+**Carried as follow-ups, not done here:**
+
+- 139 is now hardcoded twice — as the total, and as six pins that sum to it — with nothing
+  asserting the two agree.
+- **`panes/run-pane-agent.test.sh` has no pin and no runner.** Its marker entails the `0` in
+  `18 passed, 0 failed`; the `18` is reported, not asserted. It is the same shape this branch
+  exists to defend against, and this branch converted that suite without giving it the defence.
 
 ## Not in scope
 
