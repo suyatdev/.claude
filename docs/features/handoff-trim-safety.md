@@ -169,9 +169,35 @@ that ignores them, in two repos measured as not covering them today.
       back to the environment variable and then to `nosession`, so every session in one repo
       would share one snapshot — the exact C2 blinding the per-session filename exists to
       prevent. Degraded rather than silent: one shared snapshot still beats none.
-- [ ] 5. Stale-snapshot reaper in `slim-session-start.sh`, running **above every early
+- [x] 5. Stale-snapshot reaper in `slim-session-start.sh`, running **above every early
       exit** in that function, and deleting a snapshot only after confirming the archive append
       succeeded.
+      **Done 2026-09-10.** `reap_stale_snapshots` takes `REPO_ROOT` directly and never reads
+      `state_file`, so it still reaches the orphaned-snapshot case — notepad gone, snapshot the
+      only surviving copy — that every early exit below it would otherwise skip (finding C6).
+      Measured rather than reported: `slim-session-start.test.sh` reads **48/48**, which is the
+      29 assertions standing when task 4 closed plus 19 new ones (fourteen scenario, five
+      falsifier); both untouched siblings still read what they read before —
+      `handoff-archive.test.sh` **79/79** and `live-handoff.test.sh` **31/31**, the whole
+      evidence that the library and the per-turn snapshotter were not disturbed.
+      Two falsifiers, each built from a **copy** of the real hook and each asserting its own
+      mutation changed something first. **A** moves the reaper call below the `session-state.md`
+      early exit and confirms the orphaned snapshot then goes unarchived — the whole evidence
+      that the ordering assertion tests ordering rather than mere presence; it also asserts the
+      mutant still holds exactly one call, so a mutation that deleted the call instead would be
+      caught rather than counted as proof. **B** makes the delete unconditional and confirms the
+      snapshot is then destroyed by the same append failure the real hook survives. B needed its
+      own fixture: the read-only-`.claude` scenario above blocks the mutant's `rm` too, since
+      removing a file needs write permission on the *directory*, so B leaves `.claude` writable
+      and makes only the archive file unwritable.
+      ⚠️ **Two stated limits.** The reaper reads mtime with BSD `stat -f %m`, the same call the
+      hook's existing staleness check already uses (`slim-session-start.sh:104`) rather than a
+      new portability debt; where that call fails, both go blind together and the reaper's
+      digit check skips the file, so the failure direction is "nothing is reaped", never
+      "something is deleted unarchived". And the append-failure line is this hook's **one**
+      exception to its silent-on-every-failure contract, now recorded in the file header:
+      staying silent there would delete the last copy of removed text with no record anywhere,
+      this card's own headline disaster reproduced by its own fix.
 - [ ] 6. Raise **both caps in one commit**: `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) with the
       oversize body-drop branch in `slim-session-start.sh` replaced by truncate-and-say, **and** the
       write caps to 150/120, 170/140, 190/160 in `live-handoff.sh:40-49` and

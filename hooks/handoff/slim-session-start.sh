@@ -10,11 +10,19 @@
 # context.md, task-history.md, recent-prompts.md, or the retired CODING_MEMORY.md. Models on
 # memsearch-nudge.sh: silent on every failure, never delays or breaks a session
 # start. Design, contract and scenarios: docs/features/memory-system-split.md.
+#
+# One deliberate exception to "silent on every failure" above: the stale-snapshot
+# reaper below (reap_stale_snapshots) can print one line to stdout when it cannot
+# confirm that a snapshot it is about to delete was actually archived first. Staying
+# silent there would delete the last surviving copy of removed notepad text with no
+# record anywhere -- this card's own headline disaster, reproduced by its own fix.
+# Reaper design and scenarios: docs/features/handoff-trim-safety.spec.md.
 
 set -u
 
 MAX_BYTES="${SLIM_HANDOFF_MAX_BYTES:-8192}"
 STALE_HOURS="${SLIM_HANDOFF_STALE_HOURS:-24}"
+REAP_AFTER_HOURS="${SLIM_HANDOFF_REAP_AFTER_HOURS:-24}"
 
 # MARKER_PATTERN, TAG_BYTES, URANDOM_SRC, sanitize_line() and gen_tag() live in
 # lib/handoff-archive.sh, resolved relative to THIS file (${BASH_SOURCE[0]}'s
@@ -32,6 +40,47 @@ else
   exit 0
 fi
 
+# reap_stale_snapshots REPO_ROOT — archives and deletes every per-session pretrim
+# snapshot under REPO_ROOT/.claude older than REAP_AFTER_HOURS (spec:
+# snapshot.reap_after_hours). Called above every early exit in main() (finding C6):
+# it takes REPO_ROOT directly and never reads state_file, so it still reaches an
+# orphaned snapshot when session-state.md itself is gone.
+#
+# A snapshot is deleted ONLY after file_removed_block() confirms the archive (or
+# quarantine) append actually landed on disk -- deleting first would leave the same
+# "text removed, captured nowhere" hole this card exists to close. An append
+# failure is therefore left in place and printed rather than swallowed; it is the
+# one case exempt from this hook's silent-on-every-failure contract.
+reap_stale_snapshots() {
+  local repo_root="$1" claude_dir archive_path quarantine_path
+  local snap base session_id mtime_epoch now_epoch age_hours
+
+  claude_dir="$repo_root/.claude"
+  archive_path="$claude_dir/session-state.archive.md"
+  quarantine_path="$claude_dir/session-state.quarantine.md"
+
+  now_epoch="$(date +%s)" || return 0
+
+  for snap in "$claude_dir"/session-state.pretrim.*.md; do
+    [ -f "$snap" ] && [ -r "$snap" ] || continue
+
+    mtime_epoch="$(stat -f %m "$snap" 2>/dev/null)"
+    case "$mtime_epoch" in ''|*[!0-9]*) continue ;; esac
+    age_hours=$(( (now_epoch - mtime_epoch) / 3600 ))
+    [ "$age_hours" -lt "$REAP_AFTER_HOURS" ] && continue
+
+    base="$(basename -- "$snap")"
+    session_id="${base#session-state.pretrim.}"
+    session_id="${session_id%.md}"
+
+    if file_removed_block "$archive_path" "$quarantine_path" "$snap" "$session_id"; then
+      rm -f -- "$snap" 2>/dev/null
+    else
+      printf 'handoff: stale snapshot %s could not be archived; left in place\n' "$base"
+    fi
+  done
+}
+
 main() {
   [ -n "${CLAUDE_PANE_AGENT:-}" ] && exit 0
 
@@ -40,6 +89,8 @@ main() {
 
   repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
   state_file="$repo_root/.claude/session-state.md"
+
+  reap_stale_snapshots "$repo_root"
 
   [ -f "$state_file" ] && [ -r "$state_file" ] || exit 0
 
