@@ -494,10 +494,23 @@ point at nothing, which is the failure mode that is expensive rather than loud.
 - [ ] 4. **Harden line 45** with a `touch` marker + `-newer`, matching `:140`. Own commit,
   before any code moves. Re-run: still 139/0. Do **not** touch `:761` — it is safe by its
   content filter, and adding a marker there would be a change with no measured cause.
-- [ ] 5. Create `panes/test-lib.sh` per the Decision 2 contract, including `tl_finish`, the
+- [x] 5. Create `panes/test-lib.sh` per the Decision 2 contract, including `tl_finish`, the
   `|| exit 1` on `MARKER_ROOT`, and the library-owned EXIT trap. Assert the fail-closed
   behaviour directly: source it from a directory outside any repository and confirm the caller
   **stops** rather than continuing with `MARKER_ROOT` unset. No behavior change to any suite yet.
+  **Done 2026-09-09**, 63 lines. Measured, and re-run independently by the main session rather
+  than taken from the worker's report:
+
+  | Probe | Observed |
+  |---|---|
+  | real library sourced from a non-repo dir | the line after `source` never printed; caller exit **1** |
+  | same probe, library mutated to `\|\| return 1` | the line after `source` **did** print; caller exit **0** |
+  | `ok`/`bad`/`tl_finish` smoke inside the repo | `ok   — `, `FAIL — <label> (<detail>)`, `\n2 passed, 1 failed`; `tl_finish` returned 1 |
+  | `bash -n` / `shellcheck` | both clean (`shellcheck shell=bash` directive added, no shebang — the file is sourced) |
+
+  The mutation row is what makes the first row mean something: it proves the probe can fail.
+  The smoke deliberately forced `fail=1` so `tl_finish` would not write a real test marker —
+  a grader must not manufacture the receipt it is grading. Neither suite is converted yet.
 - [ ] 6. Convert `panes/run-pane-agent.test.sh` to source it and end with `tl_finish`. Re-run:
   still 18/0. Assert that a caller omitting `tl_finish` writes no marker. This proves the
   skeleton under a second caller before the big file depends on it.
