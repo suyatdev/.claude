@@ -265,7 +265,27 @@ that ignores them, in two repos measured as not covering them today.
       **both** the mtime comparison **and the last line's decision token** — mtime alone cannot
       see `unprotected`, because a guard heartbeating it every turn keeps the log looking
       fresh while nothing is protected.
-- [ ] 14. `pre-compact.sh` injects `session-state.md` first (D7).
+- [x] 14. `pre-compact.sh` injects `session-state.md` first (D7).
+      **Done 2026-09-10.** New suite `hooks/handoff/pre-compact.test.sh`, **20/20**, written
+      before the hook changed and confirmed RED at **12/20** first — the eight failures were
+      exactly the notepad assertions, while the pre-existing three-file behaviour and all
+      three falsifiers stayed green throughout, so the suite was measured against both
+      states rather than only the one it was written for.
+      Two things beyond the one-line task, both deliberate. The notepad is read by `cat`
+      itself rather than behind a `-r` probe, and an unreadable notepad is **named** in the
+      output instead of skipped. Measured on a mutant with that guard removed: a bare `cat`
+      under `set -euo pipefail` exits 1 and takes `context.md` and the other two files down
+      with it, so the vendored pattern would have turned one unreadable notepad into total
+      loss of all four files — this card's own headline failure, reproduced by the fix for
+      it. That mutation is also the receipt that the two unreadable-notepad assertions
+      discriminate at all: **both of them pass while the suite is red**, because a notepad
+      that is never read is never unreadable, and a green run alone would not have shown it.
+      Not done, and recorded rather than silently decided: this hook emits all four files
+      **unsanitized**, exactly as the vendored original did. `slim-session-start.sh`
+      sanitizes the notepad it reads, so the two read paths now disagree. Nothing in D7 or
+      in any scenario asks this path to sanitize, and sanitizing one file of the four would
+      be incoherent, so it is left as an open question for a later card — not a gap this
+      task closed, and not a decision this task was scoped to make.
 - [x] 15. memsearch: `archive_roots`/`archive_pattern` via `Path.rglob`, zero-match reporting,
       `session-state.quarantine.md` excluded by name, `_doc_source_type` widened off the
       retired `CODING_MEMORY.md`, and a `--reclassify` run so `archive_doc` becomes a usable
