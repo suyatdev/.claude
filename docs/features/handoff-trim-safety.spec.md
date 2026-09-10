@@ -1051,7 +1051,7 @@ that ignores them, in two repos measured as not covering them today.
       health signal.
 - [ ] 16. Document the `[KEEP]` convention in `skills/managing-session-memory/SKILL.md`, and
       tag the sections that need protecting in this repo notepad as the first real use.
-- [ ] 17. ADR under `docs/decisions/` for the two structural decisions: D11 (an append-only
+- [x] 17. ADR under `docs/decisions/` for the two structural decisions: D11 (an append-only
       store that rotates and is never deleted) and D12 (that store being permanent, gitignored
       and machine-local). `rules/gates.md` requires an ADR for structural decisions.
 - [ ] 18. Write the quarantine purge procedure into `skills/managing-session-memory/SKILL.md`:
