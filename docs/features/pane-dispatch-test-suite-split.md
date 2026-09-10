@@ -309,6 +309,7 @@ method delivers:
 | An assertion that goes **vacuous** after the reorder | **no**, and it reports green |
 | One of the six files never invoked by the runner | **no** by `SOURCE-SET`; **yes** by `RUN-SET` |
 | A label **substituted** for another — one deleted, another duplicated in its place | **no**, and this is where the class now sits. 139 emitted, 138 distinct: the count check passes, `RUN-SET` vs `SOURCE-SET` passes because both sides changed together, and only a comparison against the **pre-split** `panes/.label-baseline` catches it. That file is **untracked and gitignored**, so from a clean clone nobody but the author can re-run that comparison. Measured by the round-3 judge. |
+| Two suites **cancelling each other** — an assertion deleted from one and added to another | **closed as of round 4, and only by the per-suite pins.** 139 emitted, 139 distinct: it defeats set equality, the distinct count, *and* the 139 total, all three, leaving no duplicate behind for any of them to notice. `expected_labels_for` pins 28/31/47/8/14/11 individually, which is what sees it. Falsified: routing −1 and policy +1 is reported as two failures naming both sides. |
 | A **duplicate** label introduced by the split | **no** — set equality is blind in the opposite direction from the count it warns against: copy-and-delete yields 140 emissions of 139 distinct labels and passes green. Task 8 therefore asserts the emitted **count** is 139 as well as the set. |
 
 The third and fifth rows are not hypothetical: **vacuity is the exact hazard this card
@@ -696,6 +697,7 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   | "Six items were actionable" sat above a table of eight rows | **fixed** — the third round running where a count understated its own evidence, and the second time inside the paragraph correcting the previous one |
   | one disposition pointed at a "pairing-rule card" that does not exist | **fixed** — the follow-up is named as unscheduled, with no card |
   | the pin counts *how many*, never *which* — a substituted label gives 139 emitted, 138 distinct, and passes | **documented, not fixed** — added to the blind-spot table with the reason it cannot be closed here |
+  | round-2 concern #1, the spoofable sentinel, had no row here and no mention in the left-open paragraph | **fixed** — it is recorded in the ADR's Decision bullet as closed by content rather than by construction, and named here so the accounting is complete. Round 4 caught this row being missing, which is the second round running that an item went absent from the table that exists to stop items going absent. |
   | `panes/.label-baseline` is gitignored, so the one check that catches a substitution cannot be re-run from a clean clone | **documented** in the same row |
 
   **The introduced defect was reproduced before being fixed**, and the mirror direction matters
@@ -712,7 +714,45 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   wrong-message defect rather than a safety one — but the third row is a check going quiet
   under load, which is the failure this card keeps being about.
 
-  **Left open, stated:** round 2's own concerns 10 and 11 — the `MSG_STALE_TEST` narrowing
+- [x] 13d. **Observability judge round 4 (Opus) on `7a3292f` — `risk=low confidence=high`,
+  no dimension `fail`.** Eleven probes against a synthetic replica; it could not construct a
+  case where the total's message is false, and it confirmed two cases came out *better* than
+  `7a3292f` claimed — a failing assertion no longer produces a bogus second failure, and an
+  empty suite list now reports `emitted 0` rather than `emitted 6`.
+
+  **It found the fourth defect, and it is the sharpest one on the branch.** The total is blind
+  to **two suites cancelling each other out**: delete routing's 47th assertion, add one to
+  policy, and the run is 139 emitted, 139 distinct, green, marker written, one assertion gone.
+  That is strictly worse than the substitution case round 3 found, which at least left a
+  duplicate behind for a distinct-count to notice. This leaves nothing.
+
+  The judge's own observation was that the fix was already computed and discarded: the runner
+  tallies each suite separately for its stderr line, and then asserts only the sum. So
+  `expected_labels_for` now pins **28 / 31 / 47 / 8 / 14 / 11** individually. Falsified —
+  routing −1 with policy +1 is now two failures naming both sides:
+
+  ```
+  FAIL — concern suite emitted its expected labels: policy (emitted 32, expected 31)
+  FAIL — concern suite emitted its expected labels: routing (emitted 46, expected 47)
+  ```
+
+  The 139 total is **kept alongside** them rather than replaced: a per-suite check runs only
+  for a suite the loop actually reached, so a suite whose file is missing contributes nothing
+  to compare, and the total is what still notices that shortfall.
+
+  Two smaller items, both fixed: the `child_total` comment block had been wedged between the
+  `SUITES` paragraph and the one beginning "The mirror of that", leaving "that" pointing at the
+  wrong antecedent — the fourth commit running on this branch to leave a stale referent — and
+  round-3 concern #9 was itself missing from the accounting table, the second round running
+  that an item went absent from the table whose purpose is to stop items going absent.
+
+  **Heeded, not "tidied":** the judge warned that moving the `child_total` accumulation above
+  the `continue` for a missing suite would make one of the two resulting messages false. It was
+  left where it is.
+
+  **Left open, stated:** `run-pane-agent`'s `18/0` — the marker proves the **0**; the **18** is
+  unpinned, and the two halves should not be read as equally verified. Plus round 2's concerns
+  10 and 11 — the `MSG_STALE_TEST` narrowing
   (recorded in ADR 0044 as declined for this branch; **the follow-up is unscheduled and has no
   card**) and the observation that 139 is ultimately
   the author's count. The second is now weaker than it was: the number is pinned in the runner,
@@ -838,7 +878,7 @@ Per-suite emission: dispatch 28, policy 31, routing 47, cleanup 8, scratch 14, s
 | 130 | `panes/dispatch-pane-agent.cleanup.test.sh` |
 | 79 | `panes/dispatch-pane-agent.subcommands.test.sh` |
 | 66 | `panes/test-lib.sh` |
-| 142 | `panes/dispatch-pane-agent.test.sh` (runner) |
+| 176 | `panes/dispatch-pane-agent.test.sh` (runner) |
 
 `routing` landed at **445**, not the 453 Decision 1 projected. Decision 1 already flagged its
 `+41 with skeleton` column as an upper bound that assumed each file re-carries the whole
@@ -871,7 +911,7 @@ a 618-line production script, and nothing would have reported it — a guard tha
 guarding is indistinguishable from one that is working.
 
 **Closed by the user decision of 2026-09-09: keep a runner at the original name.**
-`panes/dispatch-pane-agent.test.sh` is now a **142-line runner** that invokes the six by
+`panes/dispatch-pane-agent.test.sh` is now a **176-line runner** that invokes the six by
 explicit name, re-emits their assertion lines verbatim as its own stdout, counts them itself
 rather than trusting a child summary line, folds any child's non-zero exit into `fail`, and —
 after the judge showed the exit status alone was not enough — **requires each child's summary
@@ -890,7 +930,7 @@ suites do. The gate is armed through the runner, not through them.
 The first version of this paragraph said the gate's guarantee "is about the *subject's* bytes,
 which is what it has always been". **That is wrong.** `hooks/lib/decide-commit-gate.py`
 compares the **test** blob as well, and blocks with `MSG_STALE_TEST` when it has moved. Before
-the split that check covered all 963 lines of assertions; it now covers only the 142-line
+the split that check covered all 963 lines of assertions; it now covers only the 176-line
 runner. Editing a concern file no longer invalidates the receipt, where before it would have —
 six of seven test files have left that check's scope. Recorded in ADR 0044 as the cost of
 declining the pairing-rule change.

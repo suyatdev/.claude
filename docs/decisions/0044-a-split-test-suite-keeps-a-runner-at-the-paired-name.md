@@ -1,7 +1,7 @@
 # 0044 — A split test suite keeps a runner at the paired name, or the gate it feeds goes silent
 
 - **Status:** Accepted (2026-09-09).
-- **Context:** `panes/dispatch-pane-agent.test.sh` (now a 142-line runner), the six concern
+- **Context:** `panes/dispatch-pane-agent.test.sh` (now a 176-line runner), the six concern
   suites `panes/dispatch-pane-agent.{dispatch,policy,routing,cleanup,scratch,subcommands}.test.sh`,
   and `panes/test-lib.sh`. The pairing rules this decision turns on live in
   `hooks/lib/write-test-marker.py` (`PAIR_SUFFIXES`, `derive_subject`) and
@@ -50,7 +50,7 @@ stderr of — reports the symptom rather than the consequence.
 
 **A test suite that is split into concern files keeps a runner at the original, paired name.**
 
-`panes/dispatch-pane-agent.test.sh` is now a 142-line runner holding no assertions of its own.
+`panes/dispatch-pane-agent.test.sh` is now a 176-line runner holding no assertions of its own.
 It:
 
 - invokes the six by **explicit name**, not by glob — a glob cannot distinguish "this suite was
@@ -67,8 +67,12 @@ It:
   itself and then exit early. That route is closed **by content, not by construction**: the
   grep reads raw stdout, so an assertion label cannot produce the line, and no label in the six
   files can. Worth knowing before someone adds one that could;
-- **asserts the emitted total against `EXPECTED_LABELS`**, because the sentinel proves a child
-  *reached* its end, never that it *ran its assertions on the way there* (see Consequences);
+- **asserts each suite's own label count, and the total**, because the sentinel proves a child
+  *reached* its end, never that it *ran its assertions on the way there*. Per suite as well as
+  in total, because a total is blind to two suites cancelling each other out — an assertion
+  moved from one file to another leaves the total, the distinct count and the set comparison
+  all three unchanged, with no duplicate left behind for any of them to notice (see
+  Consequences);
 - emits a label **only on failure**, so a green run is exactly the 139 the proof expects.
 
 Verified after the change: the marker for `panes/dispatch-pane-agent.sh` is written again and
@@ -89,7 +93,7 @@ intact, which is worse than never having had it.
 
 ## Consequences
 
-- The 800-line problem is fixed: 445 / 195 / 140 / 131 / 130 / 79, plus the 142-line runner and
+- The 800-line problem is fixed: 445 / 195 / 140 / 131 / 130 / 79, plus the 176-line runner and
   a 66-line shared `panes/test-lib.sh`. `routing` at 445 is over the 400 preferred and is a
   stated residual on the card.
 - One more file exists than a naive split would produce, and adding a seventh concern file
@@ -104,7 +108,7 @@ intact, which is worse than never having had it.
   the gate's guarantee "has always been about the subject's bytes". That is false as written:
   `hooks/lib/decide-commit-gate.py` compares the **test** blob as well as the subject blob, and
   blocks with `MSG_STALE_TEST` when it has moved. Before the split that check covered all 963
-  lines of assertions; it now covers only the 142-line runner, because the runner is the file
+  lines of assertions; it now covers only the 176-line runner, because the runner is the file
   the marker names. Editing a concern file therefore no longer invalidates the receipt, where
   before it would have. Six of the seven test files just left that check's scope. The
   `X.<concern>.test.sh → X.sh` pairing rule declined above is what would restore it.

@@ -22,13 +22,6 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # green. Adding a concern file means adding it here.
 SUITES="dispatch policy routing cleanup scratch subcommands"
 
-# Counted separately from `pass`/`fail`, which also carry the runner's OWN
-# diagnostics. Mixing them makes the total check answer about the wrong
-# population: a runner message inflates it into a false second failure, and
-# in the mirror direction one message can cancel a genuine shortfall and
-# silence the check in exactly the case it exists for.
-child_total=0
-
 # The mirror of that: a concern file added to panes/ but never added to SUITES
 # would silently never run. The named list stays authoritative; this only
 # reports the drift. Emits a label solely when it finds some.
@@ -48,6 +41,33 @@ for f in "$HERE"/dispatch-pane-agent.*.test.sh; do
     bad "concern suite is listed in SUITES: $concern" "$base exists but SUITES does not name it"
   fi
 done
+
+# How many labels each suite is expected to emit. Pinned per suite, not only in
+# total, because a total is blind to two suites cancelling each other out: an
+# assertion deleted from one and added to another leaves 139 emitted and 139
+# distinct, passes every set comparison and the total, and writes the marker
+# with an assertion gone. Measured by the round-4 judge. The runner already
+# tallies each suite separately for its stderr line; this asserts that tally
+# instead of discarding it. Bump a number here when that suite gains or loses
+# an assertion -- that edit is where a human confirms the change was intended.
+expected_labels_for() { # $1 suite -> expected label count, or -1 if unknown
+  case "$1" in
+    dispatch)    echo 28 ;;
+    policy)      echo 31 ;;
+    routing)     echo 47 ;;
+    cleanup)     echo 8  ;;
+    scratch)     echo 14 ;;
+    subcommands) echo 11 ;;
+    *)           echo -1 ;;
+  esac
+}
+
+# Counted separately from `pass`/`fail`, which also carry the runner's OWN
+# diagnostics. Mixing them makes the total answer about the wrong population: a
+# runner message inflates it into a false second failure, and in the mirror
+# direction one message cancels a genuine shortfall and silences the check in
+# exactly the case it exists for. Measured by the round-3 judge.
+child_total=0
 
 for suite in $SUITES; do
   f="$HERE/dispatch-pane-agent.$suite.test.sh"
@@ -113,6 +133,16 @@ for suite in $SUITES; do
 
   child_total=$((child_total + s_ok + s_fail))
 
+  s_total=$((s_ok + s_fail))
+  s_want=$(expected_labels_for "$suite")
+  if [ "$s_want" -lt 0 ]; then
+    bad "expected label count is known for: $suite" \
+      "expected_labels_for has no entry -- add one beside its SUITES entry"
+  elif [ "$s_total" -ne "$s_want" ]; then
+    bad "concern suite emitted its expected labels: $suite" \
+      "emitted $s_total, expected $s_want"
+  fi
+
   if [ "$rc" -ne 0 ]; then
     bad "concern suite exited 0: $suite" "rc=$rc; stderr: $(tr '\n' ' ' < "$err")"
   fi
@@ -134,6 +164,10 @@ done
 # the only check that sees a partial skip. Bump it deliberately when assertions
 # are added: that edit is the point at which a human confirms the change was
 # intended, which is the whole argument for the number being here at all.
+# Kept alongside the per-suite pins, not replaced by them: the per-suite checks
+# run only for suites the loop reached, so a suite whose file is missing is
+# reported by name but contributes nothing for them to compare. The total is
+# what still notices the shortfall.
 EXPECTED_LABELS=139
 if [ "$child_total" -ne "$EXPECTED_LABELS" ]; then
   bad "total labels emitted by the six suites is $EXPECTED_LABELS" "emitted $child_total"
