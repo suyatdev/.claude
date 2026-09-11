@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: handoff-pane-toggle
 ---
