@@ -4161,6 +4161,82 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       `scratchpad/criterion3-verdicts.tsv`) were never committed and are gone — a session
       scratchpad does not survive. Only this prose summary and the reproduced table above remain.
       If a future re-review is dispatched, commit its artifacts before relying on them.
+
+      **2026-09-11 — the tilde defect is fixed on `fix/worktree-guard-tilde-path`; two
+      corrections to the 09-07/08 note above, both measured before touching the code.**
+
+      ⚠️ **The mechanism named above is half right.** The 09-07/08 note attributes all four
+      refusals to `physical_path()`. Re-measured on the unmodified guard (deny mode, cwd the
+      real primary, log redirected): the `cd ~/…` row — the table's own row — is refused by
+      `resolve_effective_repo()` in `hooks/lib/worktree_guard_bash_arms.sh`, whose
+      `cd "$operand"` is quoted, so the shell never expands the tilde and the cd fails as
+      "cannot be entered". `physical_path()` has the same blindness, but for the two operands
+      *it* takes: the `git worktree add` destination (refused as "outside the centralized
+      store", because `~` was read as a directory named `~` under the cwd — while the deny
+      message itself recommends `git worktree add ~/.worktrees/<repo>/<name>`) and Arm A's
+      write target. A fix to `physical_path()` alone would have left the table's `cd` row
+      broken. The rc values in the table were right; the sentence naming one function was not.
+
+      ⚠️ **The table's `cd "$HOME/…"` → rc 0 row does not reproduce**, before or after the
+      fix: measured rc 2, "changes directory somewhere the guard cannot resolve". A `$` in a
+      cd operand is the classifier's sentinel and denies by design (boundary 12, B10). How
+      that row read 0 on 09-07/08 is not recorded — most likely the probe's shell expanded
+      `$HOME` before the guard saw it. It is not part of this defect and is left as it is.
+
+      **Fix.** One shared `expand_tilde()` in `hooks/worktree-guard.sh`, beside
+      `physical_path()`, applied at both sites: `physical_path()` runs it on its path
+      argument, and `resolve_effective_repo()` runs it on the `cd` and `-C` operands. `~` and
+      `~/x` go through `$HOME` (which is also what lets the suite point them at a fixture);
+      `~user` and `~user/x` go through bash's own tilde expansion under an eval whose input
+      is CHECKED first — a name outside `[A-Za-z0-9._-]` is returned as written, because Arm
+      A's path comes straight from the tool payload and never passes the classifier's
+      sentinel test, so this is the one place a payload string could otherwise reach an
+      eval. An unknown account is left literal, exactly as bash leaves it, and fails to
+      enter downstream as before. `hooks/worktree-guard.test.sh` GROUP T pins it: T1–T10 drive
+      the hook through the PreToolUse payload (allow/deny pairs for each arm, so the
+      expansion is shown to feed the same comparison the absolute form does and is not
+      "a tilde means allow"), T11–T14 run the function out of the hook's own text — T11
+      against Python's `expanduser` as an independent oracle for `~user`, T14 the
+      `~$(touch …)/x` falsifier that must return unchanged AND leave no file behind.
+      Red first: 13 failed, all in GROUP T, for the defect or the absent function, while
+      every one of the 222 pre-existing cases still passed (225 passed = 222 + the three T
+      controls that hold on either guard); then **238 passed, 0 failed, 1 skipped**
+      (222 → 238). Siblings re-run at the same bytes and
+      unchanged from task 11: `reference-transaction` 182/0/1, `install-layer2` 40/0/0,
+      `create-worktree` 89/0/0; `shell_segments` 60, git classifier 219.
+
+      **The card's table, re-measured on the real store** (`~/.worktrees/.claude/
+      worktree-guard-tilde`, a real linked worktree; deny mode; cwd `~/.claude`; log
+      redirected to a temp dir; probe kept out of the repo under `hooks/state/`):
+
+      | shape | before | after |
+      |---|---|---|
+      | `cd ~/WT && git merge x` | **2** cannot be entered | 0 |
+      | `cd /Users/marksuyat/WT && git merge x` | 0 | 0 |
+      | `cd "$HOME/WT" && git merge x` | 2 cannot resolve | 2 cannot resolve (by design) |
+      | `cd ~marksuyat/WT && git merge x` | **2** cannot be entered | 0 |
+      | `git -C ~/WT merge x` | **2** cannot be entered | 0 |
+      | `git worktree add ~/.worktrees/.claude/p -b p` | **2** outside the store | 0 |
+      | `git worktree add /Users/…/p -b p` | 0 | 0 |
+      | `Write ~/WT/x.txt` | **2** as PRIMARY | 0 |
+      | `Write /Users/marksuyat/WT/x.txt` | 0 | 0 |
+      | `Write ~/.claude/x.txt` (a real primary) | 2 as PRIMARY | 2 as PRIMARY |
+
+      **One boundary, stated rather than fixed.** `shell_segments.py` strips quoting, so
+      `cd "~/x"` reaches the guard as `~/x` and is now expanded although a real shell would
+      not have. That over-allows a command whose cd fails at run time — harmless behind
+      `&&`, where the failed cd stops the line; behind `;` the later segments act on the
+      ORIGINAL cwd, and a HEAD move there falls to layer 2. Pinned as T10 so a quoting-aware
+      lexer changes it deliberately. Widening the lexer is a change to all eight guards and
+      is not this task.
+
+      **What this does and does not do for the flip.** The four wrong refusals are explained
+      and closed, so criterion 3's finding is answered — but the fix is inert until merged
+      (hooks run from the primary checkout, not from a branch), the log lines the 09-07/08
+      review read were written by the OLD guard, and layer 2 has still never had its per-row
+      review. So task 10 stays open: merge this, let the fixed guard accumulate its own
+      lines, re-run criterion 3 for layer 1 on those, run it for layer 2 for the first time,
+      then flip.
 - [x] 11. ADR under `docs/decisions/` — this changes a machine-wide invariant and pivots the
       standing worktree rule from advisory to enforced. Verify the next free number against the
       deciding ref, not stale local `main`.

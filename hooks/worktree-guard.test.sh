@@ -874,6 +874,119 @@ chmod 000 "$WT_ROOT/.repo-root"
 deny 'B17 the .repo-root marker cannot be read' "$PRIMARY" \
   "$(payload_bash "git worktree add $WT_ROOT/feat-q" s-b17)"
 chmod 644 "$WT_ROOT/.repo-root"
+# ================================================================= GROUP T ===
+# Feature: a leading ~ names the same place the shell would take it to (card
+# task 10, the 2026-09-07/08 criterion-3 review).
+#
+# The lexer hands every operand to the guard UNEXPANDED — `cd ~/x` arrives as the
+# four characters `~/x` — and a quoted `cd "$operand"` or a `case /*)` then reads
+# the tilde as a relative path glued onto the cwd. So the one spelling that names
+# the centralized store the way the guard's own deny message recommends
+# (`git worktree add ~/.worktrees/<repo>/<name>`) was the spelling it refused.
+# Two sites, not one: resolve_effective_repo() takes the cd and -C operands,
+# physical_path() takes the worktree-add operand and Arm A's write target. Every
+# case below runs with HOME redirected to $HOME_FIX, so `~/.worktrees/…` resolves
+# INSIDE the fixture; the allow/deny pairs prove the expansion feeds the same
+# comparison the absolute form does, and is not "a tilde means allow".
+
+# A primary checkout that lives UNDER the fixture home, so a tilde path can name a
+# primary — the deny direction, which the fixtures above cannot reach by ~.
+HOME_PRIM="$HOME_FIX/repos/prim2"
+mk_repo "$HOME_PRIM"
+
+# T1 — the card's own table row. cd by ~ into a real linked worktree, then a HEAD
+# move there. Refused before the fix as "cannot be entered"; the absolute form of
+# the same command is T2's control and has always allowed.
+allow_silent 'T1 cd ~/… into a linked worktree, then merge' "$PRIMARY" \
+  "$(payload_bash 'cd ~/.worktrees/.claude/feat-x && git merge main' s-t1)"
+allow_silent 'T2 control: the same cd spelled absolute' "$PRIMARY" \
+  "$(payload_bash "cd $LINKED && git merge main" s-t2)"
+
+# T3 — the -C redirect, the other operand resolve_effective_repo() resolves.
+allow_silent 'T3 git -C ~/… names a linked worktree' "$PRIMARY" \
+  "$(payload_bash 'git -C ~/.worktrees/.claude/feat-x merge main' s-t3)"
+
+# T4 — the sanctioned add, spelled the way the B2 deny message tells the reader
+# to spell it. Refused before the fix as "outside the centralized store": ~ was
+# read as a directory named "~" under the cwd.
+allow_silent 'T4 git worktree add ~/.worktrees/<repo>/<name>' "$PRIMARY" \
+  "$(payload_bash 'git worktree add ~/.worktrees/.claude/feat-t -b feat/t' s-t4)"
+
+# T5 — B7 with both operands by ~. The discriminator for Arm B2: cd redirects to
+# the other repo, the add path suits THIS one, and only an expansion that feeds
+# the store comparison reaches the deny — which must still name the other store.
+deny 'T5 cd ~/… to another repo, add path suits the session repo' "$PRIMARY" \
+  "$(payload_bash 'cd ~/.worktrees/other/seed && git worktree add ~/.worktrees/.claude/feat-t' s-t5)" \
+  "must be under: $OTHER_WT_ROOT/"
+# Before the fix T5 also denied — for "cannot be entered", the wrong reason, and
+# its raw operand happens to contain the other store's name. The two negatives
+# are what make it a control rather than a coincidence.
+assert_last_stderr_lacks 'T5 …and not because the cd could not be entered' 'cannot be entered'
+
+# T6 — the discriminator for Arm D: a ~ path that names a PRIMARY checkout is
+# still a primary, and a HEAD move there still denies — as a HEAD move, not as
+# an unenterable directory.
+deny 'T6 cd ~/… into a primary checkout, then merge' "$PRIMARY" \
+  "$(payload_bash 'cd ~/repos/prim2 && git merge main' s-t6)" \
+  'would move HEAD in the PRIMARY checkout of prim2'
+
+# T7/T8 — Arm A, both directions. The write tools hand the hook absolute paths in
+# practice, but physical_path() is shared with Arm B2 and its contract is "the
+# absolute physical form of a path" — a tilde is part of that contract or it is
+# not, and the pair pins which.
+allow_silent 'T7 Write ~/… into a linked worktree' "$PRIMARY" \
+  "$(payload_write Write file_path '~/.worktrees/.claude/feat-x/notes.md' s-t7)"
+deny 'T8 Write ~/… into a primary checkout' "$PRIMARY" \
+  "$(payload_write Write file_path '~/repos/prim2/notes.md' s-t8)" \
+  'PRIMARY checkout of prim2'
+
+# T9 — ~user for an account that does not exist stays literal, exactly as bash
+# leaves it, so the walk fails to enter and the guard fails closed as before.
+deny 'T9 ~nosuchuser stays literal and cannot be entered' "$PRIMARY" \
+  "$(payload_bash 'cd ~no-such-user-zz9/x && git merge main' s-t9)" \
+  'cannot be entered'
+
+# T10 — a QUOTED tilde. Measured 2026-09-11: shell_segments.py strips the quotes,
+# so `cd "~/x"` and `cd ~/x` reach the guard as the same operand and it cannot
+# tell them apart. A real shell would leave the quoted one unexpanded, the cd
+# would fail, and `&&` would stop the line — so this is an over-ALLOW of a
+# command that cannot run, pinned here so that a lexer which one day preserves
+# quoting changes this row deliberately rather than silently. The residual is a
+# `;`-chained line whose cd fails at run time: the segments after it then act on
+# the ORIGINAL cwd, and for a HEAD move layer 2 is the backstop.
+allow_silent 'T10 a quoted ~ is indistinguishable from a bare one (lexer boundary)' \
+  "$PRIMARY" "$(payload_bash 'cd "~/.worktrees/.claude/feat-x" && git merge main' s-t10)"
+
+# T11–T14 — the expansion function itself, run out of the hook's own text so the
+# ~user branch can be pinned against a home the fixture cannot relocate. The
+# oracle for T11 is Python's expanduser — the passwd database, not $HOME, and not
+# the eval the function uses — so the two implementations must agree.
+TILDE_FN="$(sed -n '/^expand_tilde() {/,/^}/p' "$HOOK")"
+t_expand() { # $1 path — expand_tilde in a subshell with HOME redirected
+  ( HOME="$HOME_FIX"; eval "$TILDE_FN"; expand_tilde "$1" ) 2>/dev/null
+}
+t_eq() { # $1 desc, $2 want, $3 got
+  if [ "$2" = "$3" ]; then ok "$1"; else
+    printf 'FAIL — %s\n  want: %s\n  got:  %s\n' "$1" "$2" "$3"; fail=$((fail+1)); fi
+}
+ME="$(id -un)"
+t_eq 'T11 ~user/x resolves through the passwd database' \
+  "$(python3 -c 'import os,sys; print(os.path.expanduser(sys.argv[1]))' "~$ME/x")" \
+  "$(t_expand "~$ME/x")"
+t_eq 'T12 a bare ~ is $HOME' "$HOME_FIX" "$(t_expand '~')"
+t_eq 'T13 a ~ that does not lead the path is left alone' '/x/~y/a~b' "$(t_expand '/x/~y/a~b')"
+# T14 — the falsifier for the name check. Arm A's path comes straight from the
+# tool payload and never passes the classifier's sentinel test, so ~user is the
+# one place a payload string could reach an eval. A name outside [A-Za-z0-9._-]
+# must be left as written and must not run.
+rm -f "$TMP/pwned"
+t_eq 'T14 ~$(cmd)/x is returned unchanged' '~$(touch '"$TMP"'/pwned)/x' \
+  "$(t_expand '~$(touch '"$TMP"'/pwned)/x')"
+if [ -e "$TMP/pwned" ]; then
+  printf 'FAIL — T14 …and the command inside the name did not run\n'; fail=$((fail+1))
+else
+  ok 'T14 …and the command inside the name did not run'
+fi
 # ================================================================= GROUP D ===
 # Feature: Arm D — moving a primary checkout's HEAD (card :1893)
 

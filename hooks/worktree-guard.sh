@@ -35,8 +35,8 @@
 #
 # Both Bash arms — and that shared rule with them — live in lib/worktree_guard_bash_arms.sh,
 # sourced at the dispatch point below. What stays HERE is Arm A and the preconditions every
-# arm rests on: the payload, the mode, $HOME, git and its version, physical_path(),
-# append_log() and refuse(). The split is by line count (rules/core-conduct.md caps a file at
+# arm rests on: the payload, the mode, $HOME, git and its version, expand_tilde(),
+# physical_path(), append_log() and refuse(). The split is by line count (rules/core-conduct.md caps a file at
 # 800) and not by contract; nothing about the one-rule guarantee above changes with it.
 #
 # Fails CLOSED, unlike phase-guard.sh. That sibling fires in every repo on this machine and
@@ -454,13 +454,46 @@ this guard, so the hook registration and its WORKTREE_GUARD_MODE switch stay edi
 # as the whole path, and because a `$( )` here would run in a subshell — where an `exit 2`
 # raised by a caller's deny would not exit the hook at all (hooks/README.md records that
 # exact trap).
+# A leading tilde, expanded the way the shell would have before the command ran. The lexer
+# hands every operand over UNEXPANDED, and a tool payload's path was never through a shell
+# at all — so without this, `~/x` is four literal characters, read as a relative path and
+# glued onto the cwd. That is how the one spelling of the centralized store the deny
+# message below recommends (`git worktree add ~/.worktrees/<repo>/<name>`) came to be the
+# spelling the guard refused (card task 10, the 2026-09-07/08 criterion-3 review).
+#
+# `~` and `~/x` go through $HOME, as bash does — which is also what lets the suite point
+# them at a fixture. `~user` and `~user/x` go through the account's home via bash's own
+# tilde expansion, and the name is CHECKED before it reaches the eval that performs it: Arm
+# A's path comes straight from the payload and never passes the classifier's sentinel test,
+# so a name outside [A-Za-z0-9._-] is returned as written, exactly like an unknown account
+# — either then fails to enter downstream, and the caller denies as it always has.
+#
+# Boundary, measured 2026-09-11: the lexer strips quoting, so `cd "~/x"` reaches here as
+# `~/x` and is expanded although a real shell would not have. That over-ALLOWS a command
+# whose cd fails at run time — harmless behind `&&`, and behind `;` a HEAD move falls to
+# layer 2. Pinned by the suite's GROUP T so a quoting-aware lexer changes it on purpose.
+expand_tilde() { # $1 the path — result on stdout, unchanged when nothing applies
+  local p=$1 user rest
+  case "$p" in
+    '~')   printf '%s' "$HOME" ;;
+    '~'/*) printf '%s' "${HOME%/}${p#\~}" ;;
+    '~'*)  user=${p#\~}; user=${user%%/*}; rest=${p#\~"$user"}
+           case "$user" in
+             *[!A-Za-z0-9._-]*) printf '%s' "$p" ;;
+             *) printf '%s' "$(eval "printf '%s' ~$user")$rest" ;;
+           esac ;;
+    *)     printf '%s' "$p" ;;
+  esac
+}
+
 PP_ANCHOR=''  # deepest ancestor that exists, resolved physically; empty if unenterable
 PP_PATH=''    # the whole path, physical
 physical_path() { # $1 base directory a relative path is read against, $2 the path
   local p dir tail_part
-  case "$2" in
-    /*) p=$2 ;;
-    *)  p="${1%/}/$2" ;;
+  p=$(expand_tilde "$2")
+  case "$p" in
+    /*) : ;;
+    *)  p="${1%/}/$p" ;;
   esac
   dir=$p
   while [ ! -d "$dir" ] && [ "$dir" != "/" ]; do
