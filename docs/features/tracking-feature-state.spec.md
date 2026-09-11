@@ -1535,6 +1535,41 @@ forbids editing a spec.
       Closes the remote fetches on the token-bearing page and is what makes criterion 8's offline path
       actually pass. The CSP added in task 8 is what keeps it closed.
 
+- [x] 15 — Fix `_parse_frontmatter`'s blindness to a YAML trailing comment, which makes this repo's
+      own closed-card convention unreadable to this feature's own analyzer. A frontmatter line is
+      split on the first `:` and the remainder kept verbatim, so `branch: none  # merged via PR …`
+      reads as a branch *named* that whole string, the `none` test misses, and the card raises a
+      false "Where is this branch?" question. Plain `branch: none` is unaffected — which is why
+      only *closed* cards misreport.
+
+      **Added to this half 2026-09-11, after the fact.** Tasks 15 and 16 were appended to the `.md`
+      half during the card's reopen and never mirrored here, so the pair diverged and
+      `hooks/feature-sync-guard.sh` blocked every commit touching it (exit 3, naming 15 and 16).
+      The full detail, the measurements and the closing notes live in the `.md` half and are **not**
+      restated here; this entry exists so the two task lists compare equal, which is the guard's
+      whole contract.
+
+      Two findings from that task are worth carrying in the spec half, because both outlived it.
+      The fix strips only a comment introduced by whitespace-then-`#`, never a bare `#`, so a branch
+      name legitimately carrying one survives — proved falsifiable separately, since a temporary
+      strip-on-any-`#` truncated `feat/issue#42` to `feat/issue`. And the analyzer's question count
+      moved **19 → 20, not 19 → 16**: removing three false questions let four real ones surface that
+      the defect had been masking, one of which is a second, distinct defect —
+      `_ask_about_readiness` gates on `not card.branch` and never on completeness, so it asks
+      whether a fully-complete card is "ready to start". That defect is **not fixed**, has no card
+      of its own, and exists only as a paragraph here and in the `.md` half.
+
+- [x] 16 — Close the card: frontmatter to this repo's merged convention, an observability-judge
+      verdict at `implementation` stage pinning the final HEAD, then the PR.
+
+      **Added to this half 2026-09-11, after the fact** — same reason as task 15 above, and the
+      closing evidence is recorded in the `.md` half rather than duplicated here.
+
+      One consequence belongs in the spec half rather than the checklist: closing this card to the
+      `branch: none  # merged via …` convention makes it another instance of the very frontmatter
+      spelling task 15 taught the analyzer to read. The fix and the closure are therefore coupled —
+      closing first would have re-introduced a false question about this card itself.
+
 
 ## Revision history
 
