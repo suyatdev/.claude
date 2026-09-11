@@ -1,7 +1,7 @@
 ---
 phase: implementation
 model_tier: xhigh
-branch: main
+branch: fix/worktree-guard-tilde-path
 ---
 
 # worktree-guard.sh — worktrees are mandatory, and they live in one place
