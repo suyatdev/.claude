@@ -1152,6 +1152,33 @@ The canonical invocation pins pytest explicitly:
 uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q
 ```
 
+⚠️ **That command no longer runs, and this half needs the same supersession banner the `.md`
+half carries.** `treko-rename.md` (PR #64, `abfb33c`) renamed `task-tracker/` to `treko/` and
+`skills/tracking-feature-state/` to `skills/treko/` after this card had merged. **Read every
+`task-tracker/` in this file as `treko/`** — there are 54 of them, and they are deliberately
+left as written, because each records what was true at the moment it was measured and a
+find-and-replace would turn accurate history into a false present-tense claim.
+
+Measured 2026-09-11: the line above exits `file or directory not found: task-tracker/` with no
+tests run. **`pytest treko/ -q` is not the substitute.** That directory now also holds later,
+unrelated cards of the treko series, several of whose tests need a browser and a CDP connection,
+so an unscoped run reports failures belonging to other features. The equivalent is the scoped
+run over the five files this card owns:
+
+```
+uv run --with pytest==9.1.1 --no-project pytest treko/test_analyze.py treko/test_store.py \
+  treko/test_server.py treko/test_server_lifetime.py treko/test_ui_commands.py -q
+```
+
+Reported as **170 passed** by two independent runs on 2026-09-11 — the audit that found this
+gap, and the observability judge that re-ran it. A measurement with a date and an owner, not a
+contract; re-run it rather than trusting it.
+
+**Why this note exists at all:** the `.md` half got this banner and correction in `ea403ef`
+(PR #101) and this half did not, even though that same commit edited this file. The judge
+caught the asymmetry — one entry point fixed, the other left presenting a dead command as
+canonical, which is the exact trap the fix was meant to remove.
+
 `cmux` is a host binary, not a dependency this repo can pin in a manifest; the version above is what
 the contract in §"Injection route" was verified against, and a mismatch is the first thing to check
 if `send` behaves differently.
