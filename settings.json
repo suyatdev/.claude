@@ -3,7 +3,8 @@
     "defaultMode": "default"
   },
   "env": {
-    "WORKTREE_GUARD_MODE": "log"
+    "WORKTREE_GUARD_MODE": "log",
+    "HANDOFF_PANE_MODE": "off"
   },
   "model": "opus[1m]",
   "hooks": {
