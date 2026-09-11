@@ -200,8 +200,15 @@ that ignores them, in two repos measured as not covering them today.
       this card's own headline disaster reproduced by its own fix.
 - [ ] 6. Raise **both caps in one commit**: `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) with the
       oversize body-drop branch in `slim-session-start.sh` replaced by truncate-and-say, **and** the
-      write caps to 150/120, 170/140, 190/160 in `live-handoff.sh:40-49` and
-      `pre-compact-handoff.sh:85`. Deliberately one task, not two. Raising the write caps
+      write caps to 150/120, 170/140, 190/160 in the `MAX_LINES` block of `live-handoff.sh`
+      (the three assignments and the 60-80 / 80-100 / 100-120 comment directly above them)
+      and on the line beginning `Line targets:` inside the directive heredoc of
+      `pre-compact-handoff.sh`. Both are named by content, not by line: the earlier
+      `live-handoff.sh:40-49` citation was measured wrong on 2026-09-10 — the snapshot task
+      had grown the file and 40-49 is now the session-identity block, while the caps had
+      moved to 88-98. The `pre-compact-handoff.sh:85` citation was re-measured at the same
+      time and was exactly right, so this is a de-numbering, not a correction of both.
+      Deliberately one task, not two. Raising the write caps
       first opens a live regression window in every repo: `vibe-scape` is 75 lines / 5,165
       bytes = 68.9 b/line and prints fine today, but at the new 150-line target it is ~10,330
       bytes against a still-8192 read cap, so its entire handoff body would be dropped — the
