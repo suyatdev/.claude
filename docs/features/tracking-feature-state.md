@@ -13,6 +13,14 @@ merged; it states that it deliberately does not edit this card, and this card's 
 by then, so nothing updated the prose. Verified 2026-09-11: `task-tracker/` and
 `skills/tracking-feature-state/` do not exist, `treko/` and `skills/treko/` do.
 
+The served page is the third rename and needs its own mapping, because the directory substitution
+alone does not resolve it: **`Task Tracker.dc.html` is now `Treko.dc.html`** (`adfdc96`, same PR),
+so the one path below that names it — find it with
+`grep -n -F 'Task Tracker.dc.html' docs/features/tracking-feature-state.md`, whose first two hits
+are this paragraph — reads `treko/Treko.dc.html`. Do not generalise past
+that file — `Task Tracker Directions.dc.html` kept its name and only changed directory. Measured
+2026-09-12; the `.spec.md` half carries the same mapping.
+
 **The old paths below are left exactly as written, on purpose.** They record what was true at the
 moment each measurement was taken, and rewriting them in place would turn an accurate historical
 record into a false present-tense claim — the failure this repo has hit before by regex-fixing

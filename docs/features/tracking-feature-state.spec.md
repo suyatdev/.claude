@@ -1152,6 +1152,55 @@ The canonical invocation pins pytest explicitly:
 uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q
 ```
 
+⚠️ **That command no longer runs.** Measured 2026-09-11 and again 2026-09-12: it exits
+`ERROR: file or directory not found: task-tracker/`, with no tests run.
+
+⚠️ **Superseded paths — read every `task-tracker/` in this file as `treko/`, and
+`skills/tracking-feature-state/` as `skills/treko/`.** A later card, `treko-rename.md` (PR #64,
+`abfb33c`), renamed the directory, the skill and the served page after this card had merged; it
+states that it deliberately does not edit this card, and this card's branch was gone by then, so
+nothing updated the prose. The `.md` half has carried this banner since `ea403ef` (PR #101) and
+this half did not — in the same commit that edited this file — which is why this note exists.
+
+⚠️ **The served page is a rename, not a substitution: `Task Tracker.dc.html` is now
+`Treko.dc.html`** (`adfdc96`, the same PR). The directory mapping alone does not resolve a path
+that names it — measured 2026-09-12, `grep -n 'x-dc' 'treko/Task Tracker.dc.html'` exits
+`No such file or directory` while `grep -n 'x-dc' 'treko/Treko.dc.html'` resolves. **Do not
+generalise the rename past that one file:** `Task Tracker Directions.dc.html` kept its name and
+only changed directory, so `treko/Task Tracker Directions.dc.html` is correct as written.
+
+**The old paths are left exactly as written, on purpose.** Each records what was true at the
+moment it was measured, and rewriting them in place would turn accurate history into a false
+present-tense claim. No count of them is pinned here, per this file's own rule against stored
+tallies — re-derive it with
+`grep -o -F 'task-tracker/' docs/features/tracking-feature-state.spec.md | wc -l`, which counts
+occurrences rather than lines and includes this banner's own mentions.
+
+⚠️ **This banner sits here, beside the one command it corrects, rather than at the top of the
+file where the `.md` half puts its own — so most of the stale paths appear above it.** That is a
+deliberate trade, not an oversight: inserting lines above `## Security` would shift the line
+anchors that `treko-branch-graph-traversal.md` (`:198`, cited twice) and `treko-degraded-no-cmux.md`
+(`:675`) point at. Measured 2026-09-12: `treko-degraded-no-cmux.md` is under active edit on
+`feat/treko-degraded-no-cmux`, 18 commits ahead of `origin/main` touching that file, so repairing
+its anchor from here would have collided. (An earlier draft of this note said "two other
+worktrees"; the second, `chore/treko-degraded-round8-verdict`, is parked and fully contained in
+`origin/main`.) Re-find both anchors before moving this block.
+
+**`pytest treko/ -q` is not the substitute.** That directory now also holds later,
+unrelated cards of the treko series, several of whose tests need a browser and a CDP connection,
+so an unscoped run reports failures belonging to other features. The equivalent is the scoped
+run over the five files this card owns:
+
+```
+uv run --with pytest==9.1.1 --no-project pytest treko/test_analyze.py treko/test_store.py \
+  treko/test_server.py treko/test_server_lifetime.py treko/test_ui_commands.py -q
+```
+
+Reported as **170 passed, rc=0** by four independent runs, each with a date and an owner rather
+than a contract: two on 2026-09-11 (the audit that found this gap, and the observability judge
+that re-ran it) and two on 2026-09-12 (that day's judge round at 116.03s, and the main session at
+115.63s). Re-run it rather than trusting it.
+
 `cmux` is a host binary, not a dependency this repo can pin in a manifest; the version above is what
 the contract in §"Injection route" was verified against, and a mismatch is the first thing to check
 if `send` behaves differently.
