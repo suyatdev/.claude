@@ -198,7 +198,7 @@ that ignores them, in two repos measured as not covering them today.
       exception to its silent-on-every-failure contract, now recorded in the file header:
       staying silent there would delete the last copy of removed text with no record anywhere,
       this card's own headline disaster reproduced by its own fix.
-- [ ] 6. Raise **both caps in one commit**: `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) with the
+- [x] 6. Raise **both caps in one commit**: `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) with the
       oversize body-drop branch in `slim-session-start.sh` replaced by truncate-and-say, **and** the
       write caps to 150/120, 170/140, 190/160 in the `MAX_LINES` block of `live-handoff.sh`
       (the three assignments and the 60-80 / 80-100 / 100-120 comment directly above them)
@@ -214,6 +214,44 @@ that ignores them, in two repos measured as not covering them today.
       bytes against a still-8192 read cap, so its entire handoff body would be dropped — the
       exact total-loss failure this card exists to prevent, caused by the fix for it. These
       are global hooks with no opt-in, so the window is not theoretical.
+      **Done 2026-09-12**, across two commits (tests first, deliberately red, then the
+      implementation) because a single commit cannot hold both an inverted assertion and the
+      behavior that inverts it. Verified by re-running each suite directly:
+      `slim-session-start` **67/67**, `live-handoff` **31/31**, `pre-compact` **20/20**,
+      `handoff-archive` **79/79** with `handoff-archive.sh` still **399** lines — the evidence
+      the shared `extract_keep_lines` was called and not grown.
+      Withheld-line contract, copied from real runs rather than paraphrased:
+      `[truncated: 319 lines (3509 bytes) withheld — read .claude/session-state.md directly]`
+      and `[truncated: 351 lines (4568 bytes) withheld — 3 inside [KEEP] regions — read
+      .claude/session-state.md directly]`. On the 500-line / 5,500-byte fixture at a 2,000-byte
+      cap the arithmetic closes both ways: 181 emitted + 319 withheld = 500 lines,
+      1,991 + 3,509 = 5,500 bytes.
+      The positional KEEP check rests on a property **re-measured here, not inherited** — the
+      prior session's probe was lost with its scratchpad. `extract_keep_lines(head -n K f)` is
+      the leading portion of `extract_keep_lines(f)` at **43/43** cut points of a fixture with
+      front matter, two regions and fences, and at **28/28** of a second fixture whose trap
+      fence (carrying a fake `[KEEP]` heading) sits in an *unprotected* region — the over-count
+      case the first fixture missed, where the count stayed flat across all 8 mid-fence cuts.
+      Count is monotone non-decreasing, so `prefix < whole` ⟺ a KEEP line was cut. Control: a
+      tail-instead-of-head mutant of the same probe reports **27/43** mismatches, so the green
+      discriminates.
+      Four mutations were run against the implementation to confirm the new assertions bite.
+      The first three were measured against the **63**-assertion suite, before the
+      byte-semantics scenario existed: always-claim-KEEP fails B2 (62/63); never-claim-KEEP
+      fails B1 (62/63); removing the budget check fails four, including the byte ceiling at
+      `emitted=5500 cap=2000` (59/63). The fourth found a real gap — deleting `local LC_ALL=C`,
+      so `${#line}` counts characters instead of bytes, left the suite **63/63 green**. Every
+      fixture was pure ASCII, where the two are identical, so byte accounting was correct but
+      entirely unpinned. The missing control was added (one 11-byte ASCII line then 8 em dashes
+      = 25 bytes but 9 characters, at the exact 20-byte cap where character accounting just
+      admits it) and it bites: **67/67 → 65/67** under that mutation.
+      Re-pointing the write-cap fixtures was **not** listed in this task and is the part that
+      would have rotted silently. Five `live-handoff.test.sh` fixtures used 140 lines to mean
+      over-the-cap against the old general cap of 80; four fail outright at the new 150. The
+      quiet one was `repo-task` at 90 lines, whose whole purpose is proving the task cap is
+      consulted: at the new caps 90 is under both 150 and 170, so it would have kept passing
+      while proving nothing. All six re-pointed to 160, which is over the new general cap and
+      under the new task cap.
 - [ ] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
       the protected headings are re-injected verbatim.
 - [ ] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path

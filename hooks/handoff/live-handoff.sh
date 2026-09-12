@@ -85,18 +85,18 @@ HAS_BUG=false
 [ -f "$REPO_ROOT/.claude/current-bug.md" ] && HAS_BUG=true
 
 # Line limits vary by mode:
-#   General: 60-80 lines
-#   Task: 80-100 lines
-#   Bug (or task+bug): 100-120 lines
+#   General: 120-150 lines
+#   Task: 140-170 lines
+#   Bug (or task+bug): 160-190 lines
 if [ "$HAS_BUG" = true ]; then
-    MAX_LINES=120
-    TARGET_LINES=100
+    MAX_LINES=190
+    TARGET_LINES=160
 elif [ "$HAS_TASK" = true ]; then
-    MAX_LINES=100
-    TARGET_LINES=80
+    MAX_LINES=170
+    TARGET_LINES=140
 else
-    MAX_LINES=80
-    TARGET_LINES=60
+    MAX_LINES=150
+    TARGET_LINES=120
 fi
 
 # Create state file if it doesn't exist

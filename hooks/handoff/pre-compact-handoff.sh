@@ -82,7 +82,7 @@ REQUIRED content for session-state.md (adapt format based on mode above):
    - Important file:line references
    - What was just completed
    - What needs to happen next
-3. This file will be your ONLY memory after compaction. Line targets: general 60-80, task 80-100, bug 100-120 (if needed).
+3. This file will be your ONLY memory after compaction. Line targets: general 120-150, task 140-170, bug 160-190 (if needed).
 4. After compaction, you MUST read .claude/session-state.md before doing anything else.
 </pre-compact-handoff>
 DIRECTIVE
