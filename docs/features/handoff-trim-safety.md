@@ -254,6 +254,23 @@ that ignores them, in two repos measured as not covering them today.
       under the new task cap.
 - [ ] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
       the protected headings are re-injected verbatim.
+      **Shared-library step landed 2026-09-12; the two hooks are still unwired, so the task
+      stays open.** `hooks/handoff/lib/handoff-keep-reinject.sh` holds `keep_heading_lines`,
+      `envelope_keep_headings` and `keep_trim_directive`, **20/20 passing**, with
+      `handoff-archive.test.sh` still **79/79** — the evidence the shared library was called,
+      not grown. The directive wording lives in `keep_trim_directive` **once** rather than
+      being written into both hooks: this repo has a recorded history of one rule stated in N
+      places drifting apart, and the two callers differ only in their framing (incremental
+      trim vs. full rewrite), never in the filing rule or the protected-heading list.
+      A tag-generation failure prints a count-only warning — never an untagged envelope and
+      never silence, since silence is indistinguishable from "no protected headings exist".
+      Red baseline measured before the function was written: 5 failing assertions, `15/20`.
+      One of the new assertions was **vacuous as first written** and was tightened before the
+      commit: it checked the warning's heading count with `grep -F 2` against the whole
+      output, and mktemp's prefix on this machine
+      (`/var/folders/x0/j77b902977ncvy9v6xvwz7q40000gn/T/…`) contains a `2`, so it matched the
+      filing-rule line on every run and could not fail. Anchored to `^Warning: 2 protected …`
+      and falsified by substituting `3`, which does fail.
 - [ ] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
       the original bug report came from.
 - [x] 10. `hooks/handoff/handoff-keep-guard.sh` as a `Stop` hook: protected-block check, strike
