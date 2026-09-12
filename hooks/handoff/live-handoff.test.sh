@@ -115,7 +115,7 @@ fi
 # ============================================================================
 # Over the write cap: snapshot taken, trim directive out
 # ============================================================================
-REPO_B="$(mkrepo repo-over 140)"
+REPO_B="$(mkrepo repo-over 160)"
 run_hook "$REPO_B" "$HOOK" "sess-bbb"
 PT_B="$REPO_B/.claude/session-state.pretrim.sess-bbb.md"
 if [ -f "$PT_B" ] && cmp -s "$PT_B" "$REPO_B/.claude/session-state.md"; then
@@ -135,7 +135,7 @@ fi
 #   Then no trim directive is emitted, whatever the line count
 #   And the append-mode directive is emitted with a warning naming the failure
 # ============================================================================
-REPO_C="$(mkrepo repo-readonly 140)"
+REPO_C="$(mkrepo repo-readonly 160)"
 chmod 500 "$REPO_C/.claude"
 run_hook "$REPO_C" "$HOOK" "sess-ccc"
 chmod 700 "$REPO_C/.claude"
@@ -182,7 +182,7 @@ if cmp -s "$MUT_DIR/live-handoff.sh" "$HOOK"; then
 else
   ok "falsifier: the SNAPSHOT_OK guard was found and removed"
 fi
-REPO_F="$(mkrepo repo-falsify 140)"
+REPO_F="$(mkrepo repo-falsify 160)"
 chmod 500 "$REPO_F/.claude"
 run_hook "$REPO_F" "$MUT_DIR/live-handoff.sh" "sess-fff"
 chmod 700 "$REPO_F/.claude"
@@ -201,7 +201,7 @@ NOLIB_DIR="$TMP/nolib"
 mkdir -p "$NOLIB_DIR"
 cp "$HOOK" "$NOLIB_DIR/live-handoff.sh"
 chmod +x "$NOLIB_DIR/live-handoff.sh"
-REPO_D="$(mkrepo repo-nolib 140)"
+REPO_D="$(mkrepo repo-nolib 160)"
 run_hook "$REPO_D" "$NOLIB_DIR/live-handoff.sh" "sess-ddd"
 if [ "$RC" -eq 0 ]; then
   ok "missing library: the hook still exits 0"
@@ -330,7 +330,7 @@ fi
 # ============================================================================
 # Pre-existing behaviour that must not regress
 # ============================================================================
-REPO_M="$(mkrepo repo-pane 140)"
+REPO_M="$(mkrepo repo-pane 160)"
 PANE_OUT="$TMP/pane.out"
 ( cd "$REPO_M" && printf '{"session_id":"sess-mmm"}' \
     | env CLAUDE_PANE_AGENT=1 bash "$HOOK" ) >"$PANE_OUT" 2>&1
@@ -360,9 +360,9 @@ else
     ".claude holds: $(ls "$REPO_N/.claude")"
 fi
 
-# The task/bug cap table and its extra directive: 90 lines is over the 80-line general cap
-# but under the 100-line task cap, so the task file is what decides.
-REPO_O="$(mkrepo repo-task 90)"
+# The task/bug cap table and its extra directive: 160 lines is over the 150-line general
+# cap but under the 170-line task cap, so the task file is what decides.
+REPO_O="$(mkrepo repo-task 160)"
 : > "$REPO_O/.claude/current-task.md"
 run_hook "$REPO_O" "$HOOK" "sess-ooo"
 if has "$OUT" "has the current task or bug been completed"; then
@@ -371,9 +371,9 @@ else
   bad "the task/bug directive still rides along when current-task.md exists" "$(cat "$OUT")"
 fi
 if has "$OUT" "It has grown too large"; then
-  bad "the task cap still raises the trim threshold to 100 lines" "90 lines trimmed as if the cap were 80"
+  bad "the task cap still raises the trim threshold to 170 lines" "160 lines trimmed as if the cap were 150"
 else
-  ok "the task cap still raises the trim threshold to 100 lines"
+  ok "the task cap still raises the trim threshold to 170 lines"
 fi
 
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"
