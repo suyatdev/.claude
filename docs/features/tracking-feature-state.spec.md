@@ -1180,8 +1180,11 @@ occurrences rather than lines and includes this banner's own mentions.
 file where the `.md` half puts its own — so most of the stale paths appear above it.** That is a
 deliberate trade, not an oversight: inserting lines above `## Security` would shift the line
 anchors that `treko-branch-graph-traversal.md` (`:198`, cited twice) and `treko-degraded-no-cmux.md`
-(`:675`) point at, and the latter card was live in two other worktrees on 2026-09-12. Re-find those
-anchors before moving this block.
+(`:675`) point at. Measured 2026-09-12: `treko-degraded-no-cmux.md` is under active edit on
+`feat/treko-degraded-no-cmux`, 18 commits ahead of `origin/main` touching that file, so repairing
+its anchor from here would have collided. (An earlier draft of this note said "two other
+worktrees"; the second, `chore/treko-degraded-round8-verdict`, is parked and fully contained in
+`origin/main`.) Re-find both anchors before moving this block.
 
 **`pytest treko/ -q` is not the substitute.** That directory now also holds later,
 unrelated cards of the treko series, several of whose tests need a browser and a CDP connection,

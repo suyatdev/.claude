@@ -16,8 +16,8 @@ by then, so nothing updated the prose. Verified 2026-09-11: `task-tracker/` and
 The served page is the third rename and needs its own mapping, because the directory substitution
 alone does not resolve it: **`Task Tracker.dc.html` is now `Treko.dc.html`** (`adfdc96`, same PR),
 so the one path below that names it — find it with
-`grep -n -F 'Task Tracker.dc.html' docs/features/tracking-feature-state.md` — reads
-`treko/Treko.dc.html`. Do not generalise past
+`grep -n -F 'Task Tracker.dc.html' docs/features/tracking-feature-state.md`, whose first two hits
+are this paragraph — reads `treko/Treko.dc.html`. Do not generalise past
 that file — `Task Tracker Directions.dc.html` kept its name and only changed directory. Measured
 2026-09-12; the `.spec.md` half carries the same mapping.
 
