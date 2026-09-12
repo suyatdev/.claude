@@ -8,6 +8,13 @@
 # this hook ensures nothing is lost when autocompaction hits.
 #
 # Install: place in .claude/hooks/ and add to PreCompact in .claude/settings.json
+#
+# Locally patched by docs/features/handoff-trim-safety.md, task 8: step 2 used to say
+# "REWRITE it completely" with no filing rule at all -- exactly how a fact vanishes for
+# good, which is the bug this card exists to fix. The directive now embeds the shared
+# keep_trim_directive() fragment (hooks/handoff/lib/handoff-keep-reinject.sh): anything
+# removed from the notepad must be filed into the archive first, and any [KEEP]-tagged
+# heading is re-injected verbatim so the model sees exactly what must survive the rewrite.
 
 set -euo pipefail
 
@@ -18,6 +25,56 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 mkdir -p "$REPO_ROOT/.claude"
+
+# Same literal handoff-keep-guard.sh:105 uses for its own archive path.
+ARCHIVE_FILE="$REPO_ROOT/.claude/session-state.archive.md"
+
+# keep_trim_directive() lives in the shared reinject library, resolved from THIS file's
+# own directory (never $PWD, never `git rev-parse`) so the hook behaves the same whatever
+# the caller's cwd.
+HOOK_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ARCHIVE_LIB="$HOOK_DIR/lib/handoff-archive.sh"
+REINJECT_LIB="$HOOK_DIR/lib/handoff-keep-reinject.sh"
+REINJECT_LIB_OK=false
+# Measured (not assumed): under `set -e`, sourcing a file with an actual syntax error
+# does NOT just make the `.` command return non-zero for the `if` to gate on -- bash
+# treats a parse error hit while sourcing as fatal and exits the whole non-interactive
+# shell right there, `if`/`&&` guard notwithstanding. `set +e` around the sourcing (and
+# `set -e` restored immediately after) is what actually makes "a library that fails to
+# parse cannot kill the hook" true; the `if` alone only covers a MISSING/unreadable file
+# or a well-formed library that returns non-zero or never defines the function.
+set +e
+# shellcheck disable=SC1090  # libraries live beside this hook, not user input
+if [ -r "$ARCHIVE_LIB" ] && . "$ARCHIVE_LIB" && [ -r "$REINJECT_LIB" ] && . "$REINJECT_LIB"; then
+    # A library that sources cleanly but whose function never landed (a partial or
+    # renamed file) must not be trusted just because `.` returned 0 -- confirm the
+    # function itself exists before relying on it.
+    declare -f keep_trim_directive >/dev/null 2>&1 && REINJECT_LIB_OK=true
+fi
+set -e
+
+# KEEP_TRIM_FRAGMENT is computed BEFORE the heredoc below, not inside it: a command
+# substitution written directly inside a heredoc still runs at heredoc-expansion time,
+# still under `set -e`, and a failure there would kill this hook exactly when compaction
+# is imminent -- the one moment it must not silently exit non-zero. Computing it into a
+# plain variable first means the heredoc only ever does a variable interpolation, which
+# cannot fail.
+if [ "$REINJECT_LIB_OK" = true ]; then
+    KEEP_TRIM_FRAGMENT="$(keep_trim_directive "$REPO_ROOT/.claude/session-state.md" "$ARCHIVE_FILE")"
+else
+    # Opposite fail-open direction from live-handoff.sh, deliberately: live-handoff.sh
+    # SUPPRESSES its trim directive when it cannot back a trim up with a snapshot,
+    # because it fires again on the very next prompt and can afford to wait. This hook
+    # cannot -- compaction is imminent, and withholding the handoff directive entirely
+    # would lose the whole notepad, which is strictly worse than an incomplete listing of
+    # protected headings. So this branch still emits the directive, with a loud warning
+    # in place of the (unavailable) heading list. Do not "fix" one hook to match the
+    # other; they fail in opposite directions on purpose. Rationale and the consequences
+    # of harmonising them:
+    # docs/decisions/0046-the-two-trim-directive-hooks-fail-in-opposite-directions.md
+    KEEP_TRIM_FRAGMENT="Filing rule: when you remove any line from the notepad, first append those exact lines to ${ARCHIVE_FILE} under a dated heading -- the archive is append-only and is never read back in at session start.
+Warning: the archive-filing helper library could not be loaded here, so the protected [KEEP] heading(s) in the notepad could not be listed. Nothing under any [KEEP] heading may be removed."
+fi
 
 # Detect current work mode
 HAS_TASK=false
@@ -75,7 +132,9 @@ ${MODE_DIRECTIVE}
 
 REQUIRED content for session-state.md (adapt format based on mode above):
 1. Read the current session-state.md
-2. REWRITE it completely with everything needed to continue this work after compaction:
+2. REWRITE it completely with everything needed to continue this work after compaction, but removing anything means filing it first, not deleting it:
+${KEEP_TRIM_FRAGMENT}
+   Keep in the rewrite:
    - What are we working on and why
    - All decisions made and their rationale
    - Key discoveries, gotchas, blockers

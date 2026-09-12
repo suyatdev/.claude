@@ -1063,8 +1063,11 @@ that ignores them, in two repos measured as not covering them today.
       bytes against a still-8192 read cap, so its entire handoff body would be dropped — the
       exact total-loss failure this card exists to prevent, caused by the fix for it. These
       are global hooks with no opt-in, so the window is not theoretical.
-- [ ] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
-      the protected headings are re-injected verbatim.
+- [x] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
+      the protected headings are re-injected verbatim. **Done 2026-09-12** — evidence, the
+      deliberate fail-closed/fail-open asymmetry between the two hooks, and the false
+      `set -e` safety claim it uncovered in already-committed code are all recorded against
+      task 8 in `handoff-trim-safety.md`; not restated here.
 - [ ] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
       the original bug report came from.
 - [x] 10. `hooks/handoff/handoff-keep-guard.sh` as a `Stop` hook: protected-block check, strike

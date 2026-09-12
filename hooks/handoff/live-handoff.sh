@@ -27,6 +27,27 @@
 #   - a failed snapshot suppresses the trim (spec finding O-C). Asking for a cut while
 #     unable to back it up is exactly the promise this card exists to stop making, so the
 #     trim pauses and the append directive says why.
+#
+# Locally patched 2026-09-12 by task 8 of docs/features/handoff-trim-safety.md: the trim
+# directive no longer tells the model to delete lines — it tells it to file them into
+# .claude/session-state.archive.md first (hooks/handoff/lib/handoff-keep-reinject.sh,
+# keep_trim_directive()), and any [KEEP]-protected heading in the notepad is re-injected
+# verbatim, inside a tamper-evident envelope, as something that must survive the rewrite.
+# When that library cannot be loaded (or does not define keep_trim_directive), the trim
+# directive is suppressed the same way a failed snapshot suppresses it — a separate flag
+# and a separate, self-naming warning, since the two failures are independent and the
+# reader must be able to tell them apart.
+#
+# Locally patched 2026-09-12 (same day, follow-up) after finding both library loads below
+# claimed a guarantee the code did not provide: "sourced inside the `if` so a parse failure
+# cannot kill the hook under `set -e`" was false, measured against this file itself — a
+# library that fails to PARSE (not merely a missing or empty one) kills the whole
+# non-interactive shell the moment `.` hits the syntax error, `if`/`&&` guard
+# notwithstanding, so no directive was emitted at all. Both `.` calls are now wrapped in
+# `set +e` / `set -e` (the same fix already carried by pre-compact-handoff.sh, with the
+# same measurement noted there); the `if`/`&&` guard on its own only ever covered a
+# missing/unreadable file or a well-formed library that returns non-zero or never defines
+# what it should.
 
 set -euo pipefail
 
@@ -64,19 +85,51 @@ SESSION_SLUG="$(printf '%s' "$SESSION_RAW" | tr -c 'A-Za-z0-9_-' '_' | cut -c1-6
 
 PRETRIM_FILE="$REPO_ROOT/.claude/session-state.pretrim.${SESSION_SLUG}.md"
 STRIKE_FILE="$REPO_ROOT/.claude/session-state.keepguard-strikes.${SESSION_SLUG}"
+# Same literal handoff-keep-guard.sh:105 uses for its own ARCHIVE_FILE — one archive per
+# repo, not per session, since filed lines are meant to be found later regardless of which
+# session did the filing.
+ARCHIVE_FILE="$REPO_ROOT/.claude/session-state.archive.md"
 
 # snapshot_notepad() lives in the shared library, resolved from THIS file's own directory
 # (never $PWD, never `git rev-parse`) so the hook behaves the same whatever the caller cwd.
-# Sourcing happens inside the `if` so `set -e` cannot kill the hook on a library that fails
-# to parse: an unloadable library is handled below as a snapshot failure, which is the same
-# "cannot back this up" state as an unwritable disk and must not fall through to a trim.
+# Measured (not assumed — see pre-compact-handoff.sh's matching comment, and this card's
+# corrupt-library tests): under `set -euo pipefail`, sourcing a file with an actual syntax
+# error does NOT just make the `.` command return non-zero for the `if` to gate on — bash
+# treats a parse error hit while sourcing as fatal and exits the whole non-interactive
+# shell right there, `if`/`&&` guard notwithstanding. `set +e` around the sourcing (and
+# `set -e` restored immediately after) is what actually makes "a library that fails to
+# parse cannot kill the hook" true; the `if` alone only covers a MISSING/unreadable file or
+# a well-formed library that returns non-zero or never defines what it should. An
+# unloadable library is handled below as a snapshot failure, which is the same "cannot back
+# this up" state as an unwritable disk and must not fall through to a trim.
 HOOK_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LIB="$HOOK_DIR/lib/handoff-archive.sh"
 LIB_OK=false
+set +e
 # shellcheck disable=SC1090  # library lives beside this hook, not user input
 if [ -r "$LIB" ] && . "$LIB"; then
   LIB_OK=true
 fi
+set -e
+
+# The reinject library (keep_trim_directive, task 8) depends on extract_keep_lines,
+# gen_tag and sanitize_line, all defined in handoff-archive.sh above — so it is only
+# sourced when LIB_OK, and after LIB, never before. Loaded the same defensive way:
+# resolved from HOOK_DIR, wrapped in the same `set +e` / `set -e` toggle as LIB above so a
+# parse failure here cannot kill the hook under `set -e` either (the bare `if`/`&&` guard
+# does not intercept a parse error — see the measurement note above LIB). The `declare -f`
+# check is deliberate and not redundant with the `.` exit status: a syntactically valid but
+# empty file sources with rc 0 while leaving keep_trim_directive undefined, and that must
+# still read as "unloadable" here.
+REINJECT_LIB="$HOOK_DIR/lib/handoff-keep-reinject.sh"
+REINJECT_LIB_OK=false
+set +e
+# shellcheck disable=SC1090  # library lives beside this hook, not user input
+if [ "$LIB_OK" = true ] && [ -r "$REINJECT_LIB" ] && . "$REINJECT_LIB" \
+   && declare -f keep_trim_directive >/dev/null 2>&1; then
+  REINJECT_LIB_OK=true
+fi
+set -e
 
 # Check for active task/bug files
 HAS_TASK=false
@@ -149,6 +202,34 @@ recovered. Report this to the user, and fix the write failure (usually an unwrit
 .claude directory) or copy the file aside by hand before trimming anything."
 fi
 
+# This hook fails CLOSED here; pre-compact-handoff.sh deliberately fails OPEN in the very
+# same situation, emitting its rewrite directive with a warning in place of the heading
+# list. That is not an inconsistency to tidy up: this hook fires again on the next prompt
+# and can afford to withhold one directive, while that one gets a single chance before
+# compaction and suppressing it would forfeit the whole handoff. Rationale and the
+# consequences of harmonising them: docs/decisions/0046-the-two-trim-directive-hooks-fail-in-opposite-directions.md
+#
+# A second, distinct suppression reason (task 8): the snapshot can succeed while the
+# reinject library still cannot be loaded — they are different scripts that fail
+# independently, and the reader (model and human) must be able to tell which one
+# happened. Deliberately its own flag/reason rather than folded into SNAPSHOT_OK/REASON
+# above: ordering a cut while unable to state the filing rule or list the protected
+# [KEEP] headings is the same unbacked promise the snapshot suppression exists to stop
+# making, so it gets the same fail-closed treatment, worded to name itself. Gated on
+# SNAPSHOT_OK so it fires only when snapshot failure isn't already the reason we are in
+# append mode — the two warnings are otherwise mutually exclusive by construction.
+REINJECT_WARNING=""
+if [ "$SNAPSHOT_OK" = true ] && [ "$REINJECT_LIB_OK" != true ]; then
+    REINJECT_WARNING="
+⚠️ TRIM SUPPRESSED — the archive-filing/reinjection library could not be loaded:
+${REINJECT_LIB} could not be sourced, or does not define keep_trim_directive.
+Append only this turn. Do NOT rewrite, shorten, reorder or delete any part of
+.claude/session-state.md: cutting a line requires being able to state where it must be
+filed and which [KEEP] headings must survive untouched, and neither can be produced
+safely right now. Report this to the user, and check ${REINJECT_LIB} for a syntax error
+or a missing file before trimming anything."
+fi
+
 # Count current lines
 LINE_COUNT=$(wc -l < "$STATE_FILE" | tr -d ' ')
 
@@ -162,10 +243,27 @@ Also evaluate: has the current task or bug been completed?
 - If still in progress: keep task/bug context current in session-state.md"
 fi
 
-# Always output a directive — Claude sees this every turn. The SNAPSHOT_OK conjunct is the
-# suppression: with no copy behind it, the oversize branch is never taken whatever the line
-# count, and the append branch below carries the warning instead.
-if [ "$SNAPSHOT_OK" = true ] && [ "$LINE_COUNT" -gt "$MAX_LINES" ]; then
+# Trim-directive filing fragment (task 8), computed here as a plain assignment and NOT
+# inside the `cat << DIRECTIVE` heredoc below: a command substitution embedded in a
+# heredoc still runs under `set -e` at heredoc-expansion time, and a failure inside
+# keep_trim_directive's call chain there would kill the hook AFTER the snapshot has
+# already been taken but before any directive reached the model at all — worse than the
+# ordinary append-mode fallback. Computing it as an assignment keeps any such failure in
+# ordinary command-substitution territory, where `|| TRIM_KEEP_DIRECTIVE=""` (belt and
+# suspenders alongside keep_trim_directive's own documented rc-0 contract) is what
+# decides the fallback, not an uncontrolled heredoc abort. Only computed on the path
+# that will actually use it — the same trim/append gate used below.
+TRIM_KEEP_DIRECTIVE=""
+if [ "$SNAPSHOT_OK" = true ] && [ "$REINJECT_LIB_OK" = true ] && [ "$LINE_COUNT" -gt "$MAX_LINES" ]; then
+    TRIM_KEEP_DIRECTIVE="$(keep_trim_directive "$STATE_FILE" "$ARCHIVE_FILE")" || TRIM_KEEP_DIRECTIVE=""
+fi
+
+# Always output a directive — Claude sees this every turn. The SNAPSHOT_OK and
+# REINJECT_LIB_OK conjuncts are the suppression: with no copy behind it, or with no way to
+# state the filing rule and list protected [KEEP] headings, the oversize branch is never
+# taken whatever the line count, and the append branch below carries whichever warning
+# applies instead.
+if [ "$SNAPSHOT_OK" = true ] && [ "$REINJECT_LIB_OK" = true ] && [ "$LINE_COUNT" -gt "$MAX_LINES" ]; then
     cat << DIRECTIVE
 <live-handoff>
 REQUIRED: Before responding, update .claude/session-state.md:
@@ -175,8 +273,9 @@ REQUIRED: Before responding, update .claude/session-state.md:
    - Key context that would be lost if early conversation is compressed
    - Current focus and immediate next steps
    - Important file locations and what changed
-3. Remove anything that is: obvious from code, already committed, no longer relevant, or low-importance
-4. Target: under ${TARGET_LINES} lines. Be ruthless — only keep what you'd need to continue this work cold.
+3. Removing a line does not mean deleting it — it means filing it, per this rule:
+${TRIM_KEEP_DIRECTIVE}
+4. Target: under ${TARGET_LINES} lines. Keep only what you'd need to continue this work cold; nothing under a protected [KEEP] heading may be removed.
 ${TASK_BUG_DIRECTIVE}
 </live-handoff>
 DIRECTIVE
@@ -192,7 +291,7 @@ If yes — append to the appropriate section in .claude/session-state.md:
 - Changes to current focus or next steps
 If nothing noteworthy happened (e.g. simple question, no new info), skip the update.
 Do NOT rewrite the whole file — just append new items to existing sections.
-${TASK_BUG_DIRECTIVE}${SNAPSHOT_WARNING}
+${TASK_BUG_DIRECTIVE}${SNAPSHOT_WARNING}${REINJECT_WARNING}
 </live-handoff>
 DIRECTIVE
 fi

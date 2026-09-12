@@ -252,10 +252,51 @@ that ignores them, in two repos measured as not covering them today.
       consulted: at the new caps 90 is under both 150 and 170, so it would have kept passing
       while proving nothing. All six re-pointed to 160, which is over the new general cap and
       under the new task cap.
-- [ ] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
+- [x] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
       the protected headings are re-injected verbatim.
-      **Shared-library step landed 2026-09-12; the two hooks are still unwired, so the task
-      stays open.** `hooks/handoff/lib/handoff-keep-reinject.sh` holds `keep_heading_lines`,
+      **Done 2026-09-12.** `live-handoff.test.sh` **57/57**, `pre-compact-handoff.test.sh`
+      **27/27** (a new suite — this hook had none, so the task also had to pin its
+      pre-existing behaviour: the pane short-circuit, the three `MODE_DIRECTIVE` branches and
+      the line-target string), with both libraries untouched at **20/20** and **79/79**.
+
+      **The two hooks fail in opposite directions, deliberately.** `live-handoff.sh` adds
+      `REINJECT_LIB_OK` as a second, independent suppression gate beside `SNAPSHOT_OK`: it
+      emits no trim directive at all when the filing rule and protected-heading list cannot be
+      produced, because it fires again on the very next prompt and can afford to wait, and its
+      two warnings name their own distinct cause so a reader can tell them apart.
+      `pre-compact-handoff.sh` **still emits** its rewrite directive in the same situation,
+      carrying a warning in place of the heading list — compaction is imminent, and
+      withholding the handoff entirely would lose the whole notepad, which is strictly worse
+      than an incomplete listing. Both files carry a comment naming the other so a later
+      reader does not "fix" one to match it.
+
+      ⚠️ **The task uncovered a false safety claim in already-committed code, and it was not
+      in the new work.** Both hooks load their libraries as
+      `if [ -r "$LIB" ] && . "$LIB"; then`, and the comment at `live-handoff.sh` claimed this
+      meant `set -e` "cannot kill the hook on a library that fails to parse". **Measured, and
+      false:** under `set -euo pipefail` a sourced file with a real syntax error terminates
+      the shell at **rc=2** and the statement after the `if` never runs. Measured end to end
+      on `pre-compact-handoff.sh`: with a `set +e` / `set -e` toggle around the source,
+      `rc=0` and a full directive; without it, **rc=2 and zero bytes of output** — a
+      `UserPromptSubmit`/`PreCompact` hook emitting no directive whatsoever, which is the
+      opposite of the fail-closed handling the spec requires for an unloadable library. Both
+      hooks now wrap both source calls in the toggle, and the comments state the measurement
+      instead of the guarantee. The claim stood in **one** committed comment (the count was
+      first written here as three, then two; the second figure counted a copy of the same
+      wording that this task had itself added minutes earlier and not yet committed — count
+      them with `git show HEAD:hooks/handoff/live-handoff.sh` rather than trusting a figure).
+
+      **Why nothing caught it:** `live-handoff.test.sh`'s "unloadable reinject library"
+      fixture was `: > lib/handoff-keep-reinject.sh` — an **empty** file, which sources
+      cleanly at rc 0 and is caught only by the later `declare -f` check. That assertion is
+      correct and still passes; it simply tested a different failure from the one the comment
+      promised to survive. Both hooks now have a genuine parse-error fixture
+      (`this is not valid bash ((((`), and the fix was falsified by stripping only the toggle
+      lines from a scratch copy: 4 lines removed, patched copy `rc=0` with 1,057 bytes,
+      stripped copy `rc=2` with 0 bytes.
+
+      Shared library, landed earlier the same day:
+      `hooks/handoff/lib/handoff-keep-reinject.sh` holds `keep_heading_lines`,
       `envelope_keep_headings` and `keep_trim_directive`, **20/20 passing**, with
       `handoff-archive.test.sh` still **79/79** — the evidence the shared library was called,
       not grown. The directive wording lives in `keep_trim_directive` **once** rather than

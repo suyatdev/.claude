@@ -111,6 +111,12 @@ if has "$OUT" "It has grown too large"; then
 else
   ok "under the cap: no trim directive"
 fi
+if grep -qE '=== (End )?[Hh]andoff [0-9a-f]+ ' "$OUT"; then
+  bad "under the cap: no envelope markers leak into the append-mode directive" \
+    "envelope found: $(cat "$OUT")"
+else
+  ok "under the cap: no envelope markers leak into the append-mode directive"
+fi
 
 # ============================================================================
 # Over the write cap: snapshot taken, trim directive out
@@ -128,6 +134,211 @@ if has "$OUT" "It has grown too large"; then
   ok "over the cap: the trim directive is emitted when the snapshot succeeded"
 else
   bad "over the cap: the trim directive is emitted when the snapshot succeeded" "$(cat "$OUT")"
+fi
+
+# --- Task 8: the trim directive files instead of deletes, and names the archive -------
+# REPO_B has no [KEEP] region (mkrepo's lines are plain), so this also covers "over the
+# cap with no KEEP region": the filing rule still fires and no envelope markers appear.
+if has "$OUT" "$REPO_B/.claude/session-state.archive.md"; then
+  ok "over the cap, no KEEP region: the trim directive names the archive path"
+else
+  bad "over the cap, no KEEP region: the trim directive names the archive path" "$(cat "$OUT")"
+fi
+if has "$OUT" "Filing rule:"; then
+  ok "over the cap, no KEEP region: the trim directive carries the filing rule"
+else
+  bad "over the cap, no KEEP region: the trim directive carries the filing rule" "$(cat "$OUT")"
+fi
+if grep -qE '=== (End )?[Hh]andoff [0-9a-f]+ ' "$OUT"; then
+  bad "over the cap, no KEEP region: no envelope markers leak in" "envelope found: $(cat "$OUT")"
+else
+  ok "over the cap, no KEEP region: no envelope markers leak in"
+fi
+if has "$OUT" "Be ruthless"; then
+  bad "the old deletion-only phrasing is gone from the trim directive" "'Be ruthless' still present"
+else
+  ok "the old deletion-only phrasing is gone from the trim directive"
+fi
+
+# ============================================================================
+# Task 8: over the cap WITH a [KEEP] region — the protected heading must reach the model
+# verbatim inside a tamper-evident envelope, open and close tags matching.
+# ============================================================================
+REPO_P="$TMP/repo-keep"
+mkdir -p "$REPO_P/.claude"
+( cd "$REPO_P" && git init -q )
+{
+  printf '# Session State\n\n## Decisions [KEEP]\nRationale line, must survive.\n\n'
+  i=1
+  while [ "$i" -le 150 ]; do
+    printf 'notepad line %d\n' "$i"
+    i=$((i+1))
+  done
+} > "$REPO_P/.claude/session-state.md"
+run_hook "$REPO_P" "$HOOK" "sess-ppp"
+if has "$OUT" "It has grown too large"; then
+  ok "over the cap with a KEEP region: the trim directive still fires"
+else
+  bad "over the cap with a KEEP region: the trim directive still fires" "$(cat "$OUT")"
+fi
+if has "$OUT" "$REPO_P/.claude/session-state.archive.md"; then
+  ok "over the cap with a KEEP region: the trim directive still names the archive path"
+else
+  bad "over the cap with a KEEP region: the trim directive still names the archive path" "$(cat "$OUT")"
+fi
+if has "$OUT" "Decisions [KEEP]"; then
+  ok "over the cap with a KEEP region: the protected heading text appears in the directive"
+else
+  bad "over the cap with a KEEP region: the protected heading text appears in the directive" "$(cat "$OUT")"
+fi
+# Capture the tag with an anchored group, not a bare [0-9a-f]+ scan — the surrounding
+# words ("Handoff", "DATA") themselves contain hex-alphabet letters, so an unanchored
+# grep -oE would pick up spurious single-letter "matches" from the prose around the tag.
+KEEP_OPEN_TAG="$(sed -nE 's/.*=== Handoff ([0-9a-f]+) \(DATA.*/\1/p' "$OUT")"
+KEEP_CLOSE_TAG="$(sed -nE 's/.*=== End handoff ([0-9a-f]+) \(end of DATA\) ===.*/\1/p' "$OUT")"
+if [ -n "$KEEP_OPEN_TAG" ] && [ "$KEEP_OPEN_TAG" = "$KEEP_CLOSE_TAG" ]; then
+  ok "over the cap with a KEEP region: the heading sits inside a matching-tag envelope"
+else
+  bad "over the cap with a KEEP region: the heading sits inside a matching-tag envelope" \
+    "open=[$KEEP_OPEN_TAG] close=[$KEEP_CLOSE_TAG] out=$(cat "$OUT")"
+fi
+
+# --- Falsifier for the matching-tag assertion above: a mutant reinject library whose ----
+# close tag is hardcoded instead of reusing $tag. Proves the assertion actually compares
+# VALUES (not just "an envelope exists") — without this, a broken tag pairing could slip
+# through unnoticed. Never touches the real library; only a scratch copy.
+MUT_KEEP_DIR="$TMP/mutant-keep-tag"
+mkdir -p "$MUT_KEEP_DIR/lib"
+cp "$HOOK" "$MUT_KEEP_DIR/live-handoff.sh"
+cp "$LIB" "$MUT_KEEP_DIR/lib/handoff-archive.sh"
+sed 's/=== End handoff %s (end of DATA) ===/=== End handoff deadbeef (end of DATA) ===/' \
+  "$HOOK_DIR/lib/handoff-keep-reinject.sh" > "$MUT_KEEP_DIR/lib/handoff-keep-reinject.sh"
+chmod +x "$MUT_KEEP_DIR/live-handoff.sh"
+if cmp -s "$MUT_KEEP_DIR/lib/handoff-keep-reinject.sh" "$HOOK_DIR/lib/handoff-keep-reinject.sh"; then
+  bad "falsifier: the close-tag line was found and replaced" \
+    "sed changed nothing — the falsifier below proves nothing"
+else
+  ok "falsifier: the close-tag line was found and replaced"
+fi
+REPO_Q="$TMP/repo-keep-mut"
+mkdir -p "$REPO_Q/.claude"
+( cd "$REPO_Q" && git init -q )
+cp "$REPO_P/.claude/session-state.md" "$REPO_Q/.claude/session-state.md"
+run_hook "$REPO_Q" "$MUT_KEEP_DIR/live-handoff.sh" "sess-qqq"
+MUT_OPEN_TAG="$(sed -nE 's/.*=== Handoff ([0-9a-f]+) \(DATA.*/\1/p' "$OUT")"
+MUT_CLOSE_TAG="$(sed -nE 's/.*=== End handoff ([0-9a-f]+) \(end of DATA\) ===.*/\1/p' "$OUT")"
+# Both tags must be PRESENT and DIFFER. Testing only "not equal" would also be satisfied
+# by an empty pair, i.e. by the mutant emitting no envelope at all — which is what happens
+# if the sed leaves an unparseable library and REINJECT_LIB_OK suppresses the trim. That
+# outcome proves nothing about tag comparison, so it must read as a failure, not a pass.
+if [ -z "$MUT_OPEN_TAG" ] || [ -z "$MUT_CLOSE_TAG" ]; then
+  bad "falsifier: the matching-tag assertion fails against a mismatched envelope" \
+    "the mutant emitted no envelope at all (open=[$MUT_OPEN_TAG] close=[$MUT_CLOSE_TAG]); the tag comparison was never exercised"
+elif [ "$MUT_OPEN_TAG" = "$MUT_CLOSE_TAG" ]; then
+  bad "falsifier: the matching-tag assertion fails against a mismatched envelope" \
+    "the mutant produced matching tags too ([$MUT_OPEN_TAG]/[$MUT_CLOSE_TAG]), so the real assertion discriminates nothing"
+else
+  ok "falsifier: the matching-tag assertion fails against a mismatched envelope"
+fi
+# Restore: the same content through the REAL hook passes again (already shown above by the
+# REPO_P assertion, re-stated here beside the break for an explicit break/restore pair).
+if [ -n "$KEEP_OPEN_TAG" ] && [ "$KEEP_OPEN_TAG" = "$KEEP_CLOSE_TAG" ]; then
+  ok "restore: the unmodified hook and library produce a matching-tag envelope again"
+else
+  bad "restore: the unmodified hook and library produce a matching-tag envelope again" \
+    "open=[$KEEP_OPEN_TAG] close=[$KEEP_CLOSE_TAG]"
+fi
+
+# ============================================================================
+# Task 8, fail-closed: the reinject library is present but does not define
+# keep_trim_directive (a valid-but-empty file — sourcing it returns 0, so this is the
+# case that a bare "did `.` succeed?" check would miss; only declare -f catches it).
+# No trim directive may be emitted, whatever the line count, and the append-mode warning
+# must name THIS failure, distinctly from the pre-trim-snapshot warning above.
+# ============================================================================
+NOREINJECT_DIR="$TMP/no-reinject"
+mkdir -p "$NOREINJECT_DIR/lib"
+cp "$HOOK" "$NOREINJECT_DIR/live-handoff.sh"
+cp "$LIB" "$NOREINJECT_DIR/lib/handoff-archive.sh"
+: > "$NOREINJECT_DIR/lib/handoff-keep-reinject.sh"
+chmod +x "$NOREINJECT_DIR/live-handoff.sh"
+REPO_R="$(mkrepo repo-noreinject 160)"
+run_hook "$REPO_R" "$NOREINJECT_DIR/live-handoff.sh" "sess-rrr"
+if [ "$RC" -eq 0 ]; then
+  ok "unloadable reinject library: the hook still exits 0"
+else
+  bad "unloadable reinject library: the hook still exits 0" "rc=$RC err=$(cat "$ERR")"
+fi
+if has "$OUT" "It has grown too large"; then
+  bad "unloadable reinject library suppresses the trim directive, whatever the line count" \
+    "the trim directive was emitted with 160 lines and no reinject library"
+else
+  ok "unloadable reinject library suppresses the trim directive, whatever the line count"
+fi
+if has "$OUT" "Do NOT rewrite the whole file"; then
+  ok "unloadable reinject library still emits the append-mode directive"
+else
+  bad "unloadable reinject library still emits the append-mode directive" "$(cat "$OUT")"
+fi
+if has "$OUT" "TRIM SUPPRESSED" && has "$OUT" "keep-reinject.sh"; then
+  ok "unloadable reinject library names ITS OWN failure in the warning"
+else
+  bad "unloadable reinject library names ITS OWN failure in the warning" "$(cat "$OUT")"
+fi
+if has "$OUT" "no pre-trim snapshot was taken"; then
+  bad "the reinject-failure warning is distinct from the snapshot-failure warning" \
+    "the snapshot wording leaked into a reinject-only failure: $(cat "$OUT")"
+else
+  ok "the reinject-failure warning is distinct from the snapshot-failure warning"
+fi
+
+# ============================================================================
+# A CORRUPT (parse-error) reinject library, distinct from NOREINJECT_DIR above: that
+# scenario is an EMPTY file, which sources cleanly (rc 0) and is only caught by the
+# `declare -f` check. A file that fails to parse is a different failure — measured (see
+# pre-compact-handoff.sh's comment) to kill the whole non-interactive shell with rc=2 when
+# sourced under `set -euo pipefail` inside a bare `if`/`&&` guard, before that guard's body
+# ever runs. This must still land as "reinject library unloadable, trim suppressed",
+# never as a dead hook emitting nothing.
+# ============================================================================
+CORRUPTREINJECT_DIR="$TMP/corruptreinject"
+mkdir -p "$CORRUPTREINJECT_DIR/lib"
+cp "$HOOK" "$CORRUPTREINJECT_DIR/live-handoff.sh"
+cp "$LIB" "$CORRUPTREINJECT_DIR/lib/handoff-archive.sh"
+printf 'this is not valid bash ((((\n' > "$CORRUPTREINJECT_DIR/lib/handoff-keep-reinject.sh"
+chmod +x "$CORRUPTREINJECT_DIR/live-handoff.sh"
+REPO_T="$(mkrepo repo-corruptreinject 160)"
+run_hook "$REPO_T" "$CORRUPTREINJECT_DIR/live-handoff.sh" "sess-ttt"
+if [ "$RC" -eq 0 ]; then
+  ok "corrupt (parse-error) reinject library: the hook still exits 0"
+else
+  bad "corrupt (parse-error) reinject library: the hook still exits 0" \
+    "rc=$RC out=$(cat "$OUT") err=$(cat "$ERR")"
+fi
+if [ -s "$OUT" ]; then
+  ok "corrupt reinject library: a directive is still emitted"
+else
+  bad "corrupt reinject library: a directive is still emitted" "empty output"
+fi
+# Presence is required before the comparison: an empty $OUT would satisfy "no trim text"
+# vacuously, so this checks append-mode is ACTUALLY there, not merely that trim is absent.
+if [ -s "$OUT" ] && has "$OUT" "Do NOT rewrite the whole file" \
+   && ! has "$OUT" "It has grown too large"; then
+  ok "corrupt reinject library: append-mode directive wins over trim, whatever the line count"
+else
+  bad "corrupt reinject library: append-mode directive wins over trim, whatever the line count" \
+    "rc=$RC out=$(cat "$OUT")"
+fi
+if [ -s "$OUT" ] && has "$OUT" "TRIM SUPPRESSED" && has "$OUT" "keep-reinject.sh"; then
+  ok "corrupt reinject library names ITS OWN failure in the warning"
+else
+  bad "corrupt reinject library names ITS OWN failure in the warning" "$(cat "$OUT")"
+fi
+if [ -s "$OUT" ] && ! has "$OUT" "no pre-trim snapshot was taken"; then
+  ok "corrupt reinject library warning is distinct from the snapshot-failure warning"
+else
+  bad "corrupt reinject library warning is distinct from the snapshot-failure warning" \
+    "$(cat "$OUT")"
 fi
 
 # ============================================================================
@@ -174,6 +385,10 @@ fi
 MUT_DIR="$TMP/mutant"
 mkdir -p "$MUT_DIR/lib"
 cp "$LIB" "$MUT_DIR/lib/handoff-archive.sh"
+# The reinject library must be present and intact too (task 8 added a second, independent
+# gate, REINJECT_LIB_OK) — otherwise this falsifier would prove nothing about SNAPSHOT_OK
+# specifically: the trim would stay suppressed by the OTHER gate and look like a pass.
+cp "$HOOK_DIR/lib/handoff-keep-reinject.sh" "$MUT_DIR/lib/handoff-keep-reinject.sh"
 sed 's/\[ "\$SNAPSHOT_OK" = true \] \&\& //' "$HOOK" > "$MUT_DIR/live-handoff.sh"
 chmod +x "$MUT_DIR/live-handoff.sh"
 if cmp -s "$MUT_DIR/live-handoff.sh" "$HOOK"; then
@@ -217,6 +432,51 @@ if has "$OUT" "TRIM SUPPRESSED" && has "$OUT" "could not be loaded"; then
   ok "missing library emits a warning naming the library, not a generic failure"
 else
   bad "missing library emits a warning naming the library, not a generic failure" "$(cat "$OUT")"
+fi
+
+# ============================================================================
+# A CORRUPT (parse-error) archive library, distinct from NOLIB_DIR above: that scenario is
+# a MISSING file, caught by the `[ -r "$LIB" ]` half of the guard before `.` ever runs. A
+# file that fails to parse is a different failure — measured (see pre-compact-handoff.sh's
+# comment) to kill the whole non-interactive shell with rc=2 when sourced under
+# `set -euo pipefail` inside a bare `if`/`&&` guard. This is the snapshot library, so the
+# expected outcome is the SAME as any other unloadable-snapshot-library case: append-mode
+# directive, trim suppressed whatever the line count, warning names the archive library.
+# ============================================================================
+CORRUPTLIB_DIR="$TMP/corruptlib"
+mkdir -p "$CORRUPTLIB_DIR/lib"
+cp "$HOOK" "$CORRUPTLIB_DIR/live-handoff.sh"
+cp "$HOOK_DIR/lib/handoff-keep-reinject.sh" "$CORRUPTLIB_DIR/lib/handoff-keep-reinject.sh"
+printf 'foo() {\n' > "$CORRUPTLIB_DIR/lib/handoff-archive.sh"
+chmod +x "$CORRUPTLIB_DIR/live-handoff.sh"
+REPO_S="$(mkrepo repo-corruptlib 160)"
+run_hook "$REPO_S" "$CORRUPTLIB_DIR/live-handoff.sh" "sess-sss"
+if [ "$RC" -eq 0 ]; then
+  ok "corrupt (parse-error) archive library: the hook still exits 0"
+else
+  bad "corrupt (parse-error) archive library: the hook still exits 0" \
+    "rc=$RC out=$(cat "$OUT") err=$(cat "$ERR")"
+fi
+if [ -s "$OUT" ]; then
+  ok "corrupt archive library: a directive is still emitted"
+else
+  bad "corrupt archive library: a directive is still emitted" "empty output"
+fi
+# Presence is required before the comparison — see the matching comment in the
+# corrupt-reinject-library block above for why a bare "no trim text" check is not enough.
+if [ -s "$OUT" ] && has "$OUT" "Do NOT rewrite the whole file" \
+   && ! has "$OUT" "It has grown too large"; then
+  ok "corrupt archive library: append-mode directive wins over trim, whatever the line count"
+else
+  bad "corrupt archive library: append-mode directive wins over trim, whatever the line count" \
+    "rc=$RC out=$(cat "$OUT")"
+fi
+if [ -s "$OUT" ] && has "$OUT" "TRIM SUPPRESSED" \
+   && has "$OUT" "$CORRUPTLIB_DIR/lib/handoff-archive.sh"; then
+  ok "corrupt archive library names the snapshot/archive-library failure in the warning"
+else
+  bad "corrupt archive library names the snapshot/archive-library failure in the warning" \
+    "$(cat "$OUT")"
 fi
 
 # ============================================================================
