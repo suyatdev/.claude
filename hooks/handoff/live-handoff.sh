@@ -202,12 +202,13 @@ recovered. Report this to the user, and fix the write failure (usually an unwrit
 .claude directory) or copy the file aside by hand before trimming anything."
 fi
 
-# This hook fails CLOSED here; pre-compact-handoff.sh deliberately fails OPEN in the very
-# same situation, emitting its rewrite directive with a warning in place of the heading
-# list. That is not an inconsistency to tidy up: this hook fires again on the next prompt
-# and can afford to withhold one directive, while that one gets a single chance before
-# compaction and suppressing it would forfeit the whole handoff. Rationale and the
-# consequences of harmonising them: docs/decisions/0046-the-two-trim-directive-hooks-fail-in-opposite-directions.md
+# Both hooks end up ordering APPEND-ONLY here; they only reach it differently. This one
+# suppresses the trim directive and falls back to the append-mode directive it already
+# emits under the cap, plus the warning below. pre-compact-handoff.sh has no such fallback
+# — its only directive is a rewrite order — so it builds an append-only one, and emits no
+# line target on that path because a target invites a cut. Do not harmonise the two
+# branches into one: giving that hook this hook's fallback would hand it a line target.
+# Rationale, and the measurement: docs/decisions/0046-neither-trim-hook-orders-a-cut-it-cannot-back-up.md
 #
 # A second, distinct suppression reason (task 8): the snapshot can succeed while the
 # reinject library still cannot be loaded — they are different scripts that fail

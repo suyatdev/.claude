@@ -135,18 +135,20 @@ ${KEEP_TRIM_FRAGMENT}
 </pre-compact-handoff>
 DIRECTIVE
 else
-    # Opposite fail direction from live-handoff.sh, deliberately: live-handoff.sh
-    # SUPPRESSES its trim directive when it cannot back a trim up with a snapshot,
-    # because it fires again on the very next prompt and can afford to wait. This hook
-    # cannot -- compaction is imminent, and withholding the handoff directive entirely
-    # would lose the whole notepad, which is strictly worse than ordering an append-only
-    # write. So this branch still emits a directive, but it orders APPEND-ONLY instead of
-    # a rewrite: the protected [KEEP] headings could not be listed, so nothing can be
-    # safely identified as removable this run, and authorising a cut here is exactly the
-    # promise this card exists to stop making. Do not "fix" one hook to match the other;
-    # they fail in opposite directions on purpose. Rationale and the consequences of
-    # harmonising them:
-    # docs/decisions/0046-the-two-trim-directive-hooks-fail-in-opposite-directions.md
+    # Still emit a directive, but order APPEND-ONLY: the protected [KEEP] headings could
+    # not be listed, so nothing can be safely identified as removable this run, and
+    # authorising a cut here is exactly the promise this card exists to stop making.
+    # Withholding the directive entirely -- what live-handoff.sh does in the same state --
+    # is wrong HERE: compaction is imminent and this hook fires once, so suppressing it
+    # would forfeit the whole notepad rather than defer a cut. live-handoff.sh fires again
+    # on the very next prompt and can afford to wait.
+    #
+    # Both hooks therefore end up ordering append-only; they differ only in route, since
+    # live-handoff.sh has an under-cap append directive to fall back on and this one does
+    # not. Do not harmonise the two branches: this path deliberately carries NO line
+    # target, and this hook's only other directive does.
+    # Rationale and the measurement:
+    # docs/decisions/0046-neither-trim-hook-orders-a-cut-it-cannot-back-up.md
     cat << DIRECTIVE
 <pre-compact-handoff>
 CRITICAL: Context compaction is about to happen. You MUST update .claude/session-state.md NOW.

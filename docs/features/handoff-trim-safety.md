@@ -38,14 +38,15 @@ Observability: failed `success_masking` in rounds 2, 3 and 4, then **passed in r
 where it also stated the design is ready to hand to a human reviewer; on the implementation at
 `f7d570f` it returned **PASS with concerns**, the sharpest being that a mutant printing a raw
 `[KEEP]` heading *outside* an empty envelope leaves two of the three suites green.
-⚠️ **The round 1-8 counts above cannot be re-derived from any ledger, and earlier revisions
-of this paragraph wrongly told the reader they could.** Measured 2026-09-12:
-`coding-memory/compliance-judge/verdicts.jsonl` in this worktree holds exactly **one** row
-matching `handoff-trim-safety` (round 9), and the same file under `~/.claude` holds **zero**.
-Where the spec-round rows went is not recorded and is deliberately not guessed at here; only
-the gitignored round-8 prose survives locally. So the round 1-8 figures rest on this sentence
-alone — treat them as unverified, and re-derive nothing from a pointer that resolves to
-nothing. Round 9 onward *is* in the worktree ledger and can be read there.
+⚠️ **The round 1-8 counts are not in either JSONL ledger — check the prose file instead.**
+Measured 2026-09-12: `coding-memory/compliance-judge/verdicts.jsonl` in this worktree holds
+exactly **one** row matching `handoff-trim-safety` (round 9), and the same file under
+`~/.claude` holds **zero**. The figures *are* verifiable, in
+`~/.claude/coding-memory/compliance-judge/2026-09-08-handoff-trim-safety.md`, which covers
+Round 1 through Round 8 — gitignored, so it does not travel with this branch. Earlier
+revisions of this paragraph got this wrong in both directions: first by pointing at the
+ledger as if the rows were there, then by asserting the counts could not be re-derived at all.
+Round 9 onward is in the worktree ledger and can be read there.
 
 Every finding across all rounds was independently re-measured before being acted on, and every
 one held — including one this session first reported as not reproducing, which did reproduce
@@ -304,28 +305,26 @@ that ignores them, in two repos measured as not covering them today.
       explicit setup sentinel, separating "empty because it worked" from "empty because the
       setup died".
 
-      **Fail direction, decided by the user 2026-09-12 (D18) — neither hook orders a cut it
-      cannot back up.** `live-handoff.sh` adds `REINJECT_LIB_OK` as a second, independent
-      suppression gate beside `SNAPSHOT_OK`: it emits no trim directive at all when the
-      filing rule and protected-heading list cannot be produced, because it fires again on
-      the very next prompt and can afford to wait, and its two warnings name their own
-      distinct cause so a reader can tell them apart. `pre-compact-handoff.sh` **still emits
-      a directive** — it gets one chance before compaction and withholding it would forfeit
-      the whole handoff rather than defer it — but that directive orders **append-only**:
-      write the handoff, remove nothing this run, because the protected headings could not be
-      listed. So the hooks differ in *what they emit*, not in whether a cut may proceed
-      unbacked; neither authorises one. Both files carry a comment naming the other so a
-      later reader does not "fix" one to match it.
+      **Fail direction: D18, decided by the user 2026-09-12.** When the filing rule and
+      protected-heading list cannot be produced, **both** hooks order append-only — measured
+      at `79523fd` against a corrupt reinject library: both exit `0`, both emit a directive,
+      both order append-only, both name the failed library. They differ only in route, since
+      `live-handoff.sh` has an under-cap append directive to fall back on (behind a new
+      `REINJECT_LIB_OK` gate beside `SNAPSHOT_OK`) and `pre-compact-handoff.sh` has none, so
+      it builds one and deliberately omits the line target. Decision text, rejected
+      alternatives and consequences:
+      [`docs/decisions/0046-neither-trim-hook-orders-a-cut-it-cannot-back-up.md`](../decisions/0046-neither-trim-hook-orders-a-cut-it-cannot-back-up.md)
+      and D18 in the spec. Not restated here.
 
-      ⚠️ **An earlier revision of this task had `pre-compact-handoff.sh` fail *open* — full
-      rewrite plus a warning — and the compliance judge failed it in round 9 on two counts:
-      ordering a rewrite while unable to list what must survive is the unbacked promise spec
-      finding O-C forbids for the sibling hook, and the trade-off was accepted in the ADR's
-      own voice with no user decision recorded.** Both are correct. It also produced
-      self-conflicting instructions — "REWRITE it completely" beside "do not remove any" —
-      and required a hand-copied filing rule that had already drifted from the library's. The
-      append-only resolution above removes all three problems rather than trading them off,
-      and is recorded as D18 in the spec, not asserted here.
+      ⚠️ **Two review rounds were spent on this one branch, and the second was caused by the
+      first.** Round 9 failed the original fail-open form; the fix was correct, but the ADR
+      that landed with it kept the title *"the two hooks fail in opposite directions"* and
+      two code comments repeated it — describing the **rejected** design as current, and
+      instructing a future reader to preserve it. Round 10 measured that both hooks now give
+      the same instruction and failed it again. The ADR is renamed and rewritten; its own
+      *What the first draft got wrong* section keeps the record rather than quietly erasing
+      it, because the card had cited those comments as the guard against exactly that
+      mistake.
 
       ⚠️ **The task uncovered a false safety claim in already-committed code, and it was not
       in the new work.** `live-handoff.sh` loaded its library as
@@ -390,8 +389,14 @@ that ignores them, in two repos measured as not covering them today.
       commit: it checked the warning's heading count with `grep -F 2` against the whole
       output, and `mktemp`'s per-user prefix on this machine happens to contain a `2`, so it
       matched the filing-rule line on every run and could not fail. (The literal prefix is
-      deliberately not reproduced here — it is a machine-specific absolute path, and this
-      repo does not commit those. Re-derive it with `mktemp -d` if the reasoning needs
+      deliberately not reproduced here — it is a machine-specific absolute path, and a
+      `mktemp` prefix in particular is worthless to a later reader, since it differs per
+      machine and per user. That is a choice about this sentence, **not** a claim about the
+      repo: `/Users/marksuyat/.local/bin/claude` is committed at task 11 below, in the
+      companion spec, and in `hooks/handoff/handoff-keep-guard.sh:11`, so the
+      no-absolute-paths invariant is not currently held here and an earlier revision of this
+      sentence wrongly implied it was. Re-derive the prefix with `mktemp -d` if the reasoning
+      needs
       checking.) Anchored to `^Warning: 2 protected …` and falsified by substituting `3`,
       which does fail.
 - [ ] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
