@@ -16,8 +16,9 @@
 #   * when the notepad has [KEEP] headings, they are re-injected verbatim inside a
 #     tamper-evident, tagged DATA envelope (open tag == close tag);
 #   * when the reinject library cannot be loaded, the hook still emits a directive (the
-#     OPPOSITE fail-open direction from live-handoff.sh, which suppresses instead) with a
-#     loud warning that protected headings could not be listed;
+#     OPPOSITE fail direction from live-handoff.sh, which suppresses instead) but orders
+#     APPEND-ONLY instead of a rewrite, names the library path that failed, and carries no
+#     filing rule or line-target text -- a target invites a cut it cannot back up;
 #   * a missing notepad does not break the hook -- keep_trim_directive already handles
 #     that by printing the filing rule alone.
 #
@@ -265,10 +266,11 @@ else
 fi
 
 # ============================================================================
-# New behaviour: libraries unloadable -- directive still emitted (fail OPEN, the opposite
-# direction from live-handoff.sh), carrying a warning that names the un-listable [KEEP]
-# headings. Simulated with a SCRATCH COPY of the hook tree whose reinject library is
-# corrupt or absent -- the real files under hooks/handoff/lib/ are never touched.
+# New behaviour: libraries unloadable -- directive still emitted (fail OPEN, but ordering
+# APPEND-ONLY instead of a rewrite -- the opposite direction from live-handoff.sh, which
+# suppresses its directive entirely). Simulated with a SCRATCH COPY of the hook tree whose
+# reinject library is corrupt or absent -- the real files under hooks/handoff/lib/ are
+# never touched.
 # ============================================================================
 
 # make_scratch_hook LIBSTATE — copies pre-compact-handoff.sh and lib/handoff-archive.sh
@@ -288,7 +290,14 @@ make_scratch_hook() {
   printf '%s' "$dir/pre-compact-handoff.sh"
 }
 
+# Fragments pinned against the hook's OWN wording, defined once so the corrupt and absent
+# cases below compare against exactly the same strings.
+APPEND_ONLY_STR='APPEND ONLY. Do not rewrite, shorten, reorder, or delete any existing part of .claude/session-state.md this run.'
+LIB_WARN_STR='could not be loaded here, so the protected [KEEP] heading(s) in the notepad could not be listed'
+LINE_TARGET_STR='Line targets: general 120-150, task 140-170, bug 160-190 (if needed).'
+
 CORRUPT_HOOK="$(make_scratch_hook corrupt)"
+CORRUPT_LIB="$(dirname "$CORRUPT_HOOK")/lib/handoff-keep-reinject.sh"
 run_hook "$REPO_KEEP" "$CORRUPT_HOOK"
 if [ "$RC" -eq 0 ]; then
   ok "reinject library corrupt: hook still exits 0"
@@ -300,25 +309,89 @@ if has "$OUT" '<pre-compact-handoff>'; then
 else
   bad "reinject library corrupt: a directive is still emitted" "$(cat "$OUT")"
 fi
-if has "$OUT" 'could not be loaded here, so the protected [KEEP] heading(s) in the notepad could not be listed'; then
+if has "$OUT" "$APPEND_ONLY_STR"; then
+  ok "reinject library corrupt: the directive orders append-only"
+else
+  bad "reinject library corrupt: the directive orders append-only" "$(cat "$OUT")"
+fi
+if has "$OUT" "$LIB_WARN_STR"; then
   ok "reinject library corrupt: the warning names the un-listable [KEEP] headings"
 else
   bad "reinject library corrupt: the warning names the un-listable [KEEP] headings" "$(cat "$OUT")"
+fi
+if has "$OUT" "$CORRUPT_LIB"; then
+  ok "reinject library corrupt: the directive names the failed library's path"
+else
+  bad "reinject library corrupt: the directive names the failed library's path" "$(cat "$OUT")"
+fi
+if has "$OUT" 'Filing rule:'; then
+  bad "reinject library corrupt: no filing-rule text is carried" "found one anyway: $(cat "$OUT")"
+else
+  ok "reinject library corrupt: no filing-rule text is carried"
+fi
+if has "$OUT" "$LINE_TARGET_STR"; then
+  bad "reinject library corrupt: no line-target string is carried" "found one anyway: $(cat "$OUT")"
+else
+  ok "reinject library corrupt: no line-target string is carried"
 fi
 if has "$OUT" '=== Handoff '; then
   bad "reinject library corrupt: no envelope marker is fabricated" "found one anyway: $(cat "$OUT")"
 else
   ok "reinject library corrupt: no envelope marker is fabricated"
 fi
+if grep -qF 'you MUST read .claude/session-state.md before doing anything else' "$OUT"; then
+  ok "reinject library corrupt: the read-first-after-compaction instruction is kept"
+else
+  bad "reinject library corrupt: the read-first-after-compaction instruction is kept" "$(cat "$OUT")"
+fi
 cp "$OUT" "$TMP/broken-lib.out"
 
+run_hook "$REPO_TASK" "$CORRUPT_HOOK"
+if has "$OUT" 'DETECTED STATE: Active multi-session task.'; then
+  ok "reinject library corrupt: MODE_DIRECTIVE still fires in the append-only branch"
+else
+  bad "reinject library corrupt: MODE_DIRECTIVE still fires in the append-only branch" "$(cat "$OUT")"
+fi
+
 ABSENT_HOOK="$(make_scratch_hook absent)"
+ABSENT_LIB="$(dirname "$ABSENT_HOOK")/lib/handoff-keep-reinject.sh"
 run_hook "$REPO_KEEP" "$ABSENT_HOOK"
-if [ "$RC" -eq 0 ] && has "$OUT" '<pre-compact-handoff>' && \
-   has "$OUT" 'could not be loaded here, so the protected [KEEP] heading(s) in the notepad could not be listed'; then
+if [ "$RC" -eq 0 ] && has "$OUT" '<pre-compact-handoff>' && has "$OUT" "$LIB_WARN_STR"; then
   ok "reinject library absent: hook still exits 0 and warns the same way"
 else
   bad "reinject library absent: hook still exits 0 and warns the same way" "rc=$RC out=$(cat "$OUT")"
+fi
+if has "$OUT" "$APPEND_ONLY_STR"; then
+  ok "reinject library absent: the directive orders append-only"
+else
+  bad "reinject library absent: the directive orders append-only" "$(cat "$OUT")"
+fi
+if has "$OUT" "$ABSENT_LIB"; then
+  ok "reinject library absent: the directive names the missing library's path"
+else
+  bad "reinject library absent: the directive names the missing library's path" "$(cat "$OUT")"
+fi
+if has "$OUT" 'Filing rule:'; then
+  bad "reinject library absent: no filing-rule text is carried" "found one anyway: $(cat "$OUT")"
+else
+  ok "reinject library absent: no filing-rule text is carried"
+fi
+if has "$OUT" "$LINE_TARGET_STR"; then
+  bad "reinject library absent: no line-target string is carried" "found one anyway: $(cat "$OUT")"
+else
+  ok "reinject library absent: no line-target string is carried"
+fi
+
+# ============================================================================
+# The filing rule must live in exactly one place: the shared library. Assert its absence
+# from the HOOK SOURCE ITSELF, not just from one run's output -- the fallback branch used
+# to hand-copy this wording (task 8's Finding B), and a source-level check catches a
+# reintroduced copy that a differently-shaped fixture might not happen to exercise.
+# ============================================================================
+if grep -qF 'Filing rule:' "$HOOK"; then
+  bad "the filing rule is not hand-copied anywhere in pre-compact-handoff.sh" "found a copy in the source file"
+else
+  ok "the filing rule is not hand-copied anywhere in pre-compact-handoff.sh"
 fi
 
 # ============================================================================
@@ -365,6 +438,76 @@ if [ "$BROKEN_RC" -ne 0 ] && [ "$GOOD_RC" -eq 0 ]; then
 else
   bad "falsifier: envelope_wraps fails on the mismatched-tag scratch output and passes on the real one" \
     "broken_rc=$BROKEN_RC (want nonzero) good_rc=$GOOD_RC (want 0) tagbug_out=$(cat "$TMP/tagbug.out")"
+fi
+
+# ============================================================================
+# Falsifier: prove envelope_wraps requires CONTAINMENT, not just "the heading text and a
+# same-tag envelope both appear somewhere in the file" -- the observability judge's
+# reported gap. Build a scratch library whose envelope_keep_headings emits an EMPTY
+# envelope (open immediately followed by close, same real tag, nothing between) and then
+# dumps the raw, UNSANITIZED heading text after the close marker -- outside the envelope
+# entirely. This defeats both the sanitizer (a plain `cat`, not sanitize_line) and any
+# check that only looks for "does this text appear anywhere", and must still be rejected.
+# ============================================================================
+RAWOUT_DIR="$TMP/scratch-hook-rawout"
+mkdir -p "$RAWOUT_DIR/lib"
+cp "$HOOK" "$RAWOUT_DIR/pre-compact-handoff.sh"
+cp "$HOOK_DIR/lib/handoff-archive.sh" "$RAWOUT_DIR/lib/handoff-archive.sh"
+python3 - "$HOOK_DIR/lib/handoff-keep-reinject.sh" "$RAWOUT_DIR/lib/handoff-keep-reinject.sh" <<'PY'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+text = open(src).read()
+# Two small, exact, single-occurrence anchors -- safer than reproducing the whole
+# function body (which contains a literal em dash) as one giant match.
+repls = [
+    ('  while IFS= read -r line || [ -n "$line" ]; do\n',
+     '  while false; do\n'),
+    ('  printf \'=== End handoff %s (end of DATA) ===\\n\' "$tag"\n  return 0\n}\n',
+     '  printf \'=== End handoff %s (end of DATA) ===\\n\' "$tag"\n'
+     '  cat "$headings_file"\n  return 0\n}\n'),
+]
+for old, new in repls:
+    if text.count(old) != 1:
+        sys.stderr.write("FALSIFIER SETUP FAILED: expected exactly one match for %r, found %d\n" % (old, text.count(old)))
+        sys.exit(1)
+    text = text.replace(old, new, 1)
+open(dst, "w").write(text)
+PY
+RAWOUT_SETUP_RC=$?
+if [ "$RAWOUT_SETUP_RC" -eq 0 ]; then
+  ok "containment falsifier setup: the scratch library was patched to emit an empty envelope plus a raw heading outside it"
+else
+  bad "containment falsifier setup: the scratch library was patched to emit an empty envelope plus a raw heading outside it" \
+    "python3 replace failed, rc=$RAWOUT_SETUP_RC"
+fi
+
+run_hook "$REPO_KEEP" "$RAWOUT_DIR/pre-compact-handoff.sh"
+cp "$OUT" "$TMP/rawout.out"
+
+# Sanity check first: the mutant must actually produce BOTH a tagged envelope and the raw
+# heading text, or a rejection below would be vacuous -- rejecting because the fixture is
+# broken, not because envelope_wraps caught the defect it's meant to catch.
+if grep -qF '=== Handoff ' "$TMP/rawout.out" && grep -qF 'Critical Fact [KEEP]' "$TMP/rawout.out"; then
+  ok "containment falsifier: the mutant output actually contains a tagged envelope and the raw heading"
+else
+  bad "containment falsifier: the mutant output actually contains a tagged envelope and the raw heading" "$(cat "$TMP/rawout.out")"
+fi
+
+envelope_wraps "$TMP/rawout.out" 'Critical Fact [KEEP]'
+RAWOUT_RC=$?
+if [ "$RAWOUT_RC" -ne 0 ]; then
+  ok "containment falsifier: envelope_wraps rejects a raw heading printed outside an empty envelope"
+else
+  bad "containment falsifier: envelope_wraps rejects a raw heading printed outside an empty envelope" \
+    "rc=$RAWOUT_RC (want nonzero) rawout_out=$(cat "$TMP/rawout.out")"
+fi
+
+envelope_wraps "$TMP/good-keep.out" 'Critical Fact [KEEP]'
+GOOD2_RC=$?
+if [ "$GOOD2_RC" -eq 0 ]; then
+  ok "containment falsifier: envelope_wraps still accepts the real hook's genuine output"
+else
+  bad "containment falsifier: envelope_wraps still accepts the real hook's genuine output" "$(cat "$TMP/good-keep.out")"
 fi
 
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"

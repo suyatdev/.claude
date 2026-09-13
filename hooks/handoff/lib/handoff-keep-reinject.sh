@@ -100,7 +100,7 @@ keep_trim_directive() {
     return 0
   fi
 
-  printf 'The following [KEEP] heading(s), and every line beneath each one, must survive this rewrite verbatim, heading line included:\n'
+  printf 'The following [KEEP] heading(s) — shown without their leading "#" markers — and every line beneath each one must survive this rewrite verbatim, heading text included:\n'
   printf '%s\n' "$env_out"
   return 0
 }

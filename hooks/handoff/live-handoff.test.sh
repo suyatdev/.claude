@@ -79,6 +79,30 @@ run_hook() {
 
 has() { grep -qF -- "$2" "$1"; }
 
+# envelope_wraps FILE FRAGMENT — 0 if FRAGMENT appears on some line strictly between a
+# "=== Handoff <tag> (DATA" opener and a "=== End handoff <tag> (end of DATA) ===" closer
+# carrying the SAME tag; 1 otherwise (no envelope, mismatched tags, or the fragment isn't
+# inside one). Ported from pre-compact-handoff.test.sh's own envelope_wraps helper, which
+# the observability judge found is the only one of the three consumer suites that actually
+# tests containment rather than "the heading appears somewhere + some tags match somewhere
+# else". Duplicated on purpose rather than shared — these suites are independently
+# runnable by design — and anchored to the actual envelope lines rather than a bare
+# grep -F for the fragment text, so an unrelated line elsewhere in the directive can't
+# produce a false ok.
+envelope_wraps() {
+  local file="$1" frag="$2" open close
+  open="$(grep -oE '=== Handoff [0-9a-f]{8} \(DATA' "$file" | head -1 | grep -oE '[0-9a-f]{8}')"
+  close="$(grep -oE '=== End handoff [0-9a-f]{8} \(end of DATA\) ===' "$file" | head -1 | grep -oE '[0-9a-f]{8}')"
+  [ -n "$open" ] || return 1
+  [ "$open" = "$close" ] || return 1
+  awk -v open="$open" -v frag="$frag" '
+    index($0, "=== Handoff " open " (DATA") { inenv = 1; next }
+    index($0, "=== End handoff " open " (end of DATA) ===") { inenv = 0 }
+    inenv && index($0, frag) { found = 1 }
+    END { exit !found }
+  ' "$file"
+}
+
 # ============================================================================
 # Normal path, under the write cap: snapshot taken anyway, append directive out
 # ============================================================================
@@ -202,6 +226,20 @@ else
   bad "over the cap with a KEEP region: the heading sits inside a matching-tag envelope" \
     "open=[$KEEP_OPEN_TAG] close=[$KEEP_CLOSE_TAG] out=$(cat "$OUT")"
 fi
+# The two checks above only prove the heading text and matching tags each appear somewhere
+# in the output -- not that the heading is actually BETWEEN the tags. A mutant that prints
+# an empty-but-correctly-tagged envelope and then the raw heading afterward would still
+# satisfy both. envelope_wraps checks real containment; see the falsifier further below
+# that proves it actually discriminates that exact mutant. Saved aside now, before the
+# mismatched-tag mutant below overwrites $OUT, so the falsifier's "restore" step and the
+# containment falsifier can both compare against this exact genuine output.
+cp "$OUT" "$TMP/good-keep.out"
+if envelope_wraps "$TMP/good-keep.out" 'Decisions [KEEP]'; then
+  ok "over the cap with a KEEP region: the heading sits INSIDE the matching-tag envelope, not merely somewhere in the output"
+else
+  bad "over the cap with a KEEP region: the heading sits INSIDE the matching-tag envelope, not merely somewhere in the output" \
+    "$(cat "$TMP/good-keep.out")"
+fi
 
 # --- Falsifier for the matching-tag assertion above: a mutant reinject library whose ----
 # close tag is hardcoded instead of reusing $tag. Proves the assertion actually compares
@@ -247,6 +285,80 @@ if [ -n "$KEEP_OPEN_TAG" ] && [ "$KEEP_OPEN_TAG" = "$KEEP_CLOSE_TAG" ]; then
 else
   bad "restore: the unmodified hook and library produce a matching-tag envelope again" \
     "open=[$KEEP_OPEN_TAG] close=[$KEEP_CLOSE_TAG]"
+fi
+
+# ============================================================================
+# Falsifier: prove envelope_wraps requires CONTAINMENT, not just "the heading text and a
+# same-tag envelope both appear somewhere in the output" -- the observability judge's
+# reported gap. Build a scratch hook tree whose reinject library's envelope_keep_headings
+# emits an EMPTY envelope (open immediately followed by close, same real tag, nothing
+# between) and then dumps the raw, UNSANITIZED heading text after the close marker --
+# outside the envelope entirely. This defeats both the sanitizer (a plain `cat`, not
+# sanitize_line) and any check that only looks for "does this text appear anywhere", and
+# must still be rejected. Never touches the real library; only a scratch copy, and the
+# replacement count is asserted exactly 1 so a future edit to the library fails this setup
+# loudly instead of silently patching nothing.
+# ============================================================================
+RAWOUT_DIR="$TMP/mutant-keep-rawout"
+mkdir -p "$RAWOUT_DIR/lib"
+cp "$HOOK" "$RAWOUT_DIR/live-handoff.sh"
+cp "$LIB" "$RAWOUT_DIR/lib/handoff-archive.sh"
+python3 - "$HOOK_DIR/lib/handoff-keep-reinject.sh" "$RAWOUT_DIR/lib/handoff-keep-reinject.sh" <<'PY'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+text = open(src).read()
+repls = [
+    ('  while IFS= read -r line || [ -n "$line" ]; do\n',
+     '  while false; do\n'),
+    ('  printf \'=== End handoff %s (end of DATA) ===\\n\' "$tag"\n  return 0\n}\n',
+     '  printf \'=== End handoff %s (end of DATA) ===\\n\' "$tag"\n'
+     '  cat "$headings_file"\n  return 0\n}\n'),
+]
+for old, new in repls:
+    if text.count(old) != 1:
+        sys.stderr.write("FALSIFIER SETUP FAILED: expected exactly one match for %r, found %d\n" % (old, text.count(old)))
+        sys.exit(1)
+    text = text.replace(old, new, 1)
+open(dst, "w").write(text)
+PY
+RAWOUT_SETUP_RC=$?
+chmod +x "$RAWOUT_DIR/live-handoff.sh"
+if [ "$RAWOUT_SETUP_RC" -eq 0 ]; then
+  ok "containment falsifier setup: the scratch library was patched to emit an empty envelope plus a raw heading outside it"
+else
+  bad "containment falsifier setup: the scratch library was patched to emit an empty envelope plus a raw heading outside it" \
+    "python3 replace failed, rc=$RAWOUT_SETUP_RC"
+fi
+
+REPO_RAWOUT="$TMP/repo-keep-rawout"
+mkdir -p "$REPO_RAWOUT/.claude"
+( cd "$REPO_RAWOUT" && git init -q )
+cp "$REPO_P/.claude/session-state.md" "$REPO_RAWOUT/.claude/session-state.md"
+run_hook "$REPO_RAWOUT" "$RAWOUT_DIR/live-handoff.sh" "sess-rawout"
+cp "$OUT" "$TMP/rawout.out"
+
+# Sanity check first: the mutant must actually produce BOTH a tagged envelope and the raw
+# heading text, or a rejection below would be vacuous -- rejecting because the fixture is
+# broken, not because envelope_wraps caught the defect it's meant to catch.
+if grep -qF '=== Handoff ' "$TMP/rawout.out" && grep -qF 'Decisions [KEEP]' "$TMP/rawout.out"; then
+  ok "containment falsifier: the mutant output actually contains a tagged envelope and the raw heading"
+else
+  bad "containment falsifier: the mutant output actually contains a tagged envelope and the raw heading" \
+    "$(cat "$TMP/rawout.out")"
+fi
+
+if envelope_wraps "$TMP/rawout.out" 'Decisions [KEEP]'; then
+  bad "containment falsifier: envelope_wraps rejects a raw heading printed outside an empty envelope" \
+    "envelope_wraps accepted the mutant output: $(cat "$TMP/rawout.out")"
+else
+  ok "containment falsifier: envelope_wraps rejects a raw heading printed outside an empty envelope"
+fi
+
+if envelope_wraps "$TMP/good-keep.out" 'Decisions [KEEP]'; then
+  ok "containment falsifier: envelope_wraps still accepts the real hook's genuine output"
+else
+  bad "containment falsifier: envelope_wraps still accepts the real hook's genuine output" \
+    "$(cat "$TMP/good-keep.out")"
 fi
 
 # ============================================================================

@@ -17,7 +17,9 @@ Live proof, not theory: `mtg-wizard` was 235 lines at 10:42 on 2026-09-08 and 64
 13:56 the same day — roughly 171 lines cut with no snapshot and no record, while this card
 sat waiting to be judged.
 
-**Measured evidence, the fifteen user decisions D1-D15, and the full spec live in
+**Measured evidence, the numbered user decisions (`D…`, counted in the spec's Decisions
+table rather than here — this sentence said "fifteen / D1-D15" while the table held
+seventeen, then eighteen), and the full spec live in
 [`handoff-trim-safety.spec.md`](handoff-trim-safety.spec.md).** Read it before implementing;
 do not read it at session start.
 
@@ -25,11 +27,25 @@ Status: **implementation** — the gate opened 2026-09-08 on the literal phrase;
 frontmatter `phase` is the authority and this line must agree with it. Both judges PASSED
 on the spec and must run again after implementation, before any PR.
 
-Compliance: FAILED seven times (9, 8, 7, 4, 1, 5, 1 violations across rounds 1 to 7), then
-**PASSED with zero violations in round 8**. Observability: failed `success_masking` in rounds
-2, 3 and 4, then **passed in round 5**, where it also stated the design is ready to hand to a
-human reviewer. Counts come from `coding-memory/compliance-judge/verdicts.jsonl`; read them
-there rather than trusting this sentence, which has been stale twice.
+Compliance, on the **spec**: FAILED seven times (9, 8, 7, 4, 1, 5, 1 violations across rounds
+1 to 7), then **PASSED with zero violations in round 8**. On the **implementation**: FAILED
+round 9 with 7 violations at `f7d570f` — the fail-direction trade-off settled without a user
+decision (now D18), a duplicated filing rule, a wrong verification recipe, an unreproducible
+byte receipt, a wrong explanation of why the `set -e` defect went uncaught, an overstated
+keep-guard backstop, and the task-6 checkbox disagreeing between the two card halves. All
+seven were independently reproduced before being acted on, and all seven held.
+Observability: failed `success_masking` in rounds 2, 3 and 4, then **passed in round 5**,
+where it also stated the design is ready to hand to a human reviewer; on the implementation at
+`f7d570f` it returned **PASS with concerns**, the sharpest being that a mutant printing a raw
+`[KEEP]` heading *outside* an empty envelope leaves two of the three suites green.
+⚠️ **The round 1-8 counts above cannot be re-derived from any ledger, and earlier revisions
+of this paragraph wrongly told the reader they could.** Measured 2026-09-12:
+`coding-memory/compliance-judge/verdicts.jsonl` in this worktree holds exactly **one** row
+matching `handoff-trim-safety` (round 9), and the same file under `~/.claude` holds **zero**.
+Where the spec-round rows went is not recorded and is deliberately not guessed at here; only
+the gitignored round-8 prose survives locally. So the round 1-8 figures rest on this sentence
+alone — treat them as unverified, and re-derive nothing from a pointer that resolves to
+nothing. Round 9 onward *is* in the worktree ledger and can be read there.
 
 Every finding across all rounds was independently re-measured before being acted on, and every
 one held — including one this session first reported as not reproducing, which did reproduce
@@ -254,64 +270,130 @@ that ignores them, in two repos measured as not covering them today.
       under the new task cap.
 - [x] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
       the protected headings are re-injected verbatim.
-      **Done 2026-09-12.** `live-handoff.test.sh` **57/57**, `pre-compact-handoff.test.sh`
-      **27/27** (a new suite — this hook had none, so the task also had to pin its
-      pre-existing behaviour: the pane short-circuit, the three `MODE_DIRECTIVE` branches and
-      the line-target string), with both libraries untouched at **20/20** and **79/79**.
+      **Done 2026-09-12**, after a round-9 compliance FAIL and an observability PASS-with-
+      concerns were both worked through. Final: `live-handoff.test.sh` **62/62**,
+      `pre-compact-handoff.test.sh` **42/42** (a new suite — this hook had none, so the task
+      also had to pin its pre-existing behaviour: the pane short-circuit, the three
+      `MODE_DIRECTIVE` branches and the line-target string),
+      `handoff-keep-reinject.test.sh` **26/26**, and `handoff-archive.test.sh` untouched at
+      **79/79**. The three post-judge counts rose from 57, 27 and 20 as the review findings
+      were closed; the growth is the hardening, not new features.
 
-      **The two hooks fail in opposite directions, deliberately.** `live-handoff.sh` adds
-      `REINJECT_LIB_OK` as a second, independent suppression gate beside `SNAPSHOT_OK`: it
-      emits no trim directive at all when the filing rule and protected-heading list cannot be
-      produced, because it fires again on the very next prompt and can afford to wait, and its
-      two warnings name their own distinct cause so a reader can tell them apart.
-      `pre-compact-handoff.sh` **still emits** its rewrite directive in the same situation,
-      carrying a warning in place of the heading list — compaction is imminent, and
-      withholding the handoff entirely would lose the whole notepad, which is strictly worse
-      than an incomplete listing. Both files carry a comment naming the other so a later
-      reader does not "fix" one to match it.
+      **The envelope is now tested for containment, not just presence.** The observability
+      judge built a mutant `keep_trim_directive` that prints a **raw** `[KEEP]` heading
+      *outside* an otherwise-empty, correctly-tagged envelope — defeating the sanitizer and
+      the envelope at once — and measured that it left `live-handoff.test.sh` and
+      `handoff-keep-reinject.test.sh` **green**. Both suites had only checked that a heading
+      appeared *somewhere* and that *some* tags matched, never that the heading sat between
+      them. Only `pre-compact-handoff.test.sh` caught it, via an `envelope_wraps` `awk` state
+      machine that tracks an in-envelope flag. That helper is now duplicated into all three
+      suites — deliberately duplicated, since each must stay independently runnable — and in
+      each one a falsifier builds that exact mutant and asserts the helper **rejects** it
+      while accepting the real output. The scratch-copy patcher asserts its match count is
+      exactly 1 before replacing, so a later library edit fails the setup loudly instead of
+      silently patching nothing.
+
+      Two smaller review findings closed with it. The directive text promised the heading
+      line "verbatim, heading line included" while deliberately **stripping** the leading
+      `#` markers — correct behaviour (an unstripped `## ` lets a heading impersonating an
+      envelope closer slip past `sanitize_line`'s line-anchored pattern) described by a
+      sentence that contradicted it; the sentence now says the heading **text** survives and
+      that the markers are not shown. And a falsifier whose probe began
+      `htmp="$(mktemp)" || exit 1` asserted on an **empty** result, so a failed `mktemp`
+      exited early and the assertion passed having measured nothing — it now requires an
+      explicit setup sentinel, separating "empty because it worked" from "empty because the
+      setup died".
+
+      **Fail direction, decided by the user 2026-09-12 (D18) — neither hook orders a cut it
+      cannot back up.** `live-handoff.sh` adds `REINJECT_LIB_OK` as a second, independent
+      suppression gate beside `SNAPSHOT_OK`: it emits no trim directive at all when the
+      filing rule and protected-heading list cannot be produced, because it fires again on
+      the very next prompt and can afford to wait, and its two warnings name their own
+      distinct cause so a reader can tell them apart. `pre-compact-handoff.sh` **still emits
+      a directive** — it gets one chance before compaction and withholding it would forfeit
+      the whole handoff rather than defer it — but that directive orders **append-only**:
+      write the handoff, remove nothing this run, because the protected headings could not be
+      listed. So the hooks differ in *what they emit*, not in whether a cut may proceed
+      unbacked; neither authorises one. Both files carry a comment naming the other so a
+      later reader does not "fix" one to match it.
+
+      ⚠️ **An earlier revision of this task had `pre-compact-handoff.sh` fail *open* — full
+      rewrite plus a warning — and the compliance judge failed it in round 9 on two counts:
+      ordering a rewrite while unable to list what must survive is the unbacked promise spec
+      finding O-C forbids for the sibling hook, and the trade-off was accepted in the ADR's
+      own voice with no user decision recorded.** Both are correct. It also produced
+      self-conflicting instructions — "REWRITE it completely" beside "do not remove any" —
+      and required a hand-copied filing rule that had already drifted from the library's. The
+      append-only resolution above removes all three problems rather than trading them off,
+      and is recorded as D18 in the spec, not asserted here.
 
       ⚠️ **The task uncovered a false safety claim in already-committed code, and it was not
-      in the new work.** Both hooks load their libraries as
-      `if [ -r "$LIB" ] && . "$LIB"; then`, and the comment at `live-handoff.sh` claimed this
-      meant `set -e` "cannot kill the hook on a library that fails to parse". **Measured, and
-      false:** under `set -euo pipefail` a sourced file with a real syntax error terminates
-      the shell at **rc=2** and the statement after the `if` never runs. Measured end to end
-      on `pre-compact-handoff.sh`: with a `set +e` / `set -e` toggle around the source,
-      `rc=0` and a full directive; without it, **rc=2 and zero bytes of output** — a
-      `UserPromptSubmit`/`PreCompact` hook emitting no directive whatsoever, which is the
-      opposite of the fail-closed handling the spec requires for an unloadable library. Both
+      in the new work.** `live-handoff.sh` loaded its library as
+      `if [ -r "$LIB" ] && . "$LIB"; then` — `pre-compact-handoff.sh` loaded none at that
+      point, and an earlier revision of this paragraph wrongly said "both hooks" — and its
+      comment claimed this meant `set -e` "cannot kill the hook on a library that fails to
+      parse". **Measured, and false:** under `set -euo pipefail` a sourced file with a real
+      syntax error terminates the shell at **rc=2** and the statement after the `if` never
+      runs. Measured end to end on both hooks independently: with a `set +e` / `set -e`
+      toggle around the sourcing, `rc=0` and a full directive; without it, **rc=2 and zero
+      bytes of output** — a `UserPromptSubmit`/`PreCompact` hook emitting no directive
+      whatsoever, which is the opposite of the handling the spec requires for an unloadable
+      library. Both
       hooks now wrap both source calls in the toggle, and the comments state the measurement
-      instead of the guarantee. The claim stood in **one** committed comment (the count was
-      first written here as three, then two; the second figure counted a copy of the same
-      wording that this task had itself added minutes earlier and not yet committed — count
-      them with `git show HEAD:hooks/handoff/live-handoff.sh` rather than trusting a figure).
+      instead of the guarantee.
 
-      **Why nothing caught it:** `live-handoff.test.sh`'s "unloadable reinject library"
-      fixture was `: > lib/handoff-keep-reinject.sh` — an **empty** file, which sources
-      cleanly at rc 0 and is caught only by the later `declare -f` check. That assertion is
-      correct and still passes; it simply tested a different failure from the one the comment
-      promised to survive. Both hooks now have a genuine parse-error fixture
-      (`this is not valid bash ((((`), and the fix was falsified by stripping only the toggle
-      lines from a scratch copy: 4 lines removed, patched copy `rc=0` with 1,057 bytes,
-      stripped copy `rc=2` with 0 bytes.
+      The claim stood in **one** comment, and the deciding tree is **`c810171`** — not
+      `HEAD`. This figure was written here as three, then two, before being measured:
+      `git show c810171:hooks/handoff/live-handoff.sh | grep -c "cannot kill the hook"`
+      returns `1`. The same command against `HEAD` returns `3`, because the corrected
+      comments now *quote* the old wording in order to refute it — so a reader who counts at
+      `HEAD` gets a number that looks like the error and is in fact the fix. Count at
+      `c810171`.
+
+      **Why nothing caught it:** the committed suite had no corrupt-library fixture of any
+      kind. At `c810171`, `live-handoff.test.sh`'s only library-failure fixture was
+      `NOLIB_DIR` — a hook tree with no `lib/` directory at all, which fails the `[ -r ]`
+      test before `.` ever runs and so can never reach a parse error. The empty-file fixture
+      (`: > lib/handoff-keep-reinject.sh`, which sources cleanly at rc 0 and is caught only
+      by the later `declare -f` check) was added by **this** task, not inherited: an earlier
+      revision of this paragraph blamed it, which was wrong twice over — it did not exist
+      when the defect shipped, and a missing file and an empty file are two different
+      failures, neither of them the one the comment promised to survive.
+
+      Both hooks now have a genuine parse-error fixture (`this is not valid bash ((((`), and
+      the fix was falsified by stripping only the bare toggle lines from a scratch copy:
+      `live-handoff.sh` has **two** toggle pairs (4 lines, one per library),
+      `pre-compact-handoff.sh` has **one** (2 lines). In both, the patched copy exits `0`
+      and emits a full directive while the stripped copy exits `2` and emits **zero bytes**.
+      No byte count is recorded for the patched copy on purpose: the directive embeds
+      absolute paths, so its length varies with the fixture path and any figure here would
+      be a receipt nobody can re-derive. Zero bytes is the reproducible half, and it is the
+      half that matters.
 
       Shared library, landed earlier the same day:
       `hooks/handoff/lib/handoff-keep-reinject.sh` holds `keep_heading_lines`,
-      `envelope_keep_headings` and `keep_trim_directive`, **20/20 passing**, with
+      `envelope_keep_headings` and `keep_trim_directive`, **20/20 passing at the time it
+      landed** (`c810171`; **26/26** now, after the containment hardening above), with
       `handoff-archive.test.sh` still **79/79** — the evidence the shared library was called,
-      not grown. The directive wording lives in `keep_trim_directive` **once** rather than
-      being written into both hooks: this repo has a recorded history of one rule stated in N
-      places drifting apart, and the two callers differ only in their framing (incremental
-      trim vs. full rewrite), never in the filing rule or the protected-heading list.
+      not grown. The directive wording lives in `keep_trim_directive` **once**: neither hook
+      restates the filing rule, and the two callers differ only in their framing (incremental
+      trim vs. full rewrite). ⚠️ This was **false when first written** — the fail-open branch
+      of `pre-compact-handoff.sh` hand-copied the filing rule and the copy had *already*
+      drifted (em dash to `--`, closing clause dropped), which the compliance judge caught in
+      round 9: the same commit that argued against stating one rule twice stated it twice.
+      The copy is gone rather than resynced, because the branch that carried it no longer
+      orders a cut at all (see the fail-direction decision above).
       A tag-generation failure prints a count-only warning — never an untagged envelope and
       never silence, since silence is indistinguishable from "no protected headings exist".
       Red baseline measured before the function was written: 5 failing assertions, `15/20`.
       One of the new assertions was **vacuous as first written** and was tightened before the
       commit: it checked the warning's heading count with `grep -F 2` against the whole
-      output, and mktemp's prefix on this machine
-      (`/var/folders/x0/j77b902977ncvy9v6xvwz7q40000gn/T/…`) contains a `2`, so it matched the
-      filing-rule line on every run and could not fail. Anchored to `^Warning: 2 protected …`
-      and falsified by substituting `3`, which does fail.
+      output, and `mktemp`'s per-user prefix on this machine happens to contain a `2`, so it
+      matched the filing-rule line on every run and could not fail. (The literal prefix is
+      deliberately not reproduced here — it is a machine-specific absolute path, and this
+      repo does not commit those. Re-derive it with `mktemp -d` if the reasoning needs
+      checking.) Anchored to `^Warning: 2 protected …` and falsified by substituting `3`,
+      which does fail.
 - [ ] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
       the original bug report came from.
 - [x] 10. `hooks/handoff/handoff-keep-guard.sh` as a `Stop` hook: protected-block check, strike

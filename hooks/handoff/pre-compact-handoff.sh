@@ -58,22 +58,10 @@ set -e
 # still under `set -e`, and a failure there would kill this hook exactly when compaction
 # is imminent -- the one moment it must not silently exit non-zero. Computing it into a
 # plain variable first means the heredoc only ever does a variable interpolation, which
-# cannot fail.
+# cannot fail. Only the healthy (REINJECT_LIB_OK) branch needs this -- the fallback branch
+# below has no fragment to compute, because it orders no rewrite at all.
 if [ "$REINJECT_LIB_OK" = true ]; then
     KEEP_TRIM_FRAGMENT="$(keep_trim_directive "$REPO_ROOT/.claude/session-state.md" "$ARCHIVE_FILE")"
-else
-    # Opposite fail-open direction from live-handoff.sh, deliberately: live-handoff.sh
-    # SUPPRESSES its trim directive when it cannot back a trim up with a snapshot,
-    # because it fires again on the very next prompt and can afford to wait. This hook
-    # cannot -- compaction is imminent, and withholding the handoff directive entirely
-    # would lose the whole notepad, which is strictly worse than an incomplete listing of
-    # protected headings. So this branch still emits the directive, with a loud warning
-    # in place of the (unavailable) heading list. Do not "fix" one hook to match the
-    # other; they fail in opposite directions on purpose. Rationale and the consequences
-    # of harmonising them:
-    # docs/decisions/0046-the-two-trim-directive-hooks-fail-in-opposite-directions.md
-    KEEP_TRIM_FRAGMENT="Filing rule: when you remove any line from the notepad, first append those exact lines to ${ARCHIVE_FILE} under a dated heading -- the archive is append-only and is never read back in at session start.
-Warning: the archive-filing helper library could not be loaded here, so the protected [KEEP] heading(s) in the notepad could not be listed. Nothing under any [KEEP] heading may be removed."
 fi
 
 # Detect current work mode
@@ -125,7 +113,8 @@ else
     MODE_DIRECTIVE=""
 fi
 
-cat << DIRECTIVE
+if [ "$REINJECT_LIB_OK" = true ]; then
+    cat << DIRECTIVE
 <pre-compact-handoff>
 CRITICAL: Context compaction is about to happen. You MUST update .claude/session-state.md NOW.
 ${MODE_DIRECTIVE}
@@ -145,5 +134,38 @@ ${KEEP_TRIM_FRAGMENT}
 4. After compaction, you MUST read .claude/session-state.md before doing anything else.
 </pre-compact-handoff>
 DIRECTIVE
+else
+    # Opposite fail direction from live-handoff.sh, deliberately: live-handoff.sh
+    # SUPPRESSES its trim directive when it cannot back a trim up with a snapshot,
+    # because it fires again on the very next prompt and can afford to wait. This hook
+    # cannot -- compaction is imminent, and withholding the handoff directive entirely
+    # would lose the whole notepad, which is strictly worse than ordering an append-only
+    # write. So this branch still emits a directive, but it orders APPEND-ONLY instead of
+    # a rewrite: the protected [KEEP] headings could not be listed, so nothing can be
+    # safely identified as removable this run, and authorising a cut here is exactly the
+    # promise this card exists to stop making. Do not "fix" one hook to match the other;
+    # they fail in opposite directions on purpose. Rationale and the consequences of
+    # harmonising them:
+    # docs/decisions/0046-the-two-trim-directive-hooks-fail-in-opposite-directions.md
+    cat << DIRECTIVE
+<pre-compact-handoff>
+CRITICAL: Context compaction is about to happen. You MUST update .claude/session-state.md NOW.
+${MODE_DIRECTIVE}
+
+The archive-filing helper library (${REINJECT_LIB}) could not be loaded here, so the protected [KEEP] heading(s) in the notepad could not be listed -- nothing can be safely identified as removable this run. Fix that library, then let this hook run again.
+
+REQUIRED action for session-state.md:
+1. APPEND ONLY. Do not rewrite, shorten, reorder, or delete any existing part of .claude/session-state.md this run.
+2. Add a new, clearly dated section covering everything needed to continue this work after compaction:
+   - What are we working on and why
+   - All decisions made and their rationale
+   - Key discoveries, gotchas, blockers
+   - Important file:line references
+   - What was just completed
+   - What needs to happen next
+3. After compaction, you MUST read .claude/session-state.md before doing anything else.
+</pre-compact-handoff>
+DIRECTIVE
+fi
 
 exit 0
