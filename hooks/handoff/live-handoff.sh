@@ -234,14 +234,35 @@ fi
 # Count current lines
 LINE_COUNT=$(wc -l < "$STATE_FILE" | tr -d ' ')
 
-# Build the task/bug completion check directive
+# Build the task/bug completion check directive. TASK_BUG_DIRECTIVE is vendored upstream
+# text (see the file header) — but its ORIGINAL wording orders a removal ("remove
+# task-specific details ... delete .claude/current-task.md") unconditionally, and that
+# text is interpolated into BOTH the trim branch and the append-mode branch below. On a
+# suppressed path (SNAPSHOT_OK or REINJECT_LIB_OK false) that collides with the very
+# warning telling the model not to remove or delete anything: two contradictory
+# instructions in the same directive, and a removal ordered with no filing rule or
+# protected-heading list behind it — the exact defect ADR 0046
+# (docs/decisions/0046-neither-trim-hook-orders-a-cut-it-cannot-back-up.md) rejected for
+# the sibling trim directive. So this local patch branches on the same TRIM_AUTHORIZED
+# gate as the trim directive itself: on the healthy path the vendored wording is
+# untouched; on a suppressed path the directive still surfaces a finished task/fixed bug
+# (that is its job) but defers the cleanup instead of ordering it. A future vendor
+# re-sync must not flatten this back to the single unconditional string.
 TASK_BUG_DIRECTIVE=""
 if [ "$HAS_TASK" = true ] || [ "$HAS_BUG" = true ]; then
-    TASK_BUG_DIRECTIVE="
+    if [ "$SNAPSHOT_OK" = true ] && [ "$REINJECT_LIB_OK" = true ]; then
+        TASK_BUG_DIRECTIVE="
 Also evaluate: has the current task or bug been completed?
 - If a TASK is done: remove task-specific details from session-state.md, delete .claude/current-task.md, and note completion in session-state.md
 - If a BUG is fixed: remove bug investigation details from session-state.md, delete .claude/current-bug.md, and note the fix in session-state.md
 - If still in progress: keep task/bug context current in session-state.md"
+    else
+        TASK_BUG_DIRECTIVE="
+Also evaluate: has the current task or bug been completed?
+- If a TASK is done: note the completion in session-state.md, but keep the task-specific details and .claude/current-task.md exactly as they are this turn — trimming is suppressed right now (see the warning below), so that cleanup waits for a later turn when trimming is allowed again.
+- If a BUG is fixed: note the fix in session-state.md, but keep the bug investigation details and .claude/current-bug.md exactly as they are this turn — trimming is suppressed right now (see the warning below), so that cleanup waits for a later turn when trimming is allowed again.
+- If still in progress: keep task/bug context current in session-state.md"
+    fi
 fi
 
 # Trim-directive filing fragment (task 8), computed here as a plain assignment and NOT

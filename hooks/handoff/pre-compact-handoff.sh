@@ -36,6 +36,12 @@ HOOK_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ARCHIVE_LIB="$HOOK_DIR/lib/handoff-archive.sh"
 REINJECT_LIB="$HOOK_DIR/lib/handoff-keep-reinject.sh"
 REINJECT_LIB_OK=false
+# FAILED_LIB names whichever library actually failed to load, for the degraded directive
+# below to cite. It starts at ARCHIVE_LIB (the first one attempted) and only advances to
+# REINJECT_LIB once ARCHIVE_LIB has already sourced cleanly -- so a corrupt, missing, or
+# unreadable ARCHIVE_LIB is never misreported as a REINJECT_LIB failure. Mirrors how
+# live-handoff.sh keeps its two load failures (LIB_OK / REINJECT_LIB_OK) distinguishable.
+FAILED_LIB="$ARCHIVE_LIB"
 # Measured (not assumed): under `set -e`, sourcing a file with an actual syntax error
 # does NOT just make the `.` command return non-zero for the `if` to gate on -- bash
 # treats a parse error hit while sourcing as fatal and exits the whole non-interactive
@@ -45,11 +51,14 @@ REINJECT_LIB_OK=false
 # or a well-formed library that returns non-zero or never defines the function.
 set +e
 # shellcheck disable=SC1090  # libraries live beside this hook, not user input
-if [ -r "$ARCHIVE_LIB" ] && . "$ARCHIVE_LIB" && [ -r "$REINJECT_LIB" ] && . "$REINJECT_LIB"; then
-    # A library that sources cleanly but whose function never landed (a partial or
-    # renamed file) must not be trusted just because `.` returned 0 -- confirm the
-    # function itself exists before relying on it.
-    declare -f keep_trim_directive >/dev/null 2>&1 && REINJECT_LIB_OK=true
+if [ -r "$ARCHIVE_LIB" ] && . "$ARCHIVE_LIB"; then
+    FAILED_LIB="$REINJECT_LIB"
+    if [ -r "$REINJECT_LIB" ] && . "$REINJECT_LIB"; then
+        # A library that sources cleanly but whose function never landed (a partial or
+        # renamed file) must not be trusted just because `.` returned 0 -- confirm the
+        # function itself exists before relying on it.
+        declare -f keep_trim_directive >/dev/null 2>&1 && REINJECT_LIB_OK=true
+    fi
 fi
 set -e
 
@@ -138,10 +147,12 @@ else
     # Still emit a directive, but order APPEND-ONLY: the protected [KEEP] headings could
     # not be listed, so nothing can be safely identified as removable this run, and
     # authorising a cut here is exactly the promise this card exists to stop making.
-    # Withholding the directive entirely -- what live-handoff.sh does in the same state --
-    # is wrong HERE: compaction is imminent and this hook fires once, so suppressing it
-    # would forfeit the whole notepad rather than defer a cut. live-handoff.sh fires again
-    # on the very next prompt and can afford to wait.
+    # Withholding this directive entirely would be wrong HERE: compaction is imminent and
+    # this hook fires once, so suppressing it would forfeit the whole notepad rather than
+    # defer a cut. live-handoff.sh can afford to suppress its OWN trim directive in the
+    # same state -- it still emits its append-mode directive rather than withholding
+    # output entirely, and fires again on the very next prompt, so a deferred cut there
+    # costs one turn, not the whole notepad.
     #
     # Both hooks therefore end up ordering append-only; they differ only in route, since
     # live-handoff.sh has an under-cap append directive to fall back on and this one does
@@ -154,7 +165,7 @@ else
 CRITICAL: Context compaction is about to happen. You MUST update .claude/session-state.md NOW.
 ${MODE_DIRECTIVE}
 
-The archive-filing helper library (${REINJECT_LIB}) could not be loaded here, so the protected [KEEP] heading(s) in the notepad could not be listed -- nothing can be safely identified as removable this run. Fix that library, then let this hook run again.
+The archive-filing helper library (${FAILED_LIB}) could not be loaded here, so the protected [KEEP] heading(s) in the notepad could not be listed -- nothing can be safely identified as removable this run. Fix that library, then let this hook run again.
 
 REQUIRED action for session-state.md:
 1. APPEND ONLY. Do not rewrite, shorten, reorder, or delete any existing part of .claude/session-state.md this run.

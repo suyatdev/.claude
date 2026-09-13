@@ -29,19 +29,25 @@ on the spec and must run again after implementation, before any PR.
 
 Compliance, on the **spec**: FAILED seven times (9, 8, 7, 4, 1, 5, 1 violations across rounds
 1 to 7), then **PASSED with zero violations in round 8**. On the **implementation**: FAILED
-round 9 with 7 violations at `f7d570f` — the fail-direction trade-off settled without a user
-decision (now D18), a duplicated filing rule, a wrong verification recipe, an unreproducible
-byte receipt, a wrong explanation of why the `set -e` defect went uncaught, an overstated
-keep-guard backstop, and the task-6 checkbox disagreeing between the two card halves. All
-seven were independently reproduced before being acted on, and all seven held.
-Observability: failed `success_masking` in rounds 2, 3 and 4, then **passed in round 5**,
-where it also stated the design is ready to hand to a human reviewer; on the implementation at
-`f7d570f` it returned **PASS with concerns**, the sharpest being that a mutant printing a raw
-`[KEEP]` heading *outside* an empty envelope leaves two of the three suites green.
+rounds **9, 10 and 11** — 7 violations at `f7d570f`, 4 at `79523fd`, 3 at `038b173`. All 14
+were independently reproduced before being acted on and all 14 held. ⚠️ **The shape is worth
+more than the counts: 3 of round 10's 4 and 2 of round 11's 3 were defects *introduced by the
+previous round's own fix*** — the self-sustaining review loop this card already hit on the
+spec, where from round 5 onward the findings were predominantly the previous edit's. Round 11
+was run under a stop rule the user set *before* seeing the verdict: prose-only findings would
+be accepted as-is, findings naming code or a false claim would be fixed and the loop ended.
+It returned 2 code and 1 false-claim, 0 prose. Observability: failed `success_masking` in
+spec rounds 2, 3 and 4, then **passed in round 5**, where it also stated the design is ready
+to hand to a human reviewer; on the implementation it returned **PASS with concerns** at both
+`f7d570f` and `038b173`, and crashed once at `79523fd` with empty output and no verdict.
 ⚠️ **The round 1-8 counts are not in either JSONL ledger — check the prose file instead.**
-Measured 2026-09-12: `coding-memory/compliance-judge/verdicts.jsonl` in this worktree holds
-exactly **one** row matching `handoff-trim-safety` (round 9), and the same file under
-`~/.claude` holds **zero**. The figures *are* verifiable, in
+`coding-memory/compliance-judge/verdicts.jsonl` in this worktree carries only the rows this
+card's *implementation* rounds wrote, one per round from round 9 onward; the same file under
+`~/.claude` carries none. **No row count is stated here, deliberately.** An earlier revision
+said "exactly one row", and the very commit that wrote that sentence appended the second —
+the number was false before it was pushed. Count them instead:
+`git show HEAD:coding-memory/compliance-judge/verdicts.jsonl | grep -c handoff-trim-safety`.
+The round 1-8 figures *are* verifiable, in
 `~/.claude/coding-memory/compliance-judge/2026-09-08-handoff-trim-safety.md`, which covers
 Round 1 through Round 8 — gitignored, so it does not travel with this branch. Earlier
 revisions of this paragraph got this wrong in both directions: first by pointing at the
@@ -271,14 +277,38 @@ that ignores them, in two repos measured as not covering them today.
       under the new task cap.
 - [x] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
       the protected headings are re-injected verbatim.
-      **Done 2026-09-12**, after a round-9 compliance FAIL and an observability PASS-with-
-      concerns were both worked through. Final: `live-handoff.test.sh` **62/62**,
-      `pre-compact-handoff.test.sh` **42/42** (a new suite — this hook had none, so the task
+      **Done 2026-09-13**, after three judge rounds — compliance FAILED 9, 10 and 11
+      (7, 4 and 3 violations); observability PASSED 9 and 11 with concerns and crashed once
+      with no verdict. All 14 violations were independently reproduced before being acted on
+      and all 14 held. Final: `live-handoff.test.sh` **69/69**,
+      `pre-compact-handoff.test.sh` **47/47** (a new suite — this hook had none, so the task
       also had to pin its pre-existing behaviour: the pane short-circuit, the three
       `MODE_DIRECTIVE` branches and the line-target string),
       `handoff-keep-reinject.test.sh` **26/26**, and `handoff-archive.test.sh` untouched at
-      **79/79**. The three post-judge counts rose from 57, 27 and 20 as the review findings
-      were closed; the growth is the hardening, not new features.
+      **79/79**. The three post-judge counts rose from 57, 27 and 20 as findings were closed;
+      the growth is hardening, not new features.
+
+      ⚠️ **Round 11 found a removal order this task had never authorised, in vendored code
+      it had not read closely.** `live-handoff.sh` builds `TASK_BUG_DIRECTIVE` when a
+      `current-task.md` or `current-bug.md` exists, and it said `remove task-specific details
+      from session-state.md, delete .claude/current-task.md`. That string was interpolated
+      into **both** branches — including the append-mode branch that says `Do NOT rewrite,
+      shorten, reorder or delete any part`. Measured on the committed hook with a task file
+      present and the snapshot forced to fail: **2** removal-order lines emitted beside the
+      `TRIM SUPPRESSED` warning. So ADR 0046's title — *neither hook orders a cut it cannot
+      back up* — was **false on that input**, and the card had been asserting it for two
+      commits. Fixed in the code rather than by weakening the title: the suppressed path now
+      gets a variant that records the completion and explicitly defers the cleanup to a turn
+      when trimming is allowed. Same probe after: **0** removal-order lines, suppression
+      unchanged. The healthy path keeps the vendored wording untouched, with a comment citing
+      the ADR so a later vendor re-sync does not flatten the variant away.
+
+      Round 11's other two: the degraded `pre-compact-handoff.sh` directive hardcoded the
+      reinject library as the thing that failed, so a corrupt `handoff-archive.sh` sent the
+      reader to the intact file — it now tracks which library actually failed; and the
+      retired *"opposite directions"* thesis still stood in that hook's test-file comments,
+      untouched by the commit that retired it everywhere else. `grep -rni opposite
+      hooks/handoff/` now returns nothing.
 
       **The envelope is now tested for containment, not just presence.** The observability
       judge built a mutant `keep_trim_directive` that prints a **raw** `[KEEP]` heading
@@ -318,7 +348,8 @@ that ignores them, in two repos measured as not covering them today.
 
       ⚠️ **Two review rounds were spent on this one branch, and the second was caused by the
       first.** Round 9 failed the original fail-open form; the fix was correct, but the ADR
-      that landed with it kept the title *"the two hooks fail in opposite directions"* and
+      that landed with it kept the title *"The two trim-directive hooks fail in opposite
+      directions"* and
       two code comments repeated it — describing the **rejected** design as current, and
       instructing a future reader to preserve it. Round 10 measured that both hooks now give
       the same instruction and failed it again. The ADR is renamed and rewritten; its own

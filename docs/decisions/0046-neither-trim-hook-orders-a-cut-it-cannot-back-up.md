@@ -78,7 +78,8 @@ opened by asserting that asymmetry. That was true of the **rejected** fail-open 
 false of the accepted one: once `pre-compact-handoff.sh` orders append-only, both hooks
 deliver the same instruction, as measured above. Two code comments repeated the claim and
 told a future reader to preserve it, which would have meant restoring the rejected behaviour.
-Recorded here rather than quietly rewritten, because the card cites these comments as the
+Recorded here rather than quietly rewritten, because the card's own task-8 entry *had* cited
+those comments (at `f7d570f`) as the
 guard against exactly that mistake.
 
 ## Consequences

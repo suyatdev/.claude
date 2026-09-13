@@ -15,10 +15,12 @@
 #     filing it first, not deleting it outright;
 #   * when the notepad has [KEEP] headings, they are re-injected verbatim inside a
 #     tamper-evident, tagged DATA envelope (open tag == close tag);
-#   * when the reinject library cannot be loaded, the hook still emits a directive (the
-#     OPPOSITE fail direction from live-handoff.sh, which suppresses instead) but orders
-#     APPEND-ONLY instead of a rewrite, names the library path that failed, and carries no
-#     filing rule or line-target text -- a target invites a cut it cannot back up;
+#   * when a library cannot be loaded, the hook still emits a directive -- it orders
+#     APPEND-ONLY instead of a rewrite, names whichever library actually failed to load,
+#     and carries no filing rule or line-target text -- a target invites a cut it cannot
+#     back up. live-handoff.sh reaches the same append-only instruction by a different
+#     route: it suppresses only its TRIM directive and falls back to the append-mode
+#     directive it already emits under the cap (docs/decisions/0046);
 #   * a missing notepad does not break the hook -- keep_trim_directive already handles
 #     that by printing the filing rule alone.
 #
@@ -266,11 +268,12 @@ else
 fi
 
 # ============================================================================
-# New behaviour: libraries unloadable -- directive still emitted (fail OPEN, but ordering
-# APPEND-ONLY instead of a rewrite -- the opposite direction from live-handoff.sh, which
-# suppresses its directive entirely). Simulated with a SCRATCH COPY of the hook tree whose
-# reinject library is corrupt or absent -- the real files under hooks/handoff/lib/ are
-# never touched.
+# New behaviour: libraries unloadable -- directive still emitted (fail OPEN), ordering
+# APPEND-ONLY instead of a rewrite. live-handoff.sh reaches the same append-only
+# instruction differently: it suppresses only its trim directive and still emits its own
+# append-mode directive, rather than withholding output entirely (docs/decisions/0046).
+# Simulated with a SCRATCH COPY of the hook tree whose reinject library is corrupt or
+# absent -- the real files under hooks/handoff/lib/ are never touched.
 # ============================================================================
 
 # make_scratch_hook LIBSTATE — copies pre-compact-handoff.sh and lib/handoff-archive.sh
@@ -380,6 +383,51 @@ if has "$OUT" "$LINE_TARGET_STR"; then
   bad "reinject library absent: no line-target string is carried" "found one anyway: $(cat "$OUT")"
 else
   ok "reinject library absent: no line-target string is carried"
+fi
+
+# ============================================================================
+# Finding B (judge round): the gate above loads TWO libraries (handoff-archive.sh, then
+# handoff-keep-reinject.sh) but the degraded directive used to hardcode REINJECT_LIB as
+# the thing that failed -- so a corrupt handoff-archive.sh got blamed on the intact
+# handoff-keep-reinject.sh instead. Corrupt ONLY handoff-archive.sh in a fresh scratch
+# hook tree (the reinject library is copied over intact and untouched) and confirm the
+# directive names the library that actually failed, not the other one.
+# ============================================================================
+ARCHIVEBUG_DIR="$TMP/scratch-hook-archivebug"
+mkdir -p "$ARCHIVEBUG_DIR/lib"
+cp "$HOOK" "$ARCHIVEBUG_DIR/pre-compact-handoff.sh"
+cp "$HOOK_DIR/lib/handoff-keep-reinject.sh" "$ARCHIVEBUG_DIR/lib/handoff-keep-reinject.sh"
+printf 'this is not valid bash ((((\n' > "$ARCHIVEBUG_DIR/lib/handoff-archive.sh"
+ARCHIVEBUG_HOOK="$ARCHIVEBUG_DIR/pre-compact-handoff.sh"
+ARCHIVEBUG_ARCHIVE_LIB="$ARCHIVEBUG_DIR/lib/handoff-archive.sh"
+ARCHIVEBUG_REINJECT_LIB="$ARCHIVEBUG_DIR/lib/handoff-keep-reinject.sh"
+run_hook "$REPO_KEEP" "$ARCHIVEBUG_HOOK"
+if [ "$RC" -eq 0 ]; then
+  ok "corrupt archive library only: hook still exits 0"
+else
+  bad "corrupt archive library only: hook still exits 0" "rc=$RC err=$(cat "$ERR")"
+fi
+if has "$OUT" '<pre-compact-handoff>'; then
+  ok "corrupt archive library only: a directive is still emitted"
+else
+  bad "corrupt archive library only: a directive is still emitted" "$(cat "$OUT")"
+fi
+if has "$OUT" "$APPEND_ONLY_STR"; then
+  ok "corrupt archive library only: the directive orders append-only"
+else
+  bad "corrupt archive library only: the directive orders append-only" "$(cat "$OUT")"
+fi
+if has "$OUT" "$ARCHIVEBUG_ARCHIVE_LIB"; then
+  ok "corrupt archive library only: the directive names the archive library that actually failed"
+else
+  bad "corrupt archive library only: the directive names the archive library that actually failed" \
+    "$(cat "$OUT")"
+fi
+if has "$OUT" "$ARCHIVEBUG_REINJECT_LIB"; then
+  bad "corrupt archive library only: the directive does NOT blame the intact reinject library" \
+    "$(cat "$OUT")"
+else
+  ok "corrupt archive library only: the directive does NOT blame the intact reinject library"
 fi
 
 # ============================================================================

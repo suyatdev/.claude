@@ -79,6 +79,21 @@ run_hook() {
 
 has() { grep -qF -- "$2" "$1"; }
 
+# task_bug_section FILE — prints just the TASK_BUG_DIRECTIVE portion of an emitted
+# directive (from its "Also evaluate:" opener up to, but not including, the next
+# "⚠️"-prefixed warning line or end of file). Isolating this from the rest of the
+# directive matters for Finding A below: SNAPSHOT_WARNING and REINJECT_WARNING legitimately
+# contain the words "removed"/"delete" of their own (they order append-only, forbidding
+# removal), so a whole-output grep for those verbs would flag warnings that are already
+# correct rather than the task/bug directive this finding is actually about.
+task_bug_section() {
+  awk '
+    /^Also evaluate:/ { grab=1 }
+    grab && /^⚠️/ { grab=0 }
+    grab { print }
+  ' "$1"
+}
+
 # envelope_wraps FILE FRAGMENT — 0 if FRAGMENT appears on some line strictly between a
 # "=== Handoff <tag> (DATA" opener and a "=== End handoff <tag> (end of DATA) ===" closer
 # carrying the SAME tag; 1 otherwise (no envelope, mismatched tags, or the fragment isn't
@@ -746,6 +761,71 @@ if has "$OUT" "It has grown too large"; then
   bad "the task cap still raises the trim threshold to 170 lines" "160 lines trimmed as if the cap were 150"
 else
   ok "the task cap still raises the trim threshold to 170 lines"
+fi
+
+# ============================================================================
+# Finding A (judge round): on the HEALTHY trim path (both SNAPSHOT_OK and
+# REINJECT_LIB_OK), the task/bug directive's original removal/deletion wording is
+# unchanged — the fix below only touches the suppressed path.
+# ============================================================================
+REPO_TASKTRIM="$(mkrepo repo-tasktrim 200)"
+: > "$REPO_TASKTRIM/.claude/current-task.md"
+run_hook "$REPO_TASKTRIM" "$HOOK" "sess-tasktrim"
+if has "$OUT" "It has grown too large" \
+   && has "$OUT" "remove task-specific details from session-state.md" \
+   && has "$OUT" "delete .claude/current-task.md"; then
+  ok "healthy trim path: the task/bug directive still orders removal, unchanged wording"
+else
+  bad "healthy trim path: the task/bug directive still orders removal, unchanged wording" \
+    "$(cat "$OUT")"
+fi
+
+# ============================================================================
+# Finding A: on a SUPPRESSED path (here, the snapshot cannot be written), the task/bug
+# directive must not order any removal or deletion — that is exactly the unbacked cut
+# ADR 0046 rejected for the trim directive itself, and this directive was ordering it
+# right alongside a warning saying "Do NOT ... delete any part of session-state.md". It
+# must still surface the finished task and defer the cleanup instead of ordering it.
+# ============================================================================
+REPO_TASKNOCUT="$(mkrepo repo-tasknocut 200)"
+: > "$REPO_TASKNOCUT/.claude/current-task.md"
+chmod 500 "$REPO_TASKNOCUT/.claude"
+run_hook "$REPO_TASKNOCUT" "$HOOK" "sess-tasknocut"
+chmod 700 "$REPO_TASKNOCUT/.claude"
+if [ "$RC" -eq 0 ]; then
+  ok "suppressed path with a task file: the hook still exits 0"
+else
+  bad "suppressed path with a task file: the hook still exits 0" "rc=$RC err=$(cat "$ERR")"
+fi
+if has "$OUT" "TRIM SUPPRESSED"; then
+  ok "suppressed path with a task file: the snapshot-failure warning still fires"
+else
+  bad "suppressed path with a task file: the snapshot-failure warning still fires" "$(cat "$OUT")"
+fi
+if has "$OUT" "has the current task or bug been completed"; then
+  ok "suppressed path: the task/bug directive still fires and surfaces the finished task"
+else
+  bad "suppressed path: the task/bug directive still fires and surfaces the finished task" \
+    "$(cat "$OUT")"
+fi
+TASKBUG_SECTION="$(task_bug_section "$OUT")"
+if [ -n "$TASKBUG_SECTION" ]; then
+  ok "suppressed path: the task/bug section was actually extracted (non-vacuous check ahead)"
+else
+  bad "suppressed path: the task/bug section was actually extracted (non-vacuous check ahead)" \
+    "extraction found nothing in: $(cat "$OUT")"
+fi
+if [ -n "$TASKBUG_SECTION" ] && ! printf '%s\n' "$TASKBUG_SECTION" | grep -qiE 'remove|delet'; then
+  ok "suppressed path: no removal/deletion verb survives in the task/bug directive"
+else
+  bad "suppressed path: no removal/deletion verb survives in the task/bug directive" \
+    "$TASKBUG_SECTION"
+fi
+if [ -n "$TASKBUG_SECTION" ] && printf '%s\n' "$TASKBUG_SECTION" | grep -qiE 'later turn|defer'; then
+  ok "suppressed path: the directive defers cleanup to a later turn instead of ordering it"
+else
+  bad "suppressed path: the directive defers cleanup to a later turn instead of ordering it" \
+    "$TASKBUG_SECTION"
 fi
 
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"
