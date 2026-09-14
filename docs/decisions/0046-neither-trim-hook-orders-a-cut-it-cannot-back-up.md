@@ -97,6 +97,9 @@ guard against exactly that mistake.
   (measured 2026-09-12: zero matches for `handoff-keep-guard` in that file; arming it is the
   card's open task 12). Until then every guarantee here is carried by directive text a model
   may ignore.
+  **Update 2026-09-14:** task 12 registered it under `Stop` in `settings.json` on this branch;
+  the sentence above records the state as measured on 2026-09-12 and is superseded once this
+  branch merges.
 
 ## What this ADR does not claim
 

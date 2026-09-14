@@ -481,7 +481,29 @@ that ignores them, in two repos measured as not covering them today.
       rather than dead code, and it means any future proposal to raise that cap to 8 or beyond
       would silently hand the decision to the runtime. Checked *before* building on it, not
       after.
-- [ ] 12. Register the guard in `settings.json` under `Stop`.
+- [x] 12. Register the guard in `settings.json` under `Stop`.
+      **Done 2026-09-14.** Test-first: `hooks/handoff/handoff-keep-guard.test.sh` gained a
+      registration assertion plus mutation control (modeled on
+      `slim-session-start.test.sh:733-760`), confirmed RED at **48/49** (the 47 pre-existing
+      assertions plus the new mutation control both passing, only the registration check
+      failing) before the edit, committed separately under `TEST_EXEMPT`. `settings.json`'s
+      single `Stop` group gained a second `hooks[]` entry,
+      `$HOME/.claude/hooks/handoff/handoff-keep-guard.sh`, with no `timeout` key, matching
+      `live-handoff.sh`/`pre-compact-handoff.sh`/`slim-session-start.sh`; the existing orca
+      entry is untouched. Re-run GREEN at **49/49**; `verify-hook-wiring.test.sh` (**37/37**)
+      and `slim-session-start.test.sh` (**67/67**) measured unchanged from their pre-edit
+      baselines.
+      ⚠️ **Not live yet**: `grep -c handoff-keep-guard` on the primary checkout's
+      `/Users/marksuyat/.claude/settings.json` returns **0** — this branch's registration only
+      takes effect after merge.
+      Probed outside this repo (fresh repo/no `.claude/`, fresh repo/`.claude/` present but no
+      notepad, outside any repo): in a repo with **no `.claude/` directory**, the heartbeat-log
+      write fails (`No such file or directory`) and the hook reports it loudly
+      (`systemMessage`/`additionalContext`, "heartbeat was not recorded") but still exits 0 —
+      fail-open, not a crash. `live-handoff.sh:62` (`mkdir -p "$REPO_ROOT/.claude"`) runs on
+      every `UserPromptSubmit`, so in a normal turn `.claude/` already exists before `Stop`
+      fires — an **ordering dependency between two hooks, not a guarantee**. Recorded here as a
+      gap, not fixed: closing it belongs to task 10's hook, and a drive-by fix is its own task.
 - [ ] 13. Guard-liveness reporting in `slim-session-start.sh`, above the early exits, reading
       **both** the mtime comparison **and the last line's decision token** — mtime alone cannot
       see `unprotected`, because a guard heartbeating it every turn keeps the log looking
