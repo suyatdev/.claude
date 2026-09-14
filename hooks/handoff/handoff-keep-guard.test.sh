@@ -379,6 +379,34 @@ DEC="$(last_decision "$REPO")"
 if [ "$DEC" = "allow" ]; then ok "secret-flagged block -> still decision=allow (quarantine is not a block)"
 else bad "secret-flagged block -> still decision=allow (quarantine is not a block)" "got '$DEC'"; fi
 
+# --- Registration assertion: this hook must actually be wired into settings.json -----
+# A hook can pass every test above while sitting unregistered in settings.json, in which
+# case it never runs in production (judge-guard.test.sh:344 names the hazard). Checked
+# against the REAL repo settings.json, not a fixture — that file is what Claude Code
+# actually loads. Modeled on slim-session-start.test.sh's identical registration check.
+SETTINGS="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null)/settings.json"
+if [ -f "$SETTINGS" ] && /usr/bin/jq -e \
+     '[.hooks.Stop[]?.hooks[]?.command] | any(test("hooks/handoff/handoff-keep-guard\\.sh"))' \
+     "$SETTINGS" >/dev/null 2>&1; then
+  ok "handoff-keep-guard.sh is registered under Stop in settings.json"
+else
+  bad "handoff-keep-guard.sh is registered under Stop in settings.json" "not found in $SETTINGS"
+fi
+
+# Self-check: the assertion above must be able to fail, not just always pass — the exact
+# vacuous-test trap task 4 hit. Strip the hook from a copy of the real file and confirm
+# the same query reports it missing.
+MUTANT="$TMP/settings-mutant.json"
+/usr/bin/jq 'del(.hooks.Stop[]?.hooks[]? | select(.command | test("handoff-keep-guard")))' \
+  "$SETTINGS" > "$MUTANT" 2>/dev/null
+if /usr/bin/jq -e \
+     '[.hooks.Stop[]?.hooks[]?.command] | any(test("hooks/handoff/handoff-keep-guard\\.sh"))' \
+     "$MUTANT" >/dev/null 2>&1; then
+  bad "registration check can fail (hook removed from a copy)" "mutant still reported present"
+else
+  ok "registration check can fail (hook removed from a copy)"
+fi
+
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
   "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }
