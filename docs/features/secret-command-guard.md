@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
 branch: feat/secret-command-guard
 ---
@@ -213,14 +213,22 @@ by sha256.
 
 ### Not verified
 
-- Whether the hook is armed **after merge**. `settings.json` points at
-  `$HOME/.claude/hooks/...`, and the primary checkout has neither the hook files
-  nor the registration, so the registration self-test passing in this worktree
-  proves nothing about the merged state. Confirm post-merge.
+- ~~Whether the hook is armed **after merge**.~~ **Now confirmed, 2026-09-11.** The primary
+  checkout at `$HOME/.claude` carries both `hooks/secret-command-guard.sh` and
+  `hooks/lib/classify-secret-command.py`, and its own `settings.json` registers the guard
+  (one match). The original wording — "the primary checkout has neither the hook files nor
+  the registration" — was true only before PR #85 merged; it is false today and is struck
+  rather than deleted so the audit trail still shows what was open and when it closed.
 - `printenv -0` behaviour is measured on this machine's BSD `printenv` only.
-- **The guard has never run outside its test suite.** Every measurement here
-  drives the classifier or the hook directly with a synthetic payload; none
-  observes Claude Code actually invoking it on a real tool call.
+- ~~**The guard has never run outside its test suite.**~~ **No longer true, 2026-09-11.** A
+  read-only audit of this card tripped the guard on the auditor's *own* Bash tool call, when
+  a guarded path appeared in its raw command text while it was probing the Known-gaps table —
+  so Claude Code really does invoke the hook on real tool calls, not only in the harness.
+  ⚠️ **Attribution, because it changes how much this is worth:** that observation is the
+  auditing agent's, reported to the session that wrote this note; the session did not
+  reproduce it, and deliberately did not manufacture a block of its own to do so. What the
+  session *did* verify first-hand is the arming fact in the bullet above. Read this as
+  "observed once, by a named party, on a real call" — not as a measurement with a rerun recipe.
 - **"Logged" means one `printf` to stderr on an allow path.** There is no
   durable sink for a `SECRET_EXEMPT` bypass — it appears in the session
   transcript and nowhere else. That matches the house convention for the other
