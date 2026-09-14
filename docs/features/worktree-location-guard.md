@@ -4230,6 +4230,38 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       lexer changes it deliberately. Widening the lexer is a change to all eight guards and
       is not this task.
 
+      **Round 1 of the observability judge, 2026-09-13 — two findings, both real, both
+      closed in this branch rather than deferred.** The verdict was `risk=low
+      confidence=high` and did not block; these were the "what I'd double-check" items.
+      Re-measured here before changing anything, because a judge finding is a claim like
+      any other:
+
+      1. **`~` followed by a non-account still expanded.** The allowlist admitted `-` and
+         digits, so `~-` reached bash's tilde expansion and resolved to `$OLDPWD`, and `~0`
+         to the directory-stack top (`~+` and `~1` stayed literal). The shell performing
+         that expansion is the **hook's**, whose `$OLDPWD` has nothing to do with the
+         caller's — so the guard would resolve, and then judge, a directory the command
+         never names. Nothing executes; it is a wrong answer, and it can be wrong in either
+         direction. Fixed by requiring a name to START with a letter or underscore, which
+         is what excludes the dirstack forms.
+      2. **The range was collation, not ASCII.** Measured under the shipping `en_US.UTF-8`
+         on bash 3.2: `[A-Za-z]` also matched `é ß ﬁ ā` (though not `Ω`). No shell
+         metacharacter passed in any locale tried, so this was never a route to execution —
+         the set was simply wider than the comment claimed, and it moved with the
+         environment. The check now runs under `LC_ALL=C`.
+
+      Both now live in `is_tilde_user_name()`, split out of `expand_tilde()` so the suite
+      can assert the rule directly: T17–T19 are **not** observable end-to-end, because an
+      admitted-but-unknown account is left literal by bash exactly as a rejected name is.
+      T15/T16 are observable (the old behavior produced a real path) and T19 is the
+      falsifier that keeps the trio honest — an implementation that rejects everything
+      fails it. ⚠️ While writing them, T17/T18 first passed **vacuously**: with the function
+      absent the extraction helper's `else` branch reported REJECTED, so every rejection
+      case would have passed against a hook with no check at all. The helper now reports
+      `NO_SUCH_FUNCTION`, and all five were re-run red before the implementation existed.
+      Suite 238 → **243 passed, 0 failed, 1 skipped**; siblings unchanged (182/0/1, 40/0/0,
+      89/0/0).
+
       **What this does and does not do for the flip.** The four wrong refusals are explained
       and closed, so criterion 3's finding is answered — but the fix is inert until merged
       (hooks run from the primary checkout, not from a branch), the log lines the 09-07/08

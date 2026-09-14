@@ -463,25 +463,52 @@ this guard, so the hook registration and its WORKTREE_GUARD_MODE switch stay edi
 #
 # `~` and `~/x` go through $HOME, as bash does — which is also what lets the suite point
 # them at a fixture. `~user` and `~user/x` go through the account's home via bash's own
-# tilde expansion, and the name is CHECKED before it reaches the eval that performs it: Arm
-# A's path comes straight from the payload and never passes the classifier's sentinel test,
-# so a name outside [A-Za-z0-9._-] is returned as written, exactly like an unknown account
-# — either then fails to enter downstream, and the caller denies as it always has.
+# tilde expansion, and the name is CHECKED first by is_tilde_user_name() below: a name that
+# does not pass is returned as written, exactly like an unknown account — either then fails
+# to enter downstream, and the caller denies as it always has.
 #
 # Boundary, measured 2026-09-11: the lexer strips quoting, so `cd "~/x"` reaches here as
 # `~/x` and is expanded although a real shell would not have. That over-ALLOWS a command
 # whose cd fails at run time — harmless behind `&&`, and behind `;` a HEAD move falls to
 # layer 2. Pinned by the suite's GROUP T so a quoting-aware lexer changes it on purpose.
+# Does this name an ACCOUNT, and is it safe to hand to the expansion below? Both halves
+# matter, and the first is not obvious: `~` followed by something that is not an account
+# name is still expanded by bash, just not to a home. `~-` is $OLDPWD and `~0`/`~+N` are
+# the directory stack — and the shell doing that expansion here is the HOOK's, whose
+# $OLDPWD has nothing to do with the caller's. The guard would then resolve, and judge, a
+# directory the command never names: a wrong answer, in either direction. So a name must
+# START like an account (a letter or an underscore) and carry nothing but [A-Za-z0-9._-]
+# after it. That first-character rule is what excludes the dirstack forms.
+#
+# Under LC_ALL=C because the range is COLLATION, not ASCII: measured 2026-09-13 under the
+# shipping en_US.UTF-8 on bash 3.2, `[A-Za-z]` also matched é ß ﬁ ā (though not Ω). No
+# shell metacharacter passed in any locale tried — so this was never a route to execution,
+# only a set wider than the one documented — and pinning the locale stops it moving with
+# the environment. Reported by the observability judge, 2026-09-13, and re-measured before
+# the change; suite GROUP T, T15-T19.
+is_tilde_user_name() { # $1 the name between ~ and the first / — 0 when it may be expanded
+  local LC_ALL=C
+  case "$1" in
+    [A-Za-z_]*) : ;;
+    *)          return 1 ;;
+  esac
+  case "$1" in
+    *[!A-Za-z0-9._-]*) return 1 ;;
+  esac
+  return 0
+}
+
 expand_tilde() { # $1 the path — result on stdout, unchanged when nothing applies
   local p=$1 user rest
   case "$p" in
     '~')   printf '%s' "$HOME" ;;
     '~'/*) printf '%s' "${HOME%/}${p#\~}" ;;
     '~'*)  user=${p#\~}; user=${user%%/*}; rest=${p#\~"$user"}
-           case "$user" in
-             *[!A-Za-z0-9._-]*) printf '%s' "$p" ;;
-             *) printf '%s' "$(eval "printf '%s' ~$user")$rest" ;;
-           esac ;;
+           if is_tilde_user_name "$user"; then
+             printf '%s' "$(eval "printf '%s' ~$user")$rest"
+           else
+             printf '%s' "$p"
+           fi ;;
     *)     printf '%s' "$p" ;;
   esac
 }

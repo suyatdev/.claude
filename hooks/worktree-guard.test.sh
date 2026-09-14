@@ -961,13 +961,22 @@ allow_silent 'T10 a quoted ~ is indistinguishable from a bare one (lexer boundar
 # ~user branch can be pinned against a home the fixture cannot relocate. The
 # oracle for T11 is Python's expanduser — the passwd database, not $HOME, and not
 # the eval the function uses — so the two implementations must agree.
-TILDE_FN="$(sed -n '/^expand_tilde() {/,/^}/p' "$HOOK")"
+TILDE_FN="$(sed -n '/^is_tilde_user_name() {/,/^}/p;/^expand_tilde() {/,/^}/p' "$HOOK")"
 t_expand() { # $1 path — expand_tilde in a subshell with HOME redirected
   ( HOME="$HOME_FIX"; eval "$TILDE_FN"; expand_tilde "$1" ) 2>/dev/null
 }
 t_eq() { # $1 desc, $2 want, $3 got
   if [ "$2" = "$3" ]; then ok "$1"; else
     printf 'FAIL — %s\n  want: %s\n  got:  %s\n' "$1" "$2" "$3"; fail=$((fail+1)); fi
+}
+# ADMITTED (the name reaches the expansion) or REJECTED, reading the check out of
+# the hook's own text. NO_SUCH_FUNCTION is not decoration: with the function
+# absent the call simply fails, and an `else` branch would report REJECTED —
+# so every rejection case would pass against a hook that has no check at all.
+t_name() { # $1 name
+  ( eval "$(sed -n '/^is_tilde_user_name() {/,/^}/p' "$HOOK")"
+    command -v is_tilde_user_name >/dev/null 2>&1 || { printf NO_SUCH_FUNCTION; exit 0; }
+    if is_tilde_user_name "$1"; then printf ADMITTED; else printf REJECTED; fi ) 2>/dev/null
 }
 ME="$(id -un)"
 t_eq 'T11 ~user/x resolves through the passwd database' \
@@ -987,6 +996,33 @@ if [ -e "$TMP/pwned" ]; then
 else
   ok 'T14 …and the command inside the name did not run'
 fi
+
+# T15–T19 — the name check, tightened after the observability judge's round-1
+# findings (2026-09-13) and re-measured here before the change. `~` followed by
+# something that is not an account name is not a home directory at all: bash
+# takes `~-` to $OLDPWD and `~0` to the dirstack top, and the shell doing that
+# expansion is the HOOK's, whose $OLDPWD has nothing to do with the caller's. So
+# the guard would resolve, and then judge, a directory the command never names.
+# Nothing executes either way — both rows are a wrong ANSWER, not an injection —
+# but a guard that judges the wrong directory can allow what it should deny.
+#
+# T15/T16 are observable end-to-end because the old behavior produced a real
+# path. T17–T19 are not: an admitted-but-unknown account is left literal by bash,
+# which is indistinguishable from a rejected name, so they assert the check
+# itself out of the hook's text — the same extraction T11–T14 use.
+cd "$TMP" || exit 1   # a known $PWD/$OLDPWD, so a leaked dirstack form is visible
+t_dirstack() { ( cd "$TMP" 2>/dev/null; OLDPWD="$HOME_FIX"; eval "$TILDE_FN"; expand_tilde "$1" ) 2>/dev/null; }
+t_eq 'T15 ~-/x is not an account and stays literal' '~-/x' "$(t_dirstack '~-/x')"
+t_eq 'T16 ~0/x is not an account and stays literal' '~0/x' "$(t_dirstack '~0/x')"
+t_eq 'T17 a name starting with a digit is rejected' REJECTED "$(t_name '1abc')"
+# T18 — the locale finding. `[A-Za-z]` is a COLLATION range: measured 2026-09-13
+# under the shipping en_US.UTF-8 on bash 3.2, é ß ﬁ ā all matched it (Ω did not).
+# No ASCII metacharacter passed in any locale tried, so this was never a route to
+# execution — but the range admitted names the comment did not claim, and the
+# check is now made under LC_ALL=C so the set does not move with the environment.
+t_eq 'T18 a non-ASCII letter is rejected whatever the locale collates' \
+  REJECTED "$(LC_ALL=en_US.UTF-8 t_name 'é')"
+t_eq 'T19 …and an ordinary account name is still admitted' ADMITTED "$(t_name '_svc-9.x')"
 # ================================================================= GROUP D ===
 # Feature: Arm D — moving a primary checkout's HEAD (card :1893)
 
