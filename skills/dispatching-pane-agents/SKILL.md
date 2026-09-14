@@ -1,6 +1,6 @@
 ---
 name: dispatching-pane-agents
-description: Use when dispatching a substantial subagent — a judge, a plan-task implementer, general-purpose, or a parallel fan-out — so it runs as a headless Claude session in a terminal pane via dispatch-pane-agent.sh, when reading its result file, and when choosing this session's pane-split policy. Not for Explore/Plan or other read-only helpers (those stay in-process via the Agent tool) and not for the 75k context handoff (automatic, hook-owned).
+description: Use when dispatching a substantial subagent — a judge, a plan-task implementer, general-purpose, or a parallel fan-out — so it runs as a headless Claude session in a terminal pane via dispatch-pane-agent.sh, when reading its result file, and when choosing this session's pane-split policy. Not for Explore/Plan or other read-only helpers (those stay in-process via the Agent tool) and not for the context handoff (automatic, hook-owned).
 ---
 
 # Dispatching Pane Agents
@@ -92,6 +92,15 @@ Rationale: `docs/decisions/0009-pane-split-policy-three-lane-governance.md`.
    handoff, and every other agent take the default (`aux`, the far-right
    column); the flag exists so the cmux layout can tell the two apart and
    is ignored by every other terminal.
+
+   Add `--model <m>` to honor a model-switch checkpoint for that one worker
+   without touching the session default — panes otherwise inherit whatever
+   `/model` was current at launch. Omitting it is unchanged: the pane runs
+   the configured default, as before this flag existed.
+
+   The dispatcher also hands the agent its own private scratch directory —
+   `$run_dir/work`, named in a preamble written ahead of the prompt, with
+   `TMPDIR` pointed at it — so you never need to invent or stage one yourself.
 3. Capture the `RESULT_FILE:` line from its output.
 4. Wait:
    - Judges: `... wait --result-file <f> --timeout 540` in a foreground Bash

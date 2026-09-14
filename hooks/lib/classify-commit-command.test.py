@@ -207,6 +207,31 @@ check("NOTHING_RUNNABLE: exempt is the empty string -- there is no command strin
       _nothing.exempt, "")
 
 
+# =====================================================================================
+# (j) argv0-spelling-blindness (docs/features/argv0-spelling-blindness.md, tasks 2/3,
+# RED). classify-commit-command.py:213 compares argv[0] to the literal "git" -- so a
+# capitalized or path-qualified git is read as kind=OTHER today, even though the
+# command really runs. Measured against this checkout, pre-fix, 2026-09-01.
+# =====================================================================================
+
+check("argv0-spelling RED: capitalized git resolves to kind COMMIT (measured pre-fix: OTHER)",
+      kind_of("Git commit -m x"), "COMMIT")
+check("argv0-spelling RED: all-caps git resolves to kind COMMIT (measured pre-fix: OTHER)",
+      kind_of("GIT commit -m x"), "COMMIT")
+check("argv0-spelling RED: an absolute path resolves to kind COMMIT (measured pre-fix: OTHER)",
+      kind_of("/usr/bin/git commit -m x"), "COMMIT")
+
+# --- control: classify-commit-command.py:210's own `argv[0] == "cd"` stays literal too,
+# --- independent of classify-git-command.py's copy of the same rule. Measured pre-fix:
+# --- lowercase cd already forces UNSUPPORTED (FOREIGN_REPO); capitalized CD does not,
+# --- and folding it would be the exact fail-open the card rejects for SEG_CD.
+check("argv0-spelling control: lowercase cd is the load-bearing control -- FOREIGN_REPO",
+      form_of("cd /other && git commit -m x"), "UNSUPPORTED")
+check("argv0-spelling control: capitalized CD must NOT be folded -- form stays PLAIN, "
+      "not UNSUPPORTED (folding cd is out of scope and would be a fail-open)",
+      form_of("CD /other && git commit -m x"), "PLAIN")
+
+
 def main():
     print("\nclassify-commit-command unit: {} passed, {} failed".format(PASSED, FAILED))
     return 1 if FAILED else 0

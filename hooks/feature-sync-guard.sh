@@ -123,11 +123,11 @@ exempt_reason=$(printf '%s' "$command_line" | "$py" -c '
 import os, sys
 sys.path.insert(0, os.path.join(os.environ["FSG_HOOK_DIR"], "lib"))
 try:
-    from shell_segments import segments
+    from shell_segments import program, segments
 except ImportError:
     sys.exit(0)
 for assigns, argv in segments(sys.stdin.read()):
-    if len(argv) >= 2 and argv[0] == "git" and argv[1] == "commit":
+    if len(argv) >= 2 and program(argv[0]) == "git" and argv[1] == "commit":
         value = assigns.get("FEATURE_SYNC_EXEMPT", "")
         if value:
             sys.stdout.write(value.replace("\n", " "))

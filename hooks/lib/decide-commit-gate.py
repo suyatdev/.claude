@@ -73,7 +73,7 @@ def _unsupported_trigger(command):
         if argv[0] == "cd":
             cd_seen = True
             continue
-        if argv[0] != "git" or len(argv) < 2:
+        if _CLASSIFIER.program(argv[0]) != "git" or len(argv) < 2:
             continue
         subcommand, rest, blocking_option = _CLASSIFIER.resolve_subcommand(argv)
         if blocking_option is not None:

@@ -22,7 +22,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from shell_segments import WRAPPERS, segments  # noqa: E402  (path must be set first)
+from shell_segments import WRAPPERS, program, segments  # noqa: E402  (path must be set first)
 
 __all__ = ["classify", "WRAPPERS"]
 
@@ -52,7 +52,7 @@ def classify(src, subcommand=("pr", "create"), exempt_var="JUDGE_EXEMPT"):
         # flags are legal before the subcommand (`gh -R owner/repo pr create`). Requiring the
         # two words ADJACENT keeps the false-positive surface narrow -- quoted text is a single
         # token, so a commit message mentioning the phrase still cannot produce an adjacent pair.
-        if not argv or argv[0] != "gh":
+        if not argv or program(argv[0]) != "gh":
             continue
         for j in range(1, len(argv) - 1):
             if argv[j] == word1 and argv[j + 1] == word2:

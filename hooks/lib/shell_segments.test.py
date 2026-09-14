@@ -105,6 +105,82 @@ CASES = [
     ('git commit -m "2>&1 in the subject" -- a.sh',
      [["git", "commit", "-m", "2>&1 in the subject", "--", "a.sh"]], "quoted fd syntax is prose"),
 
+    # --- THE FIX: `#` opens a comment only where it begins a WORD, which is bash's own rule ---
+    # shlex opens one at an unquoted `#` ANYWHERE in a word, and -- because _lex translates
+    # newline -> `;` BEFORE lexing -- then discards to end of INPUT rather than end of line.
+    # Two independent infidelities, both fail-OPEN. Every expectation in this block is pinned
+    # against real bash and zsh by check_bash_fidelity() below, so it is an execution rather
+    # than a reading of the manual.
+
+    # (a) the exploit. Nine characters hid every following segment from all eight Tier-1
+    # guards at once -- measured end to end in docs/features/shell-lexer-comment-blindness.md.
+    ("echo hi#; git commit -m x -- foo.sh", [["echo", "hi#"], GIT_COMMIT],
+     "word-final # is ordinary text in bash -- this was a universal guard bypass"),
+    ("echo hi#; gh pr create", [["echo", "hi#"], ["gh", "pr", "create"]],
+     "same nine characters against the PR classifier"),
+    ("echo hi#&&git push --force", [["echo", "hi#"], ["git", "push", "--force"]],
+     "no whitespace anywhere: the operator still splits"),
+    ("git add a#b && git commit -m x -- foo.sh", [["git", "add", "a#b"], GIT_COMMIT],
+     "# in the middle of a word, mid-command"),
+
+    # (b) the second, separate fail-open: a GENUINE comment must end at the newline. It did
+    # not, because by lexing time there were no newlines left to end it.
+    ("git add -- a.sh # note\ngit commit -m x -- foo.sh", [["git", "add", "--", "a.sh"], GIT_COMMIT],
+     "a real comment ends at end of LINE; the next line's command must still be seen"),
+
+    # (c) the half the fix must not break -- a word-initial comment is still stripped.
+    ("git status # a real comment", [["git", "status"]], "comment after whitespace"),
+    ("git status ;# no space after the operator", [["git", "status"]],
+     "a control operator begins a word too, so # right after `;` IS a comment"),
+    ("# leading comment only", [], "a whole-line comment runs nothing"),
+    ("git status\t# after a tab", [["git", "status"]], "any unquoted whitespace, not only a space"),
+
+    # (d) the false positives a bare `commenters=\"\"` would introduce. These are ordinary work,
+    # and this lexer sits on every Bash call -- a false denial here is expensive, which is the
+    # whole reason SECRET_EXEMPT had to be retrofitted to secret-command-guard.sh.
+    ("git commit -m fix#123 -- foo.sh", [["git", "commit", "-m", "fix#123", "--", "foo.sh"]],
+     "an issue number is not a comment"),
+    ("echo '#not a comment'", [["echo", "#not a comment"]], "single-quoted # is text"),
+    ('echo "a # b"', [["echo", "a # b"]], "double-quoted # is text"),
+    ("echo \\#notcomment", [["echo", "#notcomment"]],
+     "a BACKSLASH-escaped # at word start is text -- measured against bash, not assumed"),
+    ("echo a\\ # b", [["echo", "a #", "b"]],
+     "backslash-escaped whitespace does NOT end the word, so this # is still text"),
+    ("echo 'a'#b", [["echo", "a#b"]], "a closing quote does not end the word either"),
+    ("curl http://x/#frag", [["curl", "http://x/#frag"]], "a URL fragment"),
+
+    # (e) `)` and `}` are AMBIGUOUS word breaks, and this is measured rather than reasoned:
+    # a `)` that closes a SUBSHELL ends the word, so bash comments after it -- but a `)` that
+    # closes `$( )` does NOT, and the same split holds for `}` vs `${ }` and for a backtick.
+    # Telling the two apart needs expansion tracking the pre-pass deliberately does not do;
+    # it excludes the closers instead, which can only ever emit MORE tokens. So the expansion
+    # forms are read faithfully and the following command is no longer hidden...
+    ("echo $(echo x)#y; git commit -m x -- foo.sh",
+     [["echo", "$"], ["echo", "x"], ["#y"], GIT_COMMIT],
+     "a ) closing $( ) does not end the word -- the commit after it must still be seen"),
+    ("V=q; echo ${V}#y; git commit -m x -- foo.sh",
+     [["echo", "${V}#y"], GIT_COMMIT], "same for } closing ${ }"),
+    ("echo `echo x`#y; git commit -m x -- foo.sh",
+     [["echo", "`echo", "x`#y"], GIT_COMMIT], "same for a closing backtick"),
+    # ...and the subshell form is read fail-CLOSED on purpose: bash really does start a comment
+    # here and this lexer does not, so a guard sees a command bash would not have run. Pinned
+    # from BOTH sides -- here, and as an expected disagreement in check_bash_fidelity().
+    ("(echo hi)# git commit -m x -- foo.sh",
+     [["echo", "hi"], ["#"] + GIT_COMMIT],
+     "ACCEPTED fail-closed deviation: a ) closing a subshell is not treated as a word break"),
+
+    # (f) ANSI-C quoting, `$'...'`, where a backslash escapes a quote WITHOUT closing the
+    # string. Neither shlex nor this pre-pass models it, so the quote is read as closing one
+    # character early and the whole command becomes unparseable -- segments() then returns []
+    # and fails OPEN, the pre-existing behaviour its own docstring documents. Found by the
+    # observability judge, then reproduced and scoped by a differential fuzz over 5,216
+    # inputs: it is the ONLY shape in that population where this lexer sees fewer commands
+    # than the old one, and what it loses is always a harmless `echo` head -- the guarded
+    # command after the `;` was invisible to BOTH lexers, so no protection changed hands.
+    # Pinned so the fail-open is a recorded limit rather than a surprise.
+    ("echo $'a\\'#b'; git commit -m x -- foo.sh", [],
+     "$'...' with an escaped quote is unparseable: fail-OPEN, pre-existing, both lexers"),
+
     # --- REGRESSION: behaviour that already worked and the fix must preserve ---
     ("git push && gh pr create", [["git", "push"], ["gh", "pr", "create"]], "chained &&"),
     ("git push&&gh pr create", [["git", "push"], ["gh", "pr", "create"]], "unspaced &&"),
@@ -195,6 +271,249 @@ def check_accepted_limit():
     return problems
 
 
+# (command, expected has_grouping, why) -- worktree-location-guard derivation 4.
+#
+# segments() appends a fresh segment for every control operator and THROWS THE
+# OPERATOR AWAY, so `(`, `)`, `{` and `}` are indistinguishable in its return
+# value. That distinction is load-bearing and unrecoverable: bash discards a `cd`
+# at `)` but keeps it past `}`. This second VIEW of the same token stream is what
+# lets a caller notice the ambiguity instead of resolving it wrongly.
+GROUPING_CASES = [
+    ("( cd /x && git log ) && git switch main", True, "subshell parens"),
+    ("{ cd /x; git log; }", True, "brace group -- `{` is not a shlex punctuation char by default"),
+    ("( git log )", True, "parens with nothing to carry are still parens"),
+    ("cd /x && git switch main", False, "control operators are not grouping operators"),
+    ("git commit -m x ; git push", False, "; separates, it does not group"),
+    ("git log | grep x", False, "a pipe separates"),
+    ("git log > out.txt", False, "a redirection is part of its command"),
+    ("git log 2>&1", False, "and so is the fd form, which is why `>&` must not read as grouping"),
+    # ONE LEXER, TWO VIEWS. Every row below holds a grouping character inside a
+    # QUOTED token, where it is ordinary text. A second parser written to scan the
+    # raw string is exactly what would get these wrong.
+    ('echo "(a)"', False, "parens inside double quotes are one ordinary token"),
+    ("echo '(a)'", False, "and inside single quotes"),
+    ('git commit -m "fix(lexer): stop splitting"', False,
+     "a Conventional-Commits scope is the routine shape this repo would have broken on"),
+    ('echo "{ }"', False, "braces inside quotes"),
+    ("git commit -m 'see f(x)'", False, "an unspaced paren inside a quoted message"),
+    # Process substitution contains `(` AND opens a command context, so it groups.
+    ("cat <(git log)", True, "`<(` opens a command context exactly as `(` does"),
+    ("echo hi > >(git log)", True, "the `>(` opener, likewise"),
+    ("", False, "empty input"),
+    ("   ", False, "whitespace only"),
+    ("unbalanced ' quote ( git log )", False,
+     "shlex cannot lex this at all. has_grouping reports what it SAW, which is nothing; "
+     "the empty return from segments() is the signal callers fail closed on"),
+]
+
+
+def check_has_grouping():
+    """Pin has_grouping()'s answers. Absent, this reports one clean failure per row
+    rather than exploding at import, so the red run is readable."""
+    fn = getattr(_MOD, "has_grouping", None)
+    if fn is None:
+        return ["has_grouping() DOES NOT EXIST — shell_segments.py exports {!r}".format(
+            sorted(n for n in dir(_MOD) if not n.startswith("__")))]
+    problems = []
+    for src, want, why in GROUPING_CASES:
+        got = fn(src)
+        if got is not want:
+            problems.append("FAIL — has_grouping({!r}) ({})\n       want {!r}, got {!r}".format(
+                src, why, want, got))
+    return problems
+
+
+# argv0-spelling-blindness (docs/features/argv0-spelling-blindness.md, tasks 2/3, RED).
+# program() does not exist yet -- every row below fails on ABSENCE, not on a wrong answer,
+# because there is nothing to call. Split from GROUPING_CASES/check_has_grouping's pattern:
+# one clean "DOES NOT EXIST" failure rather than an ImportError exploding at collection time.
+PROGRAM_CASES = [
+    # --- case folding: this machine's filesystem is case-insensitive, so PATH resolution
+    # --- finds the same binary regardless of spelling; program() must agree.
+    ("git", "git", "already-lowercase is unchanged"),
+    ("Git", "git", "capitalized name folds"),
+    ("GIT", "git", "all-caps folds"),
+    ("gh", "gh", "already-lowercase"),
+    ("Gh", "gh", "capitalized gh folds"),
+    ("GH", "gh", "all-caps gh folds"),
+    ("ENV", "env", "capitalized env folds"),
+    ("Printenv", "printenv", "capitalized printenv folds"),
+    ("Nohup", "nohup", "capitalized WRAPPERS entry folds -- secret_approval.py:422 depends on this"),
+    # --- path spelling: /usr/bin/git is the same binary named a different way.
+    ("/usr/bin/git", "git", "absolute path strips the directory and folds"),
+    ("/opt/homebrew/bin/gh", "gh", "a different absolute path, second binary"),
+    ("/usr/bin/env", "env", "a different absolute path, third binary"),
+    # --- totality: program() must never raise, for any str, because
+    # --- secret-command-guard.sh:146 fails OPEN on a crash (card, "Fail direction").
+    ("", "", "the empty string names no executable"),
+    ("/", "", "a single slash names no executable"),
+    ("///", "", "several slashes name no executable"),
+    ("foo/", "", "a token ending in / names no executable"),
+]
+
+
+def check_program():
+    """Pin program()'s case-folding, path-stripping and totality contracts.
+
+    Absent, this reports one clean failure per row instead of exploding at import --
+    same shape as check_has_grouping() above."""
+    fn = getattr(_MOD, "program", None)
+    if fn is None:
+        return ["program() DOES NOT EXIST — shell_segments.py exports {!r}".format(
+            sorted(n for n in dir(_MOD) if not n.startswith("__")))]
+    problems = []
+    for tok, want, why in PROGRAM_CASES:
+        try:
+            got = fn(tok)
+        except Exception as exc:  # noqa: BLE001 -- totality is exactly what this must catch
+            problems.append("FAIL — program({!r}) RAISED ({}): {!r}".format(tok, why, exc))
+            continue
+        if not isinstance(got, str):
+            problems.append("FAIL — program({!r}) ({}) did not return a str, got {!r}".format(
+                tok, why, got))
+            continue
+        if got != want:
+            problems.append("FAIL — program({!r}) ({})\n       want {!r}, got {!r}".format(
+                tok, why, want, got))
+    return problems
+
+
+def check_one_lexer():
+    """ONE LEXER, TWO VIEWS -- asserted structurally, not by reading the source.
+
+    Replacing _lex must move BOTH views. A has_grouping() carrying its own parser
+    would keep answering from the real command string and go unmoved here, which
+    is the only failure mode this rule exists to prevent. The card rejects a
+    second parser outright, and prose cannot enforce that; this can.
+    """
+    lex = getattr(_MOD, "_lex", None)
+    fn = getattr(_MOD, "has_grouping", None)
+    if lex is None or fn is None:
+        return ["_lex()/has_grouping() DO NOT BOTH EXIST — got _lex={!r}, has_grouping={!r}".format(
+            lex, fn)]
+
+    # Sanity first: _lex is the real token producer, not a stub that happens to exist.
+    if lex("a && b") != ["a", "&&", "b"]:
+        return ["_lex() IS NOT THE TOKEN PRODUCER — _lex('a && b') = {!r}".format(lex("a && b"))]
+    if lex("unbalanced ' quote") is not None:
+        return ["_lex() MUST RETURN None FOR UNPARSEABLE INPUT, so segments() can tell that "
+                "case apart from an empty command — got {!r}".format(lex("unbalanced ' quote"))]
+
+    original = _MOD._lex
+    try:
+        _MOD._lex = lambda src: ["(", "cd", "/x"]
+        seg_view = _MOD.segments("this string holds no parens")
+        grp_view = _MOD.has_grouping("this string holds no parens")
+    finally:
+        _MOD._lex = original
+
+    problems = []
+    if [argv for _, argv in seg_view if argv] != [["cd", "/x"]]:
+        problems.append("SECOND PARSER — segments() did not read the substituted _lex; got {!r}".format(
+            seg_view))
+    if grp_view is not True:
+        problems.append(
+            "SECOND PARSER — has_grouping() did not read the substituted _lex. It answered {!r} "
+            "for a token stream whose first token is '(', which means it lexed the source "
+            "string itself. One lexer, two views: a second parser is an automatic reject.".format(
+                grp_view))
+    return problems
+
+
+# Anchored OUTSIDE this file: each command is executed by a real shell and the lexer is held to
+# what the shell actually did. The CASES block above states bash's rule; this proves the statement.
+# `SECOND` is echoed by the half a comment would swallow, so "did SECOND print?" is exactly the
+# question every guard is really asking. Every command is a harmless echo -- nothing here may have
+# an effect if a shell disagrees with us about where the comment starts.
+FIDELITY = [
+    "echo hi#; echo SECOND",
+    "echo hi ; # echo SECOND",
+    "echo hi ;# echo SECOND",
+    "echo 'hi#'; echo SECOND",
+    'echo "a # b"; echo SECOND',
+    "echo \\#notcomment; echo SECOND",
+    "echo a\\ # b; echo SECOND",
+    "echo 'a'#b; echo SECOND",
+    "echo a#b#c; echo SECOND",
+    "echo hi >/dev/null # x; echo SECOND",
+    "# echo SECOND",
+    "echo http://x/#frag; echo SECOND",
+    "echo hi\t# echo SECOND",
+    "echo $(echo x)#y; echo SECOND",
+    "V=q; echo ${V}#y; echo SECOND",
+    "echo `echo x`#y; echo SECOND",
+]
+
+# The ONE shape where this lexer deliberately disagrees with the shell. A `)` closing a subshell
+# really does end the word, so bash starts a comment there -- but distinguishing it from the `)`
+# that closes `$( )` needs expansion tracking the pre-pass does not do, so the rule excludes both
+# closers. The tokens after the `#` are therefore RETAINED rather than discarded, which is the
+# fail-closed direction: this lexer never hides less than bash runs.
+#
+# What actually reaches a guard is milder, and is measured rather than reasoned: `#` itself takes
+# the segment's command position, so classify-git-command reports SEG_OPAQUE and emits no COMMIT
+# fact -- git-guard and doc-guard allow, which is what bash's own reading would produce anyway,
+# while worktree-guard denies on an opaque segment. So the deviation costs a possible false
+# denial on one guard, never a hidden command on any.
+#
+# Asserted here, not merely absent from FIDELITY, and asserted EXACTLY (the `#` must still be at
+# argv[0]) so the deviation cannot widen -- or quietly reverse -- unnoticed.
+FIDELITY_DEVIATION = [
+    ("(echo hi)# echo SECOND", ["#", "echo", "SECOND"]),
+]
+
+
+def check_bash_fidelity():
+    """The lexer must see `echo SECOND` as a command exactly when the shell really runs it.
+
+    bash is REQUIRED -- a missing shell is reported as a failure, never skipped, because a check
+    that quietly declines to run is indistinguishable from a passing one. zsh is checked too (it is
+    this machine's login shell) and is required for the same reason; if the two shells ever disagree
+    the disagreement itself is the finding, so each is asserted separately rather than merged.
+
+    The harness also has to be able to fail in both directions: if no command runs SECOND, or every
+    command does, the table discriminates nothing and the whole check is reported broken.
+    """
+    out = []
+    for shell in ("bash", "zsh"):
+        ran_true = ran_false = 0
+        for cmd in FIDELITY:
+            try:
+                proc = subprocess.run([shell, "-c", cmd], capture_output=True, text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError) as exc:
+                out.append("FAIL — {} could not run {!r}: {}".format(shell, cmd, exc))
+                continue
+            really_ran = "SECOND" in proc.stdout
+            ran_true += really_ran
+            ran_false += not really_ran
+            lexer_sees = ["echo", "SECOND"] in argvs(cmd)
+            if lexer_sees != really_ran:
+                out.append(
+                    "FAIL — {} disagrees with the lexer on {!r}\n"
+                    "       shell ran the second command: {}  (stdout {!r})\n"
+                    "       lexer saw it as a command:    {}  (argvs {!r})".format(
+                        shell, cmd, really_ran, proc.stdout, lexer_sees, argvs(cmd)))
+        if not ran_true or not ran_false:
+            out.append("FAIL — {} fidelity table discriminates nothing: {} ran, {} did not"
+                       .format(shell, ran_true, ran_false))
+
+        for cmd, want_argv in FIDELITY_DEVIATION:
+            try:
+                proc = subprocess.run([shell, "-c", cmd], capture_output=True, text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError) as exc:
+                out.append("FAIL — {} could not run {!r}: {}".format(shell, cmd, exc))
+                continue
+            really_ran = "SECOND" in proc.stdout
+            got = argvs(cmd)
+            if really_ran or want_argv not in got:
+                out.append(
+                    "FAIL — {} accepted deviation no longer holds for {!r}\n"
+                    "       expected: shell does NOT run it, and the lexer RETAINS {!r}\n"
+                    "       got:      shell ran {}, argvs {!r}".format(
+                        shell, cmd, want_argv, really_ran, got))
+    return out
+
+
 def main():
     passed = failed = 0
     problems = []
@@ -210,7 +529,8 @@ def main():
             problems.append("FAIL — {!r} ({})\n       want {!r}\n       got  {!r}".format(
                 cmd, why, want, got))
 
-    for extra in (check_heredoc, check_assignments, check_unparseable, check_accepted_limit):
+    for extra in (check_heredoc, check_assignments, check_unparseable, check_accepted_limit,
+                  check_has_grouping, check_one_lexer, check_bash_fidelity, check_program):
         msgs = extra()
         if msgs:
             failed += len(msgs)

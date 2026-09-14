@@ -94,21 +94,28 @@ BAR_FILL=$'\xe2\x96\x88'
 BAR_EMPTY=$'\xe2\x96\x91'
 
 # --- Context-window progress bar ----------------------------------------
-# The bar measures context against a fixed 100k reference, NOT the model's
-# actual context window size. 100k is the point at which the session is worth
-# clearing, so that -- not the model's headroom -- is the number that matters:
-# a 1M-context model still gets unwieldy long before it is technically full.
-# Scaling fill and colour to the same 100k reference is what keeps the two
-# halves of the widget consistent; against the real window size a 143k session
-# rendered as a nearly-empty bar coloured red, which read as a bug.
-# Consequence: at >=100k the bar is full and red and stays there. That is
-# deliberate -- past the clear threshold, how far past stops mattering, and the
-# exact count is still shown numerically beside the bar.
+# The bar measures context against the model's CLEAR-THRESHOLD reference, not
+# against its raw window. The point at which a session is worth clearing is the
+# number that matters -- a 1M-context model gets unwieldy long before it is
+# technically full -- and scaling fill and colour to that one reference is what
+# keeps the two halves of the widget consistent. Measured against raw window
+# size instead, a 143k session rendered as a nearly-empty bar coloured red,
+# which read as a bug.
+#
+# That reference used to be a fixed 100k. It is now derived per model, and the
+# real window size is consulted for exactly one purpose: capping the anchor so
+# the red tier cannot sit past the wall. See the derivation below the model
+# parse.
+#
+# Consequence: at or past the red threshold the bar is full and red and stays
+# there. That is deliberate -- past the clear threshold, how far past stops
+# mattering, and the exact count is still shown numerically beside the bar.
 BAR_WIDTH=10
-BAR_REFERENCE_TOKENS=100000
-THRESHOLD_TOKENS_YELLOW=50000
-THRESHOLD_TOKENS_ORANGE=75000
-THRESHOLD_TOKENS_RED=100000
+# BAR_REFERENCE_TOKENS and the three colour thresholds are derived together from
+# the model's orange threshold, once the model name is known -- see the
+# derivation below the model parse. They must move as a set: raising orange on
+# its own leaves red at 100k, which puts orange above red and makes the orange
+# tier unreachable while the bar sits full-but-yellow for 100k of headroom.
 
 # Formats a raw token count as "1234" (<1000) or "12.3k" (>=1000).
 format_k() {
@@ -271,6 +278,46 @@ push_claude_segment() { # $1 text  $2 visible width
 # breaks the line -- it just renders fewer segments.
 model_name=$(echo "$input" | jq -r '.model.display_name // empty')
 model_name="${model_name//[[:cntrl:]]/}"
+
+# Orange -- the checkpoint mark, matching hooks/context-handoff-watch.sh -- is
+# model-dependent: 100k Sonnet, 130k Opus/Fable, 75k for anything unrecognised.
+#
+# These are budgets for where answer quality decays, NOT fractions of the window.
+# Context rot does not scale with window size -- a 1M-context model holds more
+# tokens, not more attention -- so the anchors deliberately do not grow with it.
+case "$model_name" in
+  *[Ss]onnet*) THRESHOLD_TOKENS_ORANGE=100000 ;;
+  *[Oo]pus*|*[Ff]able*) THRESHOLD_TOKENS_ORANGE=130000 ;;
+  *) THRESHOLD_TOKENS_ORANGE=75000 ;;
+esac
+# The family anchor above is a fixed number; the model's real window is not. On a
+# model whose window is no larger than its anchor, red would sit at or beyond the
+# wall, so the bar could never redden and the checkpoint would never be
+# signalled: the warning silently off precisely when it matters. Where the
+# payload reports the window, cap the anchor so red (4/3 x orange) lands AT or
+# inside the wall rather than past it. With a binding cap red is the window
+# exactly, give or take the 1-2 tokens the two integer divisions truncate.
+#
+# At these anchors the cap binds only below a ~133k (Sonnet) / ~173k (Opus)
+# window, which no current model has -- it is defence-in-depth, not load-bearing.
+# It WAS load-bearing under the previous 200k Opus anchor, which sat exactly at a
+# non-1M Opus's wall; lowering the anchor removed that case rather than the cap.
+context_window_size=$(echo "$input" | jq -r '.context_window.context_window_size // empty')
+context_window_size="${context_window_size//[[:cntrl:]]/}"
+case "$context_window_size" in ''|*[!0-9]*) context_window_size=0 ;; esac
+if [ "$context_window_size" -gt 0 ]; then
+  window_cap=$(( context_window_size * 3 / 4 ))
+  if [ "$window_cap" -gt 0 ] && [ "$window_cap" -lt "$THRESHOLD_TOKENS_ORANGE" ]; then
+    THRESHOLD_TOKENS_ORANGE=$window_cap
+  fi
+fi
+
+# Yellow, red and the bar reference hold their original ratios to orange (2/3,
+# 4/3, and reference == red), so the 75k fallback reproduces the previous
+# 50k/75k/100k ladder exactly and every other tier stays ordered.
+THRESHOLD_TOKENS_YELLOW=$(( THRESHOLD_TOKENS_ORANGE * 2 / 3 ))
+THRESHOLD_TOKENS_RED=$(( THRESHOLD_TOKENS_ORANGE * 4 / 3 ))
+BAR_REFERENCE_TOKENS=$THRESHOLD_TOKENS_RED
 
 # Reasoning effort ("low"/"medium"/"high"/"xhigh"/"max") is only present on
 # models that support it, so it renders next to the model name only when the
@@ -642,7 +689,7 @@ if [ -n "$model_name" ]; then
 fi
 
 if [ -n "$tokens_used" ]; then
-  # Colour tier and fill fraction share the same 100k reference (see the
+  # Colour tier and fill fraction share the same derived reference (see the
   # bar constants above), so a full bar and a red bar mean the same thing.
   bar_tier=$(awk -v n="$tokens_used" -v y="$THRESHOLD_TOKENS_YELLOW" -v o="$THRESHOLD_TOKENS_ORANGE" -v r="$THRESHOLD_TOKENS_RED" \
     'BEGIN { n += 0; if (n < y) print "green"; else if (n < o) print "yellow"; else if (n < r) print "orange"; else print "red" }')

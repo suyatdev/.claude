@@ -32,7 +32,7 @@ from collections import namedtuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from shell_segments import WRAPPERS, segments  # noqa: E402  (path must be set first)
+from shell_segments import WRAPPERS, program, segments  # noqa: E402  (path must be set first)
 
 import importlib.util  # noqa: E402
 
@@ -210,7 +210,7 @@ def classify(tool_name, command):
         if argv[0] == "cd":
             cd_seen = True
             continue
-        if argv[0] != "git" or len(argv) < 2:
+        if program(argv[0]) != "git" or len(argv) < 2:
             continue
 
         subcommand, rest, blocking_option = resolve_subcommand(argv)

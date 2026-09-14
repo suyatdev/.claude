@@ -848,6 +848,136 @@ run_case "defect table row (a): -c k=v -> ask"             0 'git -c k=v commit 
 assert_stdout "$REPO" "  ...row (a) -c k=v: ask JSON present" 'git -c k=v commit -m x' '"permissionDecision":"ask"'
 
 # ---------------------------------------------------------------------------
+# SEG_UNPARSED — a command the lexer cannot read at all must be REFUSED.
+#
+# This guard's own header already says it "fails CLOSED (exit 2) when it cannot
+# inspect the command at all -- no python3, or an unrunnable classifier". A
+# command that lexes to nothing is the same condition reached by a third route,
+# and until 2026-08-31 it was the one route that fell through to allow: an empty
+# fact set reads as "no commit here", and an absent fact is not safety.
+# worktree-guard.sh has always refused on this fact; these two now agree.
+#
+# Found by the observability judge (round 3) as a REGRESSION on this branch:
+# the old lexer's comment bug truncated a command at a mid-word `#`, throwing
+# away an unbalanced quote that followed and leaving something parseable behind.
+# Fixing the comment rule removed that accident, so commands that used to
+# classify as COMMIT/PUSH_FORCE started classifying as SEG_UNPARSED and were
+# allowed. But the hole itself is OLDER than the accident -- the last control
+# below is unparseable with no `#` involved at all, and was allowed on
+# origin/main too. Rows measured 2026-08-31 against origin/main and this HEAD.
+# ---------------------------------------------------------------------------
+on_branch main
+stage src/app.sh
+
+run_case "unparseable: ANSI-C quote hiding a commit -> block"  2 "git commit -m \$'a\\'#b' -- foo.sh"
+run_case "unparseable: ANSI-C quote hiding a force push -> block" 2 "git push --force \$'a\\'#b'"
+run_case "unparseable: unbalanced single quote after # -> block" 2 "git commit -m x#'unbalanced -- foo.sh"
+run_case "unparseable: unbalanced double quote after # -> block" 2 'git commit -m x#"unbalanced -- foo.sh'
+run_case "unparseable: unbalanced quote, NO # at all -> block"  2 "git commit -m 'unbalanced -- foo.sh"
+
+# The refusal must be attributable, not a silent 2 that looks like the commit
+# guard firing. A message naming the wrong reason is how a guard teaches the
+# next reader something false.
+assert_stderr "$REPO" "  ...the refusal says it could not lex the command" \
+  "git commit -m 'unbalanced -- foo.sh" 'cannot be lexed'
+
+# CONTROLS. Without these a blanket "block everything" stub passes every row above.
+run_case "control: parseable commit on main still blocks"      2 'git commit -m msg'
+run_case "control: parseable unrelated command still allows"   0 'ls -la'
+run_case "control: an apostrophe inside double quotes parses"  0 'echo "don'"'"'t"'
+run_case "control: a quoted # is not a comment and still parses" 0 "echo 'hi#'"
+
+# ---------------------------------------------------------------------------
+# Guard 0 is SCOPED TO COMMANDS THAT MENTION git, and the scoping is the point.
+#
+# The first cut refused every unparseable command, and this guard runs on EVERY
+# Bash call. Measured after the fact by the observability judge (round 4) and
+# reproduced: `echo $'a\'b'` -- ANSI-C quoting, an ordinary way to embed an
+# apostrophe, and valid bash by `bash -n` -- was refused. In the branch's own
+# 5,984-case fuzz population, 773 of the 968 commands Guard 0 refused were valid
+# bash. That population is deliberately stuffed with this idiom and says nothing
+# about how often it appears in real traffic, but ONE valid non-git command
+# refused by the git guard is already one too many: git-guard guards
+# `git commit` and `git push --force`, so a command that never mentions git has
+# nothing here to protect and refusing it is pure overreach.
+#
+# The claim that preceded this -- "zero shapes become newly unparseable" -- was
+# drawn from ten hand-picked shapes while the fuzz population sat unused. It was
+# false, and the user approved the change partly on its strength. The rows below
+# are the correction, pinned from both sides.
+#
+# `gh` is deliberately NOT in scope: this guard never keys on gh at all.
+# ---------------------------------------------------------------------------
+on_branch main
+
+run_case "unparseable but git-free -> ALLOW (not this guard's business)" 0 "echo \$'a\\'b'"
+run_case "unparseable, git-free, 'gh' only as a substring -> ALLOW"      0 "echo \$'a\\'b' # highlight"
+run_case "unparseable gh command -> ALLOW (git-guard never keys on gh)"  0 "gh pr create#'x"
+run_case "unparseable and mentions git -> still BLOCK"                   2 "echo \$'a\\'b' && git commit -m x -- foo.sh"
+run_case "unparseable, git only in a url -> BLOCK (substring, fail closed)" 2 "curl https://github.com/x#'unbalanced"
+
+# =============================================================================
+# argv0-spelling-blindness (docs/features/argv0-spelling-blindness.md, task 2
+# completion pass, RED). git-guard.sh:358's OWN `argv[0] != "git"` check, inside
+# prints_and_exits_option(), decides which bucket-1 print-and-exit option (if any)
+# preceded a resolved `commit` subcommand -- for the MESSAGE only; whether to
+# refuse at all is already decided by `has_fact COMMIT`, which comes from
+# classify-git-command.py's own :520 site (a separate call site, already covered
+# by task 2's PROGRAM_CASES/ARGV0_SPELLING_CASES rows).
+#
+# It cannot be exercised end to end through run_case: pre-fix, :520 fails to set
+# the COMMIT fact for a capitalized/path invocation at all, so Guard 1 is never
+# entered and :358 is never reached, regardless of :358's own bug -- fixing :520
+# alone would not fix :358, and a fixture routed through Guard 1 would leave :358
+# untested by construction. Isolated instead, the same way
+# test-marker-guard.test.sh isolates decide-commit-gate.py's own git check from
+# classify-commit-command.py's: prints_and_exits_option() is extracted from the
+# REAL script text with awk (start/end markers, not a hardcoded line range, so
+# extraction survives drift) and sourced, so the assertions run the actual bytes
+# of git-guard.sh, never a copy.
+#
+# Measured directly against this checkout, pre-fix, 2026-09-01: the lowercase
+# control reports "--version"; all three capitalized/path spellings report
+# empty (verbatim, quoted in the FAIL lines below).
+# =============================================================================
+PE_EXTRACT="$TMP/prints_and_exits_option.sh"
+awk '/^prints_and_exits_option\(\) \{/{p=1} p{print} p && /2>\/dev\/null$/{f=1} f && /^}$/{exit}' \
+  "$HOOK" > "$PE_EXTRACT"
+if [ -s "$PE_EXTRACT" ]; then
+  CLASSIFIER="$(cd "$(dirname "$HOOK")" && pwd)/lib/classify-git-command.py"
+  py="$(command -v python3 || command -v python)"
+  # shellcheck disable=SC1090  # extracted at run time from the real hook, see above
+  source "$PE_EXTRACT"
+
+  check_prints_and_exits() { # $1 desc, $2 command_line, $3 expected result
+    local desc="$1" want="$3" got
+    command_line="$2"
+    got="$(prints_and_exits_option)"
+    if [ "$got" = "$want" ]; then
+      printf 'ok   — %s (got %s)\n' "$desc" "${got:-<empty>}"; pass=$((pass+1))
+    else
+      printf 'FAIL — %s (want %s, got %s)\n' "$desc" "${want:-<empty>}" "${got:-<empty>}"; fail=$((fail+1))
+    fi
+  }
+
+  check_prints_and_exits \
+    "argv0-spelling RED: control -- lowercase 'git --version commit' -> reports --version" \
+    'git --version commit -m x' '--version'
+  check_prints_and_exits \
+    "argv0-spelling RED: capitalized 'Git --version commit' must report --version like lowercase (measured pre-fix: empty)" \
+    'Git --version commit -m x' '--version'
+  check_prints_and_exits \
+    "argv0-spelling RED: 'GIT --version commit' must report --version like lowercase (measured pre-fix: empty)" \
+    'GIT --version commit -m x' '--version'
+  check_prints_and_exits \
+    "argv0-spelling RED: '/usr/bin/git --version commit' must report --version like lowercase (measured pre-fix: empty)" \
+    '/usr/bin/git --version commit -m x' '--version'
+else
+  printf 'FAIL — argv0-spelling RED: could not extract prints_and_exits_option() from git-guard.sh (extraction markers drifted) -- unmeasured\n'
+  fail=$((fail+1))
+fi
+
+# ---------------------------------------------------------------------------
 printf '\ngit-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
   "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }

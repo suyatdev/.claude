@@ -1569,7 +1569,7 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         precedent — the planning output (ADR 0030) and the plan it called for both exist, and the
         implementation is on the PR. Task 13 below is the only work this card still has open, and it
         cannot run until the PR merges. PR detail: `coding-memory/pr-tracking.md`, the PR #60 entry.
-- [ ] 13 — **Post-merge, once, in this order — the step that makes ADR 0030 take effect.** Tracked as
+- [x] 13 — **Post-merge, once, in this order — the step that makes ADR 0030 take effect.** Tracked as
       a task rather than left to `memsearch/README.md` prose because the failure is silent: skip it
       and every test still passes, `memsearch status` still reports a healthy index, and roughly 97%
       of this change is inert with no runtime signal anywhere.
@@ -1590,6 +1590,13 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         takes (`_take_backup`, `memsearch/memsearch/db.py:135-152`, called at `:175`) — so it does not
         exist until step 1 has run. Between the two steps, confirm `<db_path>.pre-v0.bak` is present
         and non-empty; a later migration deletes it (`db.py:142-144`).
+      - **Run 2026-08-22, primary checkout, `e161279`.** Step 1: schema 0 -> 1, backup confirmed at
+        `~/.claude/memory-index/memory.db.pre-v0.bak` (89,202,688 bytes) before step 2 ran. Step 2:
+        `curated_doc -> judge_doc` 187 files/3456 chunks, `repo_doc -> judge_doc` 11 files/79 chunks.
+        `memsearch status` afterward: `judge_doc: 3542` (was ~108) — acceptance met. `pytest -m
+        measurement` immediately after: 3 of 5 R9 queries pass (`verification-marker-gate` and
+        `phase-guard-hook` still fail both clauses) — unchanged from the pre-task-13 measured state
+        recorded under task 12, i.e. no regression from the reindex/reclassify.
 
 ## Verification
 

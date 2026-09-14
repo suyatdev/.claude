@@ -8,7 +8,12 @@
 # Final line is exactly "PANE_RESULT: DONE" or "PANE_RESULT: FAILED"; the write
 # is atomic (temp + mv in the result file's own directory, same filesystem).
 #
-# Usage: run-pane-agent.sh <agent-type> <prompt-file> <result-file> <cwd>
+# Usage: run-pane-agent.sh <agent-type> <prompt-file> <result-file> <cwd> [model]
+#
+# [model] is optional and positional: when non-empty it becomes --model <model> on the
+# CLI, letting a dispatch honor a model-switch gate. Empty/absent means no --model flag
+# at all, so the configured default (settings.json) still wins and 4-arg callers are
+# unchanged.
 set -u
 umask 077
 
@@ -17,11 +22,38 @@ JQ_BIN="/usr/bin/jq"
 CMUX_BIN="/Applications/cmux.app/Contents/Resources/bin/cmux"
 STDERR_TAIL_LINES=20
 
-agent_type="${1:-}"; prompt_file="${2:-}"; result_file="${3:-}"; run_cwd="${4:-}"
+agent_type="${1:-}"; prompt_file="${2:-}"; result_file="${3:-}"; run_cwd="${4:-}"; model="${5:-}"
 if [ -z "$agent_type" ] || [ -z "$prompt_file" ] || [ -z "$result_file" ] || [ -z "$run_cwd" ]; then
-  printf 'usage: run-pane-agent.sh <agent-type> <prompt-file> <result-file> <cwd>\n' >&2
+  printf 'usage: run-pane-agent.sh <agent-type> <prompt-file> <result-file> <cwd> [model]\n' >&2
   exit 64
 fi
+
+# Card pane-agent-scratch-isolation change 3: run_dir derivation, hoisted to
+# the top so ONE value governs both TMPDIR (below) and the agent-exit marker
+# (near the bottom) -- two separate derivations of the same fact could
+# disagree. Shape guard: dirname(prompt_file) must resolve, via cd+pwd (so a
+# caller path laced with ../ cannot sneak past it), to something under
+# */runs/*; anything else is a direct/out-of-shape invocation.
+run_dir="$(cd "$(dirname "$prompt_file")" 2>/dev/null && pwd)" || run_dir=""
+case "$run_dir" in
+  */runs/*)
+    # mkdir -p, not "use it only if it already exists": an earlier draft
+    # exported TMPDIR only when run_dir/work already existed and fell back to
+    # the inherited value otherwise. Measured wrong -- the inherited TMPDIR on
+    # this machine is one shared per-user /var/folders/.../T/ directory, so a
+    # silent fallback reinstates exactly the shared-scratch collision this
+    # feature removes. mkdir -p costs nothing and removes the fallback
+    # entirely for the in-shape case.
+    if mkdir -p "$run_dir/work" 2>/dev/null; then
+      export TMPDIR="$run_dir/work"
+    else
+      printf 'run-pane-agent: could not create %s -- scratch is shared for this run\n' "$run_dir/work" >&2
+    fi
+    ;;
+  *)
+    printf 'run-pane-agent: prompt file is not under */runs/* -- scratch is shared for this run\n' >&2
+    ;;
+esac
 
 write_result() { # $1 body, $2 DONE|FAILED — atomic
   local tmp
@@ -53,8 +85,14 @@ status=DONE
 # --dangerously-skip-permissions matches the machine-wide posture (shell alias +
 # cmux launch argv); without it a headless run auto-denies non-allowlisted tool
 # calls and the agent dies mid-task. It skips prompts, not hooks.
+# Optional --model, kept as an array so the pinned flags above stay a single
+# invocation. The ${a[@]+"${a[@]}"} guard is required: this is bash 3.2 (macOS),
+# where a bare "${a[@]}" on an empty array is an unbound-variable error under set -u.
+model_args=()
+[ -n "$model" ] && model_args=(--model "$model")
 "$CLAUDE_BIN" -p "$(cat "$prompt_file")" --agent "$agent_type" \
   --output-format json --dangerously-skip-permissions \
+  ${model_args[@]+"${model_args[@]}"} \
   > "$tmp_out" 2> "$tmp_err" || status=FAILED
 
 body=""
@@ -69,17 +107,25 @@ write_result "$body" "$status" || fail_early "cannot write result file: $result_
 
 # Layout-v2 completion marker: written ONLY after a successful result write, so
 # a fail_early run leaves no marker and its pane is never auto-reused (spec:
-# the error pane is preserved for post-mortem). Run dir comes from the prompt
-# file's directory with a shape guard — never trust it blindly. `cd`+`pwd`
-# normalizes first, so the guard tests a resolved absolute path and a caller
-# path laced with `../` cannot sneak past it.
-marker_dir="$(cd "$(dirname "$prompt_file")" 2>/dev/null && pwd)" || marker_dir=""
-case "$marker_dir" in
+# the error pane is preserved for post-mortem). run_dir (hoisted to the top,
+# change 3) already carries the same */runs/* shape guard -- a second,
+# independent derivation here could disagree with the one TMPDIR was set from.
+case "$run_dir" in
   # stderr redirect goes FIRST: a failing `> file` is reported by the shell
   # before a trailing 2>/dev/null would apply, and our breadcrumb is the one
   # message worth printing.
-  */runs/*) printf '%s\n' "$status" 2>/dev/null > "$marker_dir/agent-exit" \
-              || printf 'run-pane-agent: could not write agent-exit marker\n' >&2 ;;
+  */runs/*)
+    printf '%s\n' "$status" 2>/dev/null > "$run_dir/agent-exit" \
+      || printf 'run-pane-agent: could not write agent-exit marker\n' >&2
+    # Change 4a: record whether the agent actually used its scratch dir --
+    # agent-exit is already a durable per-run channel this design otherwise
+    # leaves unread, and an empty work-used on a run that plainly did
+    # filesystem work is the cheap signal that an agent ignored its locker.
+    # Written either way (non-empty if something is under work/, empty if
+    # not) so its mere existence is not itself the signal.
+    find "$run_dir/work" -mindepth 1 -print -quit 2>/dev/null > "$run_dir/work-used" \
+      || printf 'run-pane-agent: could not write work-used marker\n' >&2
+    ;;
 esac
 
 # cmux niceties, best-effort: unblock any `wait` using wait-for, then notify.

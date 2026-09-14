@@ -106,6 +106,22 @@ CASES = [
     # `JUDGE_EXEMPT=a` then `b gh pr create` -- whose command is `b`, not `gh`. bash agrees. Pinned
     # because the first draft of this test asserted PR and the classifier was right, not the test.
     ("JUDGE_EXEMPT=a\nb gh pr create", "NO", "", "newline splits before gh reaches a command slot"),
+
+    # --- argv0-spelling-blindness (docs/features/argv0-spelling-blindness.md, tasks 2/3,
+    # --- RED). classify-pr-command.py:55 compares argv[0] to the literal "gh". Measured
+    # --- against this checkout, pre-fix, 2026-09-01: all three below return ("NO", "").
+    ("Gh pr create", "PR", "",
+     "argv0-spelling RED: capitalized gh must fold (measured pre-fix: NO)"),
+    ("GH pr create", "PR", "",
+     "argv0-spelling RED: all-caps gh must fold too (measured pre-fix: NO)"),
+    ("/opt/homebrew/bin/gh pr create", "PR", "",
+     "argv0-spelling RED: an absolute path is the same binary (measured pre-fix: NO)"),
+
+    # --- control: the subcommand pair match stays case-sensitive -- gh itself rejects
+    # --- `PR`, so folding argv[0] must not spill into the adjacent-pair scan.
+    ("gh PR create", "NO", "",
+     "argv0-spelling control: the subcommand pair is compared literally, unaffected by "
+     "argv[0] folding -- PR is not pr"),
 ]
 
 

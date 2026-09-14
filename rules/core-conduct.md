@@ -30,7 +30,7 @@ Prompt instructions are guidance, not a guarantee — treat rule files as source
 
 ## Parallel-Agent Invariants
 
-Multiple Claude instances may run concurrently via git worktrees. Never touch files outside your assigned feature domain. A build/lint error in a file you didn't modify may mean another parallel agent is mid-edit — wait 30 seconds and re-check rather than fixing it. Shared-schema changes (Prisma schema, shared interfaces, migrations, `types/index.ts`): check `main` for drift first, extend rather than alter existing exports. Never add/remove/upgrade a dependency unilaterally — ask first. Can't be a skill: the model can't detect a parallel instance, so this must always be present.
+Multiple Claude instances may run concurrently via git worktrees. Never touch files outside your assigned feature domain. A build/lint error in a file you didn't modify may mean another parallel agent is mid-edit — wait 30 seconds and re-check rather than fixing it. Shared-schema changes (Prisma schema, shared interfaces, migrations, `types/index.ts`): check `main` for drift first, extend rather than alter existing exports. Never add/remove/upgrade a dependency unilaterally — ask first. Scratch work goes in a directory you were handed or created yourself (`mktemp -d`), never a fixed path — a parallel agent given a similar prompt invents the same one and deletes your files. Can't be a skill: the model can't detect a parallel instance, so this must always be present.
 
 ## Context Discipline
 

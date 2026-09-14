@@ -1,10 +1,31 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
-branch: fix/tracker-frontmatter-comment
+branch: none  # merged via PR #56 (7fcfd95); fix/tracker-frontmatter-comment deleted 2026-08-20
 ---
 
 # Feature-state tracking with a browser UI
+
+⚠️ **Superseded paths — read every `task-tracker/` in this card as `treko/`, and
+`skills/tracking-feature-state/` as `skills/treko/`.** A later card, `treko-rename.md` (PR #64,
+`abfb33c`), renamed the directory, the skill and the served page after this card had already
+merged; it states that it deliberately does not edit this card, and this card's branch was gone
+by then, so nothing updated the prose. Verified 2026-09-11: `task-tracker/` and
+`skills/tracking-feature-state/` do not exist, `treko/` and `skills/treko/` do.
+
+The served page is the third rename and needs its own mapping, because the directory substitution
+alone does not resolve it: **`Task Tracker.dc.html` is now `Treko.dc.html`** (`adfdc96`, same PR),
+so the one path below that names it — find it with
+`grep -n -F 'Task Tracker.dc.html' docs/features/tracking-feature-state.md`, whose first two hits
+are this paragraph — reads `treko/Treko.dc.html`. Do not generalise past
+that file — `Task Tracker Directions.dc.html` kept its name and only changed directory. Measured
+2026-09-12; the `.spec.md` half carries the same mapping.
+
+**The old paths below are left exactly as written, on purpose.** They record what was true at the
+moment each measurement was taken, and rewriting them in place would turn an accurate historical
+record into a false present-tense claim — the failure this repo has hit before by regex-fixing
+anchors. Only the one command that presents itself as re-runnable is corrected, in `## Verification`
+below, and it is corrected by addition rather than replacement.
 
 ⚠️ **This card has passed the planning→implementation gate more than once; the convention for that is
 recorded here rather than as a fourth `phase` state.** The three-state field cannot express "paused
@@ -106,10 +127,15 @@ it belongs in the spec half, and it is what keeps this file readable at session 
       produced the first complete-and-branchless cards. **Not fixed here** — a distinct defect
       with its own design question, and out of this task's scope. It bears on task 16: closing
       this card to the merged convention makes `tracking-feature-state` the fourth such card.
-- [ ] 16 — Close the card. Frontmatter to this repo's merged convention — `branch: none  # merged
+- [x] 16 — Close the card. Frontmatter to this repo's merged convention — `branch: none  # merged
       via PR #51 (06e7c9d) …; feat/tracking-feature-state deleted 2026-08-19` — naming this
       reopen's PR beside it. Observability judge at `implementation` stage pinning the final HEAD,
       then the PR.
+      ✅ This reopen's PR was **#56** (`fix/tracker-frontmatter-comment`), merged `7fcfd95` on
+      2026-08-20, branch auto-deleted the same day (verified via `gh api .../pulls/56` and the PR
+      timeline's `head_ref_deleted` event, not assumed from merge time). Implementation-stage judge
+      verdict already on record, pinning the pre-merge head: `coding-memory/observability-judge/
+      2026-08-20-fix-tracker-frontmatter-comment.md` @ `9056081`. Frontmatter updated above.
 
 ## Verification
 
@@ -142,6 +168,23 @@ uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q
 It reported **53 passed** on 2026-08-09; that number is a measurement with a date, not a contract —
 re-run it rather than trusting it. There is no system `pytest` here, so `uv run` is the only
 invocation that works.
+
+⚠️ **That command no longer runs** — `task-tracker/` was renamed to `treko/` (see the supersession
+banner at the top of this card). Measured 2026-09-11: it exits with
+`ERROR: file or directory not found: task-tracker/` and `no tests ran`. Two things to know before
+substituting a path:
+
+- **`pytest treko/ -q` is not the equivalent command.** `treko/` now also holds the code of later,
+  unrelated cards in the treko series (theme, sidebar, non-text-contrast, drawer), several of whose
+  tests need a browser and a CDP connection. An unscoped run there reports failures that belong to
+  those cards, not to this one, and reading them as this card's regressions would be wrong.
+- **The equivalent is the scoped run** over the five files this card actually owns:
+  `uv run --with pytest==9.1.1 --no-project pytest treko/test_analyze.py treko/test_store.py
+  treko/test_server.py treko/test_server_lifetime.py treko/test_ui_commands.py -q`.
+
+That scoped run was reported as **170 passed** on 2026-09-11 by the audit that found this gap. It is
+recorded here as that audit's figure, **not** re-run by the session writing this note — the same
+standard the paragraph above asks for: a measurement with a date and an owner, not a contract.
 
 ⚠️ **Three of those tests are conditionally skipped on a host without `node`.**
 `task-tracker/test_store.py` guards three tests with `@pytest.mark.skipif(NODE is None, ...)`
