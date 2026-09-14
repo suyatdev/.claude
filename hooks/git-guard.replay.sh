@@ -2,7 +2,14 @@
 # Replay: run a baseline git-guard (third positional, default `main`) and this
 # branch's git-guard over the same command matrix in the same fixture states, and
 # report every case where the base BLOCKS and the branch ALLOWS. Against the
-# default base, that set must be empty for "never weaker than main" to hold.
+# default base, that set must contain nothing but the commands named in
+# EXPECTED_RELAXED for "never weaker than main except where declared" to hold.
+#
+# That contract was an unqualified "never weaker than main" until
+# docs/features/judge-ledger-commitability.md, which deliberately re-allowed the
+# two judge verdict ledgers that PR #59 had left tracked but un-committable. The
+# gate did not go away: it now reads a declared list, exactly as the stricter
+# direction already did, so an UNDECLARED relaxation still fails the run.
 set -u
 WT_INPUT="$1"                 # worktree path (the branch under test), as typed
 UNDER_TEST="${2:-worktree}"  # "worktree" = the fix; or a git rev to extract instead
@@ -187,8 +194,22 @@ CMDS=(
   # These two are EXPECTED to report stricter against any base predating
   # docs/features/rule-surface-trim.md, which removed CODING_MEMORY.md and
   # coding-memory/* from the main-branch allowlist. See EXPECTED_STRICTER below.
+  # Neither is a judge ledger, so neither is rescued by the two ledger arms added
+  # in docs/features/judge-ledger-commitability.md -- they are what proves those
+  # arms are two exact literals and not a `coding-memory/` prefix.
   'git commit -m msg -- CODING_MEMORY.md'
   'git commit -m msg -- coding-memory/x.jsonl'
+  # The two judge ledgers. NEITHER PATH WAS IN THIS MATRIX BEFORE -- the allowlist
+  # change that made them committable was invisible to every replay run, which is
+  # the one thing this harness exists to prevent. They report two DIFFERENT results
+  # depending on the base, and both are intended:
+  #   vs. a base predating PR #59 (e.g. 7fcfd95): identical -- `coding-memory/*`
+  #     allowed them there, and the two literals allow them here.
+  #   vs. main at or after PR #59: RELAXED -- main blocks them, this branch allows
+  #     them. That is the whole point of the change, and it is the first sanctioned
+  #     relaxation this harness has carried. See EXPECTED_RELAXED below.
+  'git commit -m msg -- coding-memory/observability-judge/verdicts.jsonl'
+  'git commit -m msg -- coding-memory/compliance-judge/verdicts.jsonl'
   'git commit -m msg -- docs/tool.sh'
   'git commit -m msg -- docs/a/b/deep.md'
   'git commit -i -m msg -- docs/tracked.md'
@@ -260,17 +281,61 @@ is_expected_stricter() {
   return 1
 }
 
+# The mirror image, and the reason the contract at the top of this file now reads
+# "never weaker than main EXCEPT where declared here". Until this feature the
+# harness had no such list, because it had never had an intended relaxation: every
+# `relaxed` was a regression, so failing on the raw count was exactly right.
+#
+# docs/features/judge-ledger-commitability.md is the first deliberate widening.
+# The argument for declaring it rather than deleting the gate is the one already
+# made for EXPECTED_STRICTER five lines up: without a list, an intended widening
+# and a regression both just print `relaxed`, and the only way to keep the run
+# green would be to stop gating on relaxation at all -- which would retire the
+# protection for all 63 other commands to accommodate two.
+#
+# Entries are matched as WHOLE COMMAND STRINGS, so declaring these two ledgers
+# grants nothing to any other path: `coding-memory/x.jsonl` and CODING_MEMORY.md
+# are in the matrix directly above and still gate as before.
+#   docs/features/judge-ledger-commitability.md -- restored the two judge verdict
+#   ledgers to the main-branch allowlist as exact literals, after PR #59 left them
+#   tracked but un-committable.
+EXPECTED_RELAXED=(
+  'git commit -m msg -- coding-memory/observability-judge/verdicts.jsonl'
+  'git commit -m msg -- coding-memory/compliance-judge/verdicts.jsonl'
+)
+
+is_expected_relaxed() {
+  local e
+  for e in "${EXPECTED_RELAXED[@]}"; do
+    [ "$1" = "$e" ] && return 0
+  done
+  return 1
+}
+
 # Every case where main BLOCKS and the candidate ALLOWS is a relaxation. Each one
 # has to be inspected: a relaxation is intended ONLY where the commit names its own
-# documentation paths. Printed once per distinct command, not once per state.
-relaxed=0; stricter=0; same=0; unexpected=0
+# documentation paths, or names one of the two judge ledgers declared in
+# EXPECTED_RELAXED. Printed once per distinct command, not once per state.
+#
+# `relaxed` still counts EVERY relaxation, declared or not, so the summary line
+# never under-reports how far this branch has moved; `relaxed_undeclared` is what
+# the gate at the bottom reads.
+relaxed=0; stricter=0; same=0; unexpected=0; relaxed_undeclared=0
 : > "$TMP/relaxed"
+: > "$TMP/relaxed-undeclared"
 for state in empty-clean empty-docs empty-src empty-both staged-docs staged-src; do
   for c in "${CMDS[@]}"; do
     set_state "$state"; a=$(run "$BASE/git-guard.sh" "$c")
     set_state "$state"; b=$(run "$NEW" "$c")
     if [ "$a" = 2 ] && [ "$b" = 0 ]; then
       relaxed=$((relaxed+1)); printf '%s\n' "$c" >> "$TMP/relaxed"
+      if is_expected_relaxed "$c"; then
+        printf 'relaxed (EXPECTED, judge-ledger-commitability) [%s] %s\n' "$state" "$c"
+      else
+        relaxed_undeclared=$((relaxed_undeclared+1))
+        printf 'relaxed (UNDECLARED -- inspect this) [%s] %s\n' "$state" "$c"
+        printf '%s\n' "$c" >> "$TMP/relaxed-undeclared"
+      fi
     elif [ "$a" = 0 ] && [ "$b" = 2 ]; then
       stricter=$((stricter+1))
       if is_expected_stricter "$c"; then
@@ -286,18 +351,20 @@ for state in empty-clean empty-docs empty-src empty-both staged-docs staged-src;
 done
 printf 'DISTINCT COMMANDS base=%s (%s) BLOCKS and %s ALLOWS:\n' "$BASE_SHA" "$BASE_REV" "$UNDER_TEST"
 sort -u "$TMP/relaxed" | sed 's/^/  /'
-printf '\nbase=%s (%s) — %s commands x 6 states = %s pairs: %s identical, %s stricter (%s unexpected), %s relaxed (%s distinct commands)\n' \
-  "$BASE_SHA" "$BASE_REV" "${#CMDS[@]}" "$((relaxed+stricter+same))" "$same" "$stricter" "$unexpected" "$relaxed" "$(sort -u "$TMP/relaxed" | grep -c . || true)"
+printf '\nbase=%s (%s) — %s commands x 6 states = %s pairs: %s identical, %s stricter (%s unexpected), %s relaxed (%s distinct commands, %s undeclared)\n' \
+  "$BASE_SHA" "$BASE_REV" "${#CMDS[@]}" "$((relaxed+stricter+same))" "$same" "$stricter" "$unexpected" "$relaxed" "$(sort -u "$TMP/relaxed" | grep -c . || true)" "$relaxed_undeclared"
 
 # Gate, don't just report (observability judge, 2026-08-20, ADR 0031). Until now
 # this harness printed `N unexpected` and still exited 0, so a caller running it
 # in a chain -- or a human skimming the last line -- could not tell a clean run
-# from a divergent one. `relaxed` breaks the stated "never weaker than main"
-# contract; `unexpected` means a stricter divergence nobody declared in
-# EXPECTED_STRICTER, which is indistinguishable from a regression.
-if [ "$relaxed" -gt 0 ] || [ "$unexpected" -gt 0 ]; then
-  printf 'REPLAY FAILED: %s relaxed, %s unexpected stricter — inspect before trusting this run.\n' \
-    "$relaxed" "$unexpected" >&2
+# from a divergent one. An UNDECLARED `relaxed` breaks the stated "never weaker
+# than main except where declared" contract; `unexpected` means a stricter
+# divergence nobody declared in EXPECTED_STRICTER, which is indistinguishable
+# from a regression. Both read from a declared list, so the gate can only be
+# quieted by naming the exact command in this file -- never by a run's own result.
+if [ "$relaxed_undeclared" -gt 0 ] || [ "$unexpected" -gt 0 ]; then
+  printf 'REPLAY FAILED: %s undeclared relaxed (of %s total), %s unexpected stricter — inspect before trusting this run.\n' \
+    "$relaxed_undeclared" "$relaxed" "$unexpected" >&2
   exit 1
 fi
 exit 0

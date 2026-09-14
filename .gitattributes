@@ -1,0 +1,32 @@
+# .gitattributes — repo-wide file attributes.
+#
+# Judge ledgers: let concurrent appends concatenate instead of conflicting.
+#
+# Both files are append-only JSONL written by the two judge subagents across many repos,
+# worktrees and parallel sessions. Two branches each appending a row to the same ledger is the
+# normal case here, not an anomaly, and a plain three-way merge turns every one of those into a
+# textual conflict over the last line. Git's built-in `union` driver keeps both sides' lines.
+# No custom merge script: a driver that only ever needs "keep both, in order" is exactly what
+# the built-in already does, and a script would be one more thing to install per clone.
+#
+# Two exact literals, not `coding-memory/*/verdicts.jsonl`. A third judge is hypothetical, and
+# the attribute should be no wider than the rule it encodes (same call as the git-guard
+# allowlist — see docs/features/judge-ledger-commitability.md, "Open questions").
+#
+# LIMIT — this does NOT close the failure that prompted it. That one was *uncommitted local
+# changes* meeting a FAST-FORWARD pull ("Your local changes to the following files would be
+# overwritten by merge"). No merge driver runs on a fast-forward, so `merge=union` is inert
+# there; it is a branch-vs-branch mechanism only. The half that stops that drift accumulating is
+# the git-guard allowlist change, which lets the ledgers be committed on the default branch in
+# the first place. Neither half substitutes for the other.
+#
+# LIMIT — union concatenates, it does not deduplicate. Measured, that is narrower than "any
+# byte-identical row duplicates": when both sides append the SAME single row, the three-way merge
+# resolves the identical change itself and one row comes out, no driver involved. A row survives
+# twice only when it sits in two hunks the merge cannot align. Rows carry distinct `ts`/`head_sha`
+# so neither shape is expected here, but "not expected" is not "prevented".
+#
+# Both limits, and the union behaviour itself, are pinned by gitattributes.test.sh — which
+# merges real commits in a throwaway repo rather than asserting any of this from the docs.
+coding-memory/observability-judge/verdicts.jsonl merge=union
+coding-memory/compliance-judge/verdicts.jsonl    merge=union
