@@ -168,10 +168,28 @@ changing what the judges write, and backfilling `outcome` values.
       > plus both writer files is **empty**, so the bytes under test are byte-identical to main's.
       > One receipt was written by hand: `hooks/test-marker-guard.test.sh` passed **249/0** against
       > these exact bytes but never calls the writer for its own subject, so no marker appeared —
-      > the same wiring species as the two `panes` suites. Recorded, not fixed: its own card.
+      > the same wiring species as the two `panes` suites. Recorded, not fixed — that gap belongs to
+      > `docs/features/verification-marker-gate.md`, which already records leaving
+      > `hooks/test-marker-guard.test.sh` unwired. Named here rather than left as "its own card",
+      > which asserts a card exists without saying which.
 - [x] 9. ADR under `docs/decisions/` amending ADR 0031: state that keeping the ledgers tracked and
       excluding them from the allowlist were incompatible, and which one moved.
-- [ ] 10. Observability judge, then draft PR.
+- [x] 10. Observability judge, then draft PR.
+      > **2026-09-14 — judge `risk=low confidence=high`; draft PR #104.** The judge reproduced every
+      > claim rather than reading it, and returned five findings, all acted on here:
+      > (a) `hooks/git-guard.sh:234` was a dead citation — corrected to a name-based anchor;
+      > (b) a stale "docs/*.md alone" comment in `hooks/git-guard.test.sh`;
+      > (c) "its own card" named no card — now names `verification-marker-gate.md`;
+      > (d) **nothing invokes `git-guard.replay.sh`** — no hook, runner or CI; added to ADR 0047 as
+      >     a bound on every claim it makes. Pre-existing, open work, its own card;
+      > (e) emptying `EXPECTED_RELAXED` crashes under bash 3.2 `set -u` rather than reporting.
+      > It also **strengthened** finding 2 beyond what this card claimed, and the correction was
+      > re-measured here before being written down: injecting the two ledger rows into `origin/main`'s
+      > own harness yields `8 relaxed`, `REPLAY FAILED`, rc=1. So the old gate was **sound** — blind
+      > only in its population. "The ratchet was blind" was an overstatement and has been fixed in
+      > ADR 0047.
+      > PR opened *before* these commits by design: `judge-guard.sh` requires `head_sha == HEAD`,
+      > and committing the verdict moves HEAD and invalidates it.
 
 ## Also worth fixing while here — decide separately, do not silently bundle
 
@@ -245,9 +263,16 @@ to the declaration block **and must assert the block shrank**.
 
 ## Carried forward — deliberately not fixed in this round
 
-- `hooks/git-guard.sh:234` — the remedy line still reads "or stage only documentation". Changing
-  it would break the exact-string assertion at `hooks/git-guard.test.sh:264`, and the refusal line
-  directly above it now prints both ledger paths in full.
+- `hooks/git-guard.sh`, the `commit)` arm of the remedy `case` inside `refuse()` — it still reads
+  "or stage only documentation". Changing it would break the exact-string assertion in
+  `hooks/git-guard.test.sh`, and the refusal line directly above it now prints both ledger paths
+  in full.
+  > **Corrected 2026-09-14 (observability judge, verified).** This entry cited
+  > `hooks/git-guard.sh:234`, which is `return 1` in an unrelated helper; the remedy line is ~35
+  > lines further down. The number was right when written and died in the 496-commit merge. Anchors
+  > here are now **function and case-arm names**, per ADR 0047's own rule — the same rule ADR 0044
+  > adopted after every `:NNN` in a card died at once.
+  > This is the six-site drift the ADR warns about, arriving inside the change that documented it.
 - `docs/features/git-guard-detached-head.md:341` and `:732` quote the refusal message as
   `(CODING_MEMORY.md, coding-memory/*, docs/*.md)` — stale since PR #59, now stale twice over.
   Outside every worker's assigned file set this round.

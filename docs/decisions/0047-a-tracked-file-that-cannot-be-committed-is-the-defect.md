@@ -50,6 +50,22 @@ A clean sheet. The guard under test allows two commands the baseline blocks, and
 reports **nothing**, with exit 0. The same run under the harness in this branch reports 8 relaxed
 cases across 2 distinct commands. The difference is entirely the two rows added to `CMDS`.
 
+**Say precisely what was broken, because "the ratchet was blind" overstates it.** The gate *logic*
+was correct the whole time; only its **population** was incomplete. Measured 2026-09-14 by taking
+`origin/main`'s harness, injecting the two ledger rows into `CMDS` and changing nothing else — no
+`EXPECTED_RELAXED`, which that version does not have:
+
+```
+65 commands x 6 states = 390 pairs: 382 identical, 0 stricter, 8 relaxed (2 distinct commands)
+REPLAY FAILED: 8 relaxed, 0 unexpected stricter
+rc=1
+```
+
+The old gate would have caught PR #59 the day it landed, had anyone given it the commands to
+replay. This matters for what to conclude: the fix is not "the gate was weak and we strengthened
+it" but "a correct gate was asked the wrong question." A differential check inherits every blind
+spot of its input matrix, and reports a clean sheet for each one.
+
 This is the standing hazard with any differential check: it goes quiet when the population is
 wrong, and a run that reports nothing is indistinguishable from a run that found nothing.
 
@@ -112,6 +128,17 @@ replacement edits both, leaves the declaration intact, and the run passes — wh
 gate is fine"* while nothing was actually mutated. The first attempt did exactly this and was
 caught only by an assertion on the occurrence count. Any future mutation of this file must be
 scoped to the declaration block and must assert that the block shrank.
+
+**Nothing invokes this harness.** Raised by the observability judge on 2026-09-14 and confirmed:
+`hooks/git-guard.replay.sh` is wired to no hook, no runner and no CI step. It is run when a person
+remembers to run it. That is true both before and after this change and is not introduced here, but
+it bounds every claim on this page: the ratchet protects nothing on its own, declared exceptions or
+not. Wiring it is open work and belongs to its own card.
+
+**A degenerate `EXPECTED_RELAXED` crashes rather than reports.** Emptying the list entirely trips
+`set -u` on bash 3.2 (the macOS system bash) when the array is expanded, exiting 1 as a crash rather
+than as a verdict. Exit 1 is still the safe direction, but the message is a shell error, not a
+finding. Removing *entries* — the realistic edit — behaves correctly, as the falsifier above shows.
 
 **The residual risk is human, and is not mitigated by anything here.** A ratchet with a
 declared-exception list is exactly as strong as the discipline of whoever maintains the list.

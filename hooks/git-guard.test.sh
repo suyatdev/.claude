@@ -277,7 +277,8 @@ run_case "commit named inside a quoted message -> allow"     0 'echo "remember t
 run_case "commit as a commit-message substring -> allow"     0 'git log --grep "git commit"'
 run_case "unrelated command -> allow"                        0 'ls -la'
 
-# The documentation exception, now narrowed to docs/*.md alone.
+# The documentation exception: docs/*.md, plus the two judge verdict ledgers named
+# as exact literals (ADR 0047). It was docs/*.md alone between PR #59 and that ADR.
 # CODING_MEMORY.md and coding-memory/ are being retired as a tracked tree
 # (docs/features/rule-surface-trim.md), so they are no longer permitted on main;
 # these two cases previously asserted the opposite and are inverted, not dropped,
