@@ -4,7 +4,8 @@
 # Sourced, not executed: the sourcing hook must already have parsed the payload and run
 # every shared precondition, so that $ARM, $SUBJECT, $operand, $py, $CLASSIFIER, $LIB_DIR,
 # $SENTINEL, $STORE_REL, $MARKER_NAME, $EXEMPT_VAR, $MODE, $SID, $TAB, $LF, $payload_cwd
-# and the shared functions append_log(), refuse(), physical_path() are all in place.
+# and the shared functions append_log(), refuse(), expand_tilde(), physical_path() are all
+# in place.
 # worktree-guard.sh sources this file at its Bash dispatch point and nowhere else.
 #
 # It is a file of its own because task 6 grew worktree-guard.sh past the 800-line cap in
@@ -267,7 +268,9 @@ guard cannot identify, which is the one thing it may not allow. The operand is o
 command line above." \
         "$idx"
     fi
-    dir=$(cd "$dir" 2>/dev/null && cd "$operand" 2>/dev/null && pwd -P) || dir=""
+    # The operand arrives unexpanded and the cd below is quoted; a leading ~ has to be
+    # taken to $HOME here, as the shell already did before this command ran (card task 10).
+    dir=$(cd "$dir" 2>/dev/null && cd "$(expand_tilde "$operand")" 2>/dev/null && pwd -P) || dir=""
     if [ -z "$dir" ]; then
       deny_segment \
         "an earlier segment changes directory to somewhere that cannot be entered." \
@@ -292,7 +295,7 @@ git's own short-option grammar) or the segment carries more than one \`-C\`, whi
 git and would have to compose here too. Spell it as a single \`-C <dir>\`." \
         "$i"
     fi
-    dir=$(cd "$dir" 2>/dev/null && cd "$operand" 2>/dev/null && pwd -P) || dir=""
+    dir=$(cd "$dir" 2>/dev/null && cd "$(expand_tilde "$operand")" 2>/dev/null && pwd -P) || dir=""
     if [ -z "$dir" ]; then
       deny_segment \
         "this segment's \`-C\` names a directory that cannot be entered." \
