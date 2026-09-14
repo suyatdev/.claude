@@ -128,20 +128,20 @@ changing what the judges write, and backfilling `outcome` values.
 
 ## Tasks
 
-- [ ] 0. Branch `chore/judge-ledger-commitability` + worktree. **Only after `gate confirmed`.**
-- [ ] 1. Re-run the evidence above; confirm the counts still hold at the then-current `main`.
-- [ ] 2. **Red:** add `git-guard.test.sh` cases asserting a commit of each ledger on `main` is
+- [x] 0. Branch `chore/judge-ledger-commitability` + worktree. **Only after `gate confirmed`.**
+- [x] 1. Re-run the evidence above; confirm the counts still hold at the then-current `main`.
+- [x] 2. **Red:** add `git-guard.test.sh` cases asserting a commit of each ledger on `main` is
       currently REFUSED, and that `coding-memory/other.md` and a traversing
       `coding-memory/../src/x.sh` stay refused after the change. Watch them fail for the right reason.
-- [ ] 3. **Green:** add the allow arm(s) at `git-guard.sh:386`; update the `:391` refusal message,
+- [x] 3. **Green:** add the allow arm(s) at `git-guard.sh:386`; update the `:391` refusal message,
       which currently names only `docs/*.md`.
-- [ ] 4. Update `hooks/git-guard.replay.sh` expected values — the two ledger commands move from
+- [x] 4. Update `hooks/git-guard.replay.sh` expected values — the two ledger commands move from
       `stricter` to `identical` vs. the pre-#59 base. Confirm the run still reports **63 commands**;
       a mutation that drops a case from `CMDS` proves nothing.
-- [ ] 5. `.gitattributes` with `merge=union`, scoped to the ledger paths.
-- [ ] 6. Test the union driver for real: two branches each append a row, merge, assert both survive
+- [x] 5. `.gitattributes` with `merge=union`, scoped to the ledger paths.
+- [x] 6. Test the union driver for real: two branches each append a row, merge, assert both survive
       and no duplicate appears. This is the claim that must not be asserted without running it.
-- [ ] 7. Update `rules/gates.md` (default-branch safety stub names the allowlist verbatim),
+- [x] 7. Update `rules/gates.md` (default-branch safety stub names the allowlist verbatim),
       `hooks/README.md`, and `skills/managing-session-memory` where they state `docs/*.md` alone.
       > **Correction 2026-08-23 — this task names the wrong skill, and undercounts the sites.**
       > `skills/managing-session-memory` contains **zero** occurrences of `docs/*.md`; the real
@@ -155,8 +155,21 @@ changing what the judges write, and backfilling `outcome` values.
       > `docs/decisions/0031-one-tracked-record-and-the-guards-that-follow-it.md:93` states the old
       > allowlist inside a mermaid diagram and is **deliberately left alone**: ADR 0031 is merged
       > and is the historical record, to be amended by the new ADR in task 9, not edited.
-- [ ] 8. Full suite green — record counts run, not counts read.
-- [ ] 9. ADR under `docs/decisions/` amending ADR 0031: state that keeping the ledgers tracked and
+- [x] 8. Full suite green — record counts run, not counts read.
+      > **2026-09-14 — 38 suites run, 37 exit 0, 1 exit non-zero. Not a clean sweep; say so.**
+      > The suite list was re-enumerated from the filesystem *after* the merge rather than reused:
+      > merging `main` added **13 suites** (38 now, 25 before) that a stale hand-list would have
+      > skipped in silence, reporting a green run over two thirds of the tree.
+      > The red one is `hooks/lib/write-test-marker.test.py` (63 passed, 2 failed), pre-existing on
+      > `main` and not reachable from this branch: both failures say
+      > `panes/dispatch-pane-agent.test.sh` and `panes/run-pane-agent.test.sh` never call the
+      > marker-write helper. Measured — `origin/main`'s own copy of the first contains **0**
+      > occurrences of `hooks/lib/write-test-marker.py`, and `git diff origin/main` over `panes/`
+      > plus both writer files is **empty**, so the bytes under test are byte-identical to main's.
+      > One receipt was written by hand: `hooks/test-marker-guard.test.sh` passed **249/0** against
+      > these exact bytes but never calls the writer for its own subject, so no marker appeared —
+      > the same wiring species as the two `panes` suites. Recorded, not fixed: its own card.
+- [x] 9. ADR under `docs/decisions/` amending ADR 0031: state that keeping the ledgers tracked and
       excluding them from the allowlist were incompatible, and which one moved.
 - [ ] 10. Observability judge, then draft PR.
 
@@ -192,30 +205,43 @@ machine. It is a docs-only fix and could ship as its own small PR ahead of this 
 - **2026-08-23, user — bundle the PR #59 correction into this PR** rather than shipping it ahead
   as its own docs-only PR. See the note directly above.
 
-## ⚠️ OPEN — awaiting user ratification, blocks ADR 0036
+## RATIFIED 2026-09-14 — the replay contract change, and what it cost to confirm
 
 **`hooks/git-guard.replay.sh` gained an `EXPECTED_RELAXED` list, changing that file's headline
 contract** from *"never weaker than main"* to *"never weaker than main **except where declared**"*.
+The user ratified this on 2026-09-14. It is recorded as a named decision in
+`docs/decisions/0047-a-tracked-file-that-cannot-be-committed-is-the-defect.md`, which supplies the
+reasoning and the residual risk; this section keeps only the measurements.
 
 Task 4's premise was false and this is the fallout. The two ledger commands were **never in
-`CMDS`**, so nothing could "move from `stricter` to `identical`". Measured at `b0250b4`, before
-the replay file was touched: vs `main`, 378 pairs, **378 identical, 0 relaxed** — the allowlist
-change was *invisible to every replay run*, which is the one failure that harness exists to
-prevent. The two rows that genuinely report `stricter` are `CODING_MEMORY.md` and
-`coding-memory/x.jsonl`; under the exact-literal decision both correctly stay stricter.
+`CMDS`**, so nothing could "move from `stricter` to `identical`".
 
-Adding the ledger commands to `CMDS` (63 → 65; set-compared: **0 dropped, 2 added, 0 duplicates**)
-then made the run fail by design — `REPLAY FAILED: 8 relaxed` — because the harness had no way to
-declare an *intended* relaxation. `EXPECTED_RELAXED` mirrors the `EXPECTED_STRICTER` list already
-in the file for the identical stated reason. The alternative was deleting the relaxation gate
-outright, retiring that protection for all 63 other commands to accommodate two.
+**Re-measured 2026-09-14 against `origin/main` (`270a0b9`), run not read.** The earlier figures in
+this card were taken at `b0250b4` against a `main` that has since advanced 496 commits, so they
+were re-derived rather than carried forward:
 
-The new gate was proved able to fire, not merely observed passing: dropping one entry from
-`EXPECTED_RELAXED` in a scratch copy gives exit 1, `REPLAY FAILED: 4 undeclared relaxed (of 8
-total)`.
+| Harness version | Guard under test | Result |
+|---|---|---|
+| `origin/main`'s copy | this branch (widened) | 63 cmds x 6 = **378 pairs, 378 identical, 0 relaxed**, exit 0 |
+| this branch's copy | this branch (widened) | 65 cmds x 6 = **390 pairs, 382 identical, 0 stricter (0 unexpected), 8 relaxed (2 distinct, 0 undeclared)**, exit 0 |
 
-**This is a contract change and must be a named decision in ADR 0036. Do not write the ADR until
-the user has ratified it.**
+The first row is the finding, not a control: the old harness, pointed at a guard that genuinely
+allows two commands the baseline blocks, reports a clean sheet and exits 0. The narrowing in PR #59
+was invisible to every replay run that ever executed.
+
+**The gate still discriminates — proven by mutation, not by observing a pass:**
+
+```
+MUTANT rc=1
+REPLAY FAILED: 4 undeclared relaxed (of 8 total), 0 unexpected stricter
+```
+
+⚠️ **The first falsifier attempt was itself wrong, and passed.** The entry text appears **twice**
+in `hooks/git-guard.replay.sh` — once in `CMDS`, once in `EXPECTED_RELAXED`. A plain string
+replacement edits both, leaves the declaration count unchanged, and the run exits 0 — reading as
+*"the gate is fine"* when nothing had been mutated. It was caught only by an assertion on the
+occurrence count, not by the result looking wrong. Any future mutation of this file must be scoped
+to the declaration block **and must assert the block shrank**.
 
 ## Carried forward — deliberately not fixed in this round
 
