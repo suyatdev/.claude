@@ -1061,9 +1061,12 @@ that ignores them, in two repos measured as not covering them today.
       own fixture: the read-only-`.claude` scenario above blocks the mutant's `rm` too, since
       removing a file needs write permission on the *directory*, so B leaves `.claude` writable
       and makes only the archive file unwritable.
-      ⚠️ **Two stated limits.** The reaper reads mtime with BSD `stat -f %m`, the same call the
-      hook's existing staleness check already uses (`slim-session-start.sh:104`) rather than a
-      new portability debt; where that call fails, both go blind together and the reaper's
+      ⚠️ **Two stated limits.** The reaper reads mtime with BSD `stat -f %m`, the same call
+      `guard_liveness_state` uses for its own staleness comparison, rather than a new
+      portability debt (the `slim-session-start.sh:104` line this task originally cited has
+      since moved — task 13's insertions pushed the file's content down, and that line number
+      now holds an unrelated `return 0` inside `keepguard_log_kind`; re-measured 2026-09-16);
+      where that call fails, both go blind together and the reaper's
       digit check skips the file, so the failure direction is "nothing is reaped", never
       "something is deleted unarchived". And the append-failure line is this hook's **one**
       exception to its silent-on-every-failure contract, now recorded in the file header:
@@ -1148,7 +1151,11 @@ that ignores them, in two repos measured as not covering them today.
 - [x] 12. Register the guard in `settings.json` under `Stop`.
       **Done 2026-09-14.** Test-first: `hooks/handoff/handoff-keep-guard.test.sh` gained a
       registration assertion plus mutation control (modeled on
-      `slim-session-start.test.sh:733-760`), confirmed RED at **48/49** (the 47 pre-existing
+      `slim-session-start.test.sh`'s own "Registration assertion" block and its
+      "registration check can fail" mutant self-check, near the end of the file — the
+      `slim-session-start.test.sh:733-760` line range this task originally cited has since
+      moved and now holds task 13's "Guard liveness" scenario instead; re-measured
+      2026-09-16), confirmed RED at **48/49** (the 47 pre-existing
       assertions plus the new mutation control both passing, only the registration check
       failing) before the edit, committed separately under `TEST_EXEMPT`. `settings.json`'s
       single `Stop` group gained a second `hooks[]` entry,
