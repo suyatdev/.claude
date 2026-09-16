@@ -243,8 +243,9 @@ LINE_COUNT=$(wc -l < "$STATE_FILE" | tr -d ' ')
 # instructions in the same directive, and a removal ordered with no filing rule or
 # protected-heading list behind it — the exact defect ADR 0046
 # (docs/decisions/0046-neither-trim-hook-orders-a-cut-it-cannot-back-up.md) rejected for
-# the sibling trim directive. So this local patch branches on the same TRIM_AUTHORIZED
-# gate as the trim directive itself: on the healthy path the vendored wording is
+# the sibling trim directive. So this local patch branches on the same
+# `[ "$SNAPSHOT_OK" = true ] && [ "$REINJECT_LIB_OK" = true ]` gate the trim directive
+# itself is built on: on the healthy path the vendored wording is
 # untouched; on a suppressed path the directive still surfaces a finished task/fixed bug
 # (that is its job) but defers the cleanup instead of ordering it. A future vendor
 # re-sync must not flatten this back to the single unconditional string.
