@@ -4279,6 +4279,92 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       review. So task 10 stays open: merge this, let the fixed guard accumulate its own
       lines, re-run criterion 3 for layer 1 on those, run it for layer 2 for the first time,
       then flip.
+
+      **2026-09-16 — the fix is live and measured; the flip is still not due, and the reason
+      has changed.** Work on `chore/worktree-guard-criterion3`. Evidence committed first, at
+      `7be03dc`, under `docs/features/evidence/worktree-location-guard/`, deliberately before
+      any review ran — the 09-07/08 review lost its per-row verdicts to a session scratchpad
+      and only prose survived. Reviews and the probe script followed at `03b096c`.
+
+      **Precondition verified by blob identity, not by mtime or by the merge existing.** A
+      merge does not make a hook live: hooks run from `$HOME/.claude/hooks/`. Both layer-1
+      files in the primary hash to exactly the blobs in the merge commit `270a0b9`
+      (`hooks/worktree-guard.sh` → `186375ce`, `hooks/lib/worktree_guard_bash_arms.sh` →
+      `2ab301cf`), so the fixed code really is what runs. Layer 2's installed hook
+      (`~/.config/git/hooks/reference-transaction`) hashes identically to the repo copy
+      (`447f50bd`), so its whole log was written by the code that is live now.
+
+      **Criterion 1 — layer 1's window restarted, and is about a quarter done.** The fixed
+      guard's first line is `2026-09-14T20:41:44Z`, the same second as the guard file's mtime;
+      zero lines fall in the 44-second sliver between the merge and that mtime, so the window
+      cut is exact rather than approximate. Seven days complete **2026-09-21T20:41Z**. Layer
+      2's own window (armed 2026-09-01, code unchanged since) completed 2026-09-08 and is MET.
+
+      **Criterion 2 — met, but the card was wrong about which arms exist.** Layer 1 emits
+      **four** labels, not two: `A` (`worktree-guard.sh:543`), `B2D` (`:544`), and the literal
+      `B2` and `D` inside the Bash arms (`hooks/lib/worktree_guard_bash_arms.sh:420` and
+      `:528`). Layer 2 emits one, `D-L2` (`reference-transaction:143`). The 09-01 and 09-04
+      notes above dismiss the log's `D` and `B2` lines as predating a consolidation into
+      `B2D`; there was no such era inside the window, and both labels are live today. That is
+      marked in place at those notes. Whole-log counts **at 2026-09-16T19:45Z**: `B2D` 1690,
+      `A` 391, `D` 46, `B2` 10, `D-L2` 1226 — every arm has fired, so criterion 2 holds. In
+      the post-fix window only `B2D` (74), `A` (1) and `D` (1) have fired; `B2` has not.
+
+      These logs are live and other sessions append to them continuously, so a figure here is
+      a reading with a timestamp, never a stable fact: the same `B2D` count measured earlier
+      the same day was 1670, twenty lines lower, and that is drift rather than a disagreement.
+      Re-derive before citing — `awk -F'\t' '{print $3}' hooks/state/worktree-guard.log | sort
+      | uniq -c`. The committed extracts under `evidence/` are frozen and do not move; the
+      live logs do.
+
+      **Criterion 3, layer 1 — first pass on the 76 post-fix lines. No tilde regression, and
+      a much larger problem than the tilde ever was.** 14 distinct sessions across three
+      calendar days, no session over 21% of the lines, so the sample is not one session
+      repeating one shape. Of the 76: 2 judged correct refusals, 4 undeterminable (a real
+      HEAD-moving command whose cwd the log does not record for a refusal that fires before
+      repo resolution), and **70 refusals of commands that did no git work in a primary
+      checkout at all.**
+
+      Those 70 are not new breakage and not the tilde. Every one traces to two pre-existing
+      fail-closed paths the source already names as an accepted cost: `SEG_UNPARSED`
+      (`hooks/lib/worktree_guard_bash_arms.sh:137`, a command line the lexer cannot read) and
+      `SEG_OPAQUE` (`:186`, a segment whose `argv[0]` is neither `git` nor `cd` but which
+      mentions one — a heredoc carrying a commit message, a `python3 -` script, a diagnostic
+      pipeline). They are correct under the guard's stated "cannot inspect ⇒ do not allow"
+      policy and simultaneously useless refusals in fact, and both things need saying.
+
+      That headline does not rest on the reviewing agent alone.
+      `evidence/worktree-location-guard/classify-layer1-postfix.py` is a deliberately crude
+      independent reading of the same 76 lines: **30 of the refused commands contain no `git`
+      token anywhere** and 29 more carry only read-only git, so **59 is a floor** on the
+      false-positive count that does not depend on trusting the guard's own parse. Reproduced
+      here before the report was accepted.
+
+      The tilde hunt came back clean, and the negative is worth stating precisely: 15 of the
+      76 lines contain a `~`, of which 4 name
+      `~/.worktrees/mtg-wizard/ui-redesign-visual-restyle` — a real linked worktree — and
+      those 4 were refused by `SEG_OPAQUE`, never reaching the tilde code path at all. So "no
+      regression" here means *the tilde path was exercised and behaved*, not *no tilde
+      commands occurred*.
+
+      **Criterion 3, layer 2 — the population is almost entirely synthetic.** 1226 would-deny
+      lines over 15 days, but they dedupe to 331 distinct targets of which **327 are throwaway
+      test fixtures** in `mktemp` and `/tmp` directories. Only **4 are real repositories**, and
+      their 19 lines all fall between 2026-09-01 and **2026-09-08** — layer 2 has recorded no
+      real-world refusal in the eight days since. A per-row review was dispatched and had not
+      landed when this note was written; when it does it belongs in
+      `evidence/worktree-location-guard/layer2-criterion3-review.md`, and this paragraph
+      should be updated to cite it rather than restate it.
+
+      **What changed about the flip decision.** The 2026-09-04 note worried that arming would
+      block ordinary work in repos that had no worktree yet. That specific worry has eased —
+      all four repositories layer 1 has ever refused (`Snatch-Bracket`, `mtg-wizard`,
+      `vibe-scape`, `.claude`) now have linked worktrees under `~/.worktrees/`. It has been
+      replaced by a sharper one: the dominant refusal in the current window is not a misplaced
+      worktree but an **unparseable or opaque Bash line**, and arming today would block most
+      ordinary heredoc-and-pipeline work at a rate the earlier notes never measured. Whether
+      that cost is acceptable is a judgement for the user, not a criterion this card can
+      settle on its own. **Do not flip without asking.**
 - [x] 11. ADR under `docs/decisions/` — this changes a machine-wide invariant and pivots the
       standing worktree rule from advisory to enforced. Verify the next free number against the
       deciding ref, not stale local `main`.
