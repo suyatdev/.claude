@@ -1,5 +1,5 @@
 ---
-phase: review
+phase: implementation
 model_tier: high
 branch: feat/handoff-trim-safety
 worktree: ~/.worktrees/.claude/handoff-trim-safety
@@ -512,6 +512,13 @@ that ignores them, in two repos measured as not covering them today.
       One judgment call flagged: the heartbeat log rotates on a local timestamp scheme rather
       than reusing `archive_rotate_if_needed`, which hardcodes a `.md` suffix and would misname
       `session-state.keepguard.log`. No scenario pins the rotated name, so nothing is violated.
+      ⚠️ **Data-loss defect found and fixed** (observability verdict 2026-09-16 on `cb4190b`):
+      both `archive_failed` paths left the snapshot at `PRETRIM_FILE` and both already deleted
+      `STRIKE_FILE`, but `live-handoff.sh` only preserves an existing `PRETRIM_FILE` when a
+      strike file sits beside it — so the very next prompt's `snapshot_notepad` call silently
+      overwrote the "kept" snapshot, losing the removed text while the guard's own warning
+      claimed it was safe. Fixed by moving the snapshot to a distinct unfiled copy
+      (`unfile_snapshot`, RED at 49/55, GREEN at 55/55) before either warning is printed.
 - [x] 11. Confirm the `Stop` hook JSON contract against the installed binary, not the docs
       page, and pin the finding in a comment.
       **Done 2026-09-10**, pinned at the top of `handoff-keep-guard.sh`, attributed to
@@ -729,7 +736,7 @@ in this table, not a missing test.
 | Fence char/length matching removed | A tilde fence does not close a backtick fence | `Then the fence is still open` |
 | Strike reset removed | The guard must not wedge the session | `And it deletes the strike file` |
 | Snapshot-failure suppression removed | The snapshot cannot be written | `Then no trim directive is emitted` |
-| Archive-append failure handling removed | The archive append fails | `And the snapshot is NOT deleted` |
+| Archive-append failure handling removed | The archive append fails | `And the guard's warning names the unfiled copy's actual path` |
 | Log-write failure silenced | The liveness log cannot be written | `Then it reports the failure in its Stop output` |
 | `unprotected` collapsed into `allow` | The guard runs with no snapshot present | `Then the liveness line records decision=unprotected` |
 | Session-start reader consults only mtime | The session-start report reads the last decision token | `And a reader that consults only mtime fails this scenario` |
@@ -745,6 +752,13 @@ in this table, not a missing test.
 from the spec, extract every scenario name from this table, and diff the two sets. Every row
 must resolve. That mechanical check is what caught the last three failures; the prose claiming
 coverage never did.
+
+**Cross-hook checking, not just per-hook (2026-09-16).** The falsifier table above pins each
+hook against its own suite in isolation; it did not catch the archive_failed → next-prompt
+data-loss defect (task 10) because that defect only shows up when two hooks run back to back
+for the same session. `handoff-keep-guard.test.sh` test 15 closes that gap: it drives the
+guard, then `live-handoff.sh`, in sequence, and asserts the removed text is still on disk
+afterward — not just that the guard's own output looked correct.
 
 **R1 is measured at runtime, not asserted between constants.** The test walks the live notepad
 population, computes bytes per non-blank line for each, and reports the maximum against the

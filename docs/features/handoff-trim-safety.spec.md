@@ -417,10 +417,29 @@ distinguishable on sight and by grep.
 **Archive-append failure (finding O-a).** The design specified what happens when the *snapshot*
 cannot be written and said nothing about the archive append failing, which is the same disk
 and the same permissions. A failed append means text was removed from the notepad and captured
-nowhere. It is escalated in the guard Stop output, the block is retained in the snapshot by
-**not** deleting the snapshot, and the liveness line records `decision=archive_failed`. The
-turn is not blocked — blocking cannot make the disk writable — but the failure is never
-silent, and the snapshot survives as the copy of last resort.
+nowhere. It is escalated in the guard Stop output, and the liveness line records
+`decision=archive_failed`. The turn is not blocked — blocking cannot make the disk writable —
+but the failure is never silent.
+
+The original wording here said the block was retained "by **not** deleting the snapshot" and
+that "the snapshot survives as the copy of last resort." That was false: leaving the snapshot
+in place at `PRETRIM_FILE` is not the same as it surviving, because `live-handoff.sh` only
+skips overwriting `PRETRIM_FILE` on the next prompt when a keep-guard strike file sits beside
+it, and both `archive_failed` paths delete that strike file. A snapshot left at `PRETRIM_FILE`
+was therefore silently clobbered by the very next prompt's `snapshot_notepad` call — the text
+this whole card exists to protect ended up nowhere on disk while this paragraph, and the
+guard's own Stop-output warning, both claimed it was safe (observability verdict 2026-09-16 on
+`cb4190b`; see `docs/features/handoff-trim-safety.md` task 10). The fix: on both
+`archive_failed` paths the guard now `mv`s the snapshot, before anything else can overwrite it,
+to a distinct **unfiled** copy in the same `.claude/` directory
+(`session-state.pretrim.<session>.unfiled-<UTC timestamp>.md`). That name matches
+`slim-session-start.sh`'s `reap_stale_snapshots` glob (`session-state.pretrim.*.md`), so an
+unfiled copy self-heals into the archive on a later session start with no new state machine.
+`PRETRIM_FILE` no longer exists once the `mv` succeeds, so the next prompt snapshots fresh and
+strike handling is unaffected. The guard's warning names the unfiled path, not `PRETRIM_FILE`.
+If the `mv` itself fails, the warning says so and names `PRETRIM_FILE` instead — which the
+failed `mv` left untouched, so that path genuinely still exists — rather than repeating the
+same false "kept" claim about a path a later prompt is about to erase.
 
 **Secret handling (finding C9, revised after round 2).** The archive makes notepad text
 permanent and search-indexed, on a path that never passes through `scan-secrets.sh` — that
@@ -742,7 +761,9 @@ Scenario: The archive append fails
   When the guard files a removal
   Then the liveness line records decision=archive_failed
   And the guard says so in its Stop output
-  And the snapshot is NOT deleted, so the removed text still has a copy
+  And the snapshot is moved to a distinct unfiled copy in the same directory, not left at
+    PRETRIM_FILE where the next prompt's snapshot would silently overwrite it
+  And the guard's warning names the unfiled copy's actual path
 
 Scenario: The liveness log cannot be written
   Given the log file cannot be written

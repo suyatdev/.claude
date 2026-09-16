@@ -213,6 +213,41 @@ count_keep_headings() {
   printf '%s' "$n"
 }
 
+# unfile_snapshot SNAPSHOT_PATH -- on an archive_failed path, moves a still-needed snapshot
+# to a distinct "unfiled" copy beside it (same .claude/ dir, so the mv is atomic and needs
+# no new write capacity — the snapshot was written there, so the directory is writable)
+# instead of leaving it at PRETRIM_FILE. Both archive_failed paths already delete
+# STRIKE_FILE, and live-handoff.sh's next-prompt snapshot only skips overwriting
+# PRETRIM_FILE when STRIKE_FILE sits beside it — so a snapshot left at PRETRIM_FILE is
+# silently clobbered by the very next prompt's snapshot_notepad call, and the text this
+# whole hook exists to protect ends up nowhere on disk while this hook's own warning said
+# it was safe (data-loss bug, observability verdict 2026-09-16 on cb4190b;
+# docs/features/handoff-trim-safety.md task 10). Moving it out from under PRETRIM_FILE
+# makes the next prompt snapshot fresh instead, so strike handling is unaffected.
+#
+# The new name matches slim-session-start.sh's reap_stale_snapshots glob
+# (session-state.pretrim.*.md), so an unfiled copy self-heals into the archive on a later
+# session start with no new state machine, and is covered by the same /.claude/ gitignore
+# entry as every other file under .claude/.
+#
+# Prints the destination path and returns 0 on success. Returns 1 (prints nothing) if the
+# `mv` itself fails, so the caller can fall back to naming SNAPSHOT_PATH — which the failed
+# mv left untouched — as the copy of last resort, rather than printing a path that does not
+# exist.
+unfile_snapshot() {
+  local src="$1" dir ts dest suffix
+  dir="$(dirname -- "$src")"
+  ts="$(date -u +%Y%m%dT%H%M%SZ)" || return 1
+  dest="$dir/session-state.pretrim.${SESSION_SLUG}.unfiled-${ts}.md"
+  suffix=1
+  while [ -e "$dest" ]; do
+    dest="$dir/session-state.pretrim.${SESSION_SLUG}.unfiled-${ts}-${suffix}.md"
+    suffix=$(( suffix + 1 ))
+  done
+  mv -- "$src" "$dest" 2>/dev/null || return 1
+  printf '%s' "$dest"
+}
+
 # emit_json DECISION REASON SYSTEM_MSG -- prints the Stop-hook JSON payload via jq (never
 # string concatenation -- notepad-derived text can carry quotes and backslashes) and exits
 # 0. DECISION may be empty (approve implicitly). REASON/SYSTEM_MSG may be empty.
@@ -288,7 +323,11 @@ if [ "$PROTECTED_OK" -eq 0 ]; then
       rm -f -- "$PRETRIM_FILE" 2>/dev/null || true
     else
       DECISION_TOKEN=archive_failed
-      ARCHIVE_NOTE=" The archive append also failed, so the snapshot at ${PRETRIM_FILE} was kept as the copy of last resort."
+      if UNFILED_PATH="$(unfile_snapshot "$PRETRIM_FILE")"; then
+        ARCHIVE_NOTE=" The archive append also failed, so the snapshot was moved to ${UNFILED_PATH} and kept there as the copy of last resort."
+      else
+        ARCHIVE_NOTE=" The archive append also failed, and the snapshot could not be moved to a safe copy; it was kept at ${PRETRIM_FILE} as the copy of last resort."
+      fi
     fi
     rm -f -- "$STRIKE_FILE" 2>/dev/null || true
 
@@ -361,11 +400,18 @@ if file_removed_block "$ARCHIVE_FILE" "$QUARANTINE_FILE" "$REMOVED_TMP" "$SESSIO
   exit 0
 fi
 
-# archive_append (via file_removed_block) failed: escalate, keep the snapshot.
+# archive_append (via file_removed_block) failed: escalate, keep the snapshot -- moved
+# aside to an unfiled copy so live-handoff.sh's next-prompt snapshot (which only skips
+# PRETRIM_FILE when STRIKE_FILE is also present, and STRIKE_FILE was already deleted above)
+# does not silently overwrite it (see unfile_snapshot's comment for the full rationale).
 write_heartbeat "$LOG_FILE" "$SESSION_SLUG" archive_failed "$PROTECTED_REGIONS" "$REMOVED_COUNT" \
   || LOG_FAIL_NOTE="session-state.keepguard.log could not be written; this turn's heartbeat was not recorded."
 rm -f -- "$REMOVED_TMP" 2>/dev/null || true
-WARN="The archive append failed for ${REMOVED_COUNT} removed line(s). The snapshot at ${PRETRIM_FILE} was kept so the text is not lost."
+if UNFILED_PATH="$(unfile_snapshot "$PRETRIM_FILE")"; then
+  WARN="The archive append failed for ${REMOVED_COUNT} removed line(s). The snapshot was moved to ${UNFILED_PATH} and kept there so the text is not lost."
+else
+  WARN="The archive append failed for ${REMOVED_COUNT} removed line(s). The snapshot could not be moved to a safe copy; it was kept at ${PRETRIM_FILE} so the text is not lost."
+fi
 [ -n "$LOG_FAIL_NOTE" ] && WARN="${WARN}
 ${LOG_FAIL_NOTE}"
 emit_json "" "$WARN" "$WARN"
