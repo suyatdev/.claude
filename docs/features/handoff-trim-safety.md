@@ -1,5 +1,5 @@
 ---
-phase: review
+phase: implementation
 model_tier: high
 branch: feat/handoff-trim-safety
 worktree: ~/.worktrees/.claude/handoff-trim-safety
@@ -23,9 +23,9 @@ seventeen, then eighteen), and the full spec live in
 [`handoff-trim-safety.spec.md`](handoff-trim-safety.spec.md).** Read it before implementing;
 do not read it at session start.
 
-Status: **review** — re-entered 2026-09-16 after the judge-round-12 fixes (the two source
-findings at `cb4190b` — the comment naming a nonexistent `TRIM_AUTHORIZED` gate, and the two
-stale line anchors task 13's insert moved — plus this file-size split, at `895b047`); the
+Status: **implementation** — re-opened 2026-09-16 for the round-13 fixes (the judge findings
+on the file-size split at `e19fc78`: the split runners' `source`-is-not-fatal blind spot,
+the mislabeled `archive_failed` test, and the stale task-number/self-heal claims below); the
 frontmatter `phase` is the authority and this line must agree with it. Both judges PASSED
 on the spec and must run again after implementation, before any PR.
 
