@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
 branch: feat/handoff-trim-safety
 worktree: ~/.worktrees/.claude/handoff-trim-safety
@@ -23,7 +23,9 @@ seventeen, then eighteen), and the full spec live in
 [`handoff-trim-safety.spec.md`](handoff-trim-safety.spec.md).** Read it before implementing;
 do not read it at session start.
 
-Status: **implementation** — re-opened 2026-09-16 for the judge-round-12 fixes (review was entered at `cb4190b` and reverted in `5aba8ac`: `hooks/phase-guard.sh` only treats `implementation` as claiming a branch, so `review` made every source write refusable while any planning card exists — flip back to `review` in the final docs commit before the PR); the
+Status: **review** — re-entered 2026-09-16 after the judge-round-12 fixes (the two source
+findings at `cb4190b` — the comment naming a nonexistent `TRIM_AUTHORIZED` gate, and the two
+stale line anchors task 13's insert moved — plus this file-size split, at `895b047`); the
 frontmatter `phase` is the authority and this line must agree with it. Both judges PASSED
 on the spec and must run again after implementation, before any PR.
 
@@ -793,11 +795,15 @@ subagent edit is caught (gap 1), or that a determined model cannot delete the sn
 themselves, judge-flagged in earlier rounds, re-measured here rather than re-fixed:
 
 - `hooks/handoff/live-handoff.test.sh`'s "restore" assertion (`ok "restore: the unmodified
-  hook and library produce a matching-tag envelope again"`, currently lines 298-299)
-  re-compares the exact same `$KEEP_OPEN_TAG`/`$KEEP_CLOSE_TAG` variables the earlier
-  assertion at lines 238-239 already checked; nothing between the two reassigns them (the
-  intervening mutant run writes to `$MUT_OPEN_TAG`/`$MUT_CLOSE_TAG` instead), so the
-  "restore" assertion cannot fail independently of the one it duplicates.
+  hook and library produce a matching-tag envelope again"`) re-compares the exact same
+  `$KEEP_OPEN_TAG`/`$KEEP_CLOSE_TAG` variables the earlier assertion (`ok "over the cap with a
+  KEEP region: the heading sits inside a matching-tag envelope"`) already checked; nothing
+  between the two reassigns them (the intervening mutant run writes to
+  `$MUT_OPEN_TAG`/`$MUT_CLOSE_TAG` instead), so the "restore" assertion cannot fail
+  independently of the one it duplicates. Both assertions now live in
+  `hooks/handoff/live-handoff.test.d/10-snapshot-and-keep-envelope.sh` (the file-size split
+  moved them out of the single-file suite); find each by grepping for its quoted description
+  above rather than by line number.
 - `live-handoff.test.sh` and `pre-compact-handoff.test.sh` drive their KEEP-region fixtures
   with plain ASCII headings only (e.g. `Decisions [KEEP]`) and carry no envelope-mimicking or
   non-ASCII heading — unlike `handoff-keep-guard.test.sh`, which already has its own mimic
@@ -812,3 +818,9 @@ themselves, judge-flagged in earlier rounds, re-measured here rather than re-fix
   `SLIM_HANDOFF_URANDOM=/dev/null`). Only `handoff-keep-reinject.test.sh` exercises that path
   (currently lines 200-207, "a tag-generation failure makes envelope_keep_headings return 1,
   never an untagged envelope").
+
+**File-size split (2026-09-16).** Compliance round 12 flagged `core-conduct/file-size-limit`
+at `cb4190b` (the four hook test suites all over the 800-line cap); the user chose to split
+rather than waive. Each suite was cut at its own scenario boundaries into an entry runner plus
+sourced `*.test.d/*.sh` parts, all under 400 lines, with no test reordered or reworded — proof
+per suite (`N/N passed`, call-site counts, description-diff) is in its own commit.
