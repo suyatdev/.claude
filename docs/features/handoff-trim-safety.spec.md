@@ -225,6 +225,7 @@ All paths relative to `<repo>/.claude/`.
 |---|---|---|---|
 | `session-state.md` | model | `slim-session-start.sh` | live |
 | `session-state.pretrim.<session-id>.md` | `live-handoff.sh`, `pre-compact-handoff.sh` | `handoff-keep-guard.sh` | one turn; reaped at session start if older than 24h — **reaping runs before the reader early-exits**, see below |
+| `session-state.pretrim.<session-id>.unfiled-<UTC timestamp>.md` | `handoff-keep-guard.sh` (`unfile_snapshot`, both `archive_failed` paths) | nothing reads it directly — `slim-session-start.sh`'s reaper matches it via the same `session-state.pretrim.*.md` glob as the plain snapshot | until the reaper files it into the archive on a later session start, once its `mv`-preserved mtime is older than `REAP_AFTER_HOURS` (24h, same constant as the row above) — **not** "on the next session start" unqualified; see the self-heal note below |
 | `session-state.archive.md` | `handoff-keep-guard.sh` (auto) and model (curated) | humans, memsearch | until rotation |
 | `session-state.archive.<N>.md` | rotation | humans, memsearch | forever, never modified again |
 | `session-state.keepguard-strikes.<session-id>` | `handoff-keep-guard.sh` | itself | cleared on success **and** on fail-open |
@@ -434,7 +435,13 @@ guard's own Stop-output warning, both claimed it was safe (observability verdict
 to a distinct **unfiled** copy in the same `.claude/` directory
 (`session-state.pretrim.<session>.unfiled-<UTC timestamp>.md`). That name matches
 `slim-session-start.sh`'s `reap_stale_snapshots` glob (`session-state.pretrim.*.md`), so an
-unfiled copy self-heals into the archive on a later session start with no new state machine.
+unfiled copy self-heals into the archive with no new state machine — qualified: `mv` preserves
+the file's original mtime rather than resetting it, and the reaper only files a snapshot whose
+age exceeds `REAP_AFTER_HOURS` (24h, `slim-session-start.sh`'s
+`SLIM_HANDOFF_REAP_AFTER_HOURS`-overridable constant). The unfiled copy therefore self-heals on
+the **first session start at or after the original snapshot turns 24h old**, not necessarily
+the very next one — a session that starts minutes after the `archive_failed` turn will not reap
+it yet; one that starts a day later will.
 `PRETRIM_FILE` no longer exists once the `mv` succeeds, so the next prompt snapshots fresh and
 strike handling is unaffected. The guard's warning names the unfiled path, not `PRETRIM_FILE`.
 If the `mv` itself fails, the warning says so and names `PRETRIM_FILE` instead — which the
@@ -1130,6 +1137,13 @@ that ignores them, in two repos measured as not covering them today.
       One judgment call flagged: the heartbeat log rotates on a local timestamp scheme rather
       than reusing `archive_rotate_if_needed`, which hardcodes a `.md` suffix and would misname
       `session-state.keepguard.log`. No scenario pins the rotated name, so nothing is violated.
+      ⚠️ **Data-loss defect found and fixed** (observability verdict 2026-09-16 on `cb4190b`):
+      both `archive_failed` paths left the snapshot at `PRETRIM_FILE` and both already deleted
+      `STRIKE_FILE`, but `live-handoff.sh` only preserves an existing `PRETRIM_FILE` when a
+      strike file sits beside it — so the very next prompt's `snapshot_notepad` call silently
+      overwrote the "kept" snapshot, losing the removed text while the guard's own warning
+      claimed it was safe. Fixed by moving the snapshot to a distinct unfiled copy
+      (`unfile_snapshot`, RED at 49/55, GREEN at 55/55) before either warning is printed.
 - [x] 11. Confirm the `Stop` hook JSON contract against the installed binary, not the docs
       page, and pin the finding in a comment.
       **Done 2026-09-10**, pinned at the top of `handoff-keep-guard.sh`, attributed to
@@ -1333,8 +1347,14 @@ matching edit; adding or removing a task does.
 
 ### A note on cross-references
 
-Task numbers are deliberately **not** cited anywhere in this document — verified by search,
-not asserted; the check is `grep -nE "task [0-9]"` over both halves, which must return nothing.
+Steps are named by what they do, never *primarily* by number — but a task number does show up
+in prose in a bounded, checked set of places, not zero: `grep -nE "task [0-9]"
+docs/features/handoff-trim-safety.md docs/features/handoff-trim-safety.spec.md` returns 17
+lines as of this writing (10 in the card, 7 in this spec), recorded here rather than asserted
+empty. What makes these safe is not their absence but that the checklist entries themselves
+(`- [x] N. ...`) are never re-flowed — a folded/skipped number stays skipped instead of being
+renumbered — so a citation points at a fixed line item rather than a target that keeps moving
+under it.
 The list also has a deliberate numbering gap: the read-cap step was folded into the write-cap
 step so both caps rise in a single commit, and the numbers were not re-flowed afterwards,
 because re-flowing them is what made cross-references stale twice before. Three of them went

@@ -79,7 +79,12 @@ and the frontmatter ever disagree again, the frontmatter is the authority.
 Ordered so every step is independently useful and nothing depends on a later step. **The list
 skips 7 on purpose** — the read-cap step was folded into the write-cap step so both caps rise in
 one commit, and the numbers were deliberately not re-flowed, because re-flowing them is what made
-cross-references stale before. Steps are referred to by what they do, never by number. The ignore
+cross-references stale before. Steps are referred to primarily by what they do, not by number —
+but a number does appear in prose in a bounded, checked set of places: `grep -nE "task [0-9]"
+docs/features/handoff-trim-safety.md docs/features/handoff-trim-safety.spec.md` returns 17
+lines as of this writing (10 in this file, 7 in the spec), recorded rather than asserted empty.
+What makes those safe is that the checklist entries below (`- [x] N. ...`) are never re-flowed,
+so a number stays a fixed pointer instead of a moving target. The ignore
 rules come **first**, before anything writes a file they are meant to cover — an earlier
 ordering created per-turn byte-identical copies of the notepad seventeen tasks before the rule
 that ignores them, in two repos measured as not covering them today.
