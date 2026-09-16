@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
 branch: feat/handoff-trim-safety
 worktree: ~/.worktrees/.claude/handoff-trim-safety
@@ -23,7 +23,7 @@ seventeen, then eighteen), and the full spec live in
 [`handoff-trim-safety.spec.md`](handoff-trim-safety.spec.md).** Read it before implementing;
 do not read it at session start.
 
-Status: **implementation** — the gate opened 2026-09-08 on the literal phrase; the
+Status: **review** — all 18 tasks ticked at `659569d`, entered 2026-09-16 after the model-switch checkpoint; the
 frontmatter `phase` is the authority and this line must agree with it. Both judges PASSED
 on the spec and must run again after implementation, before any PR.
 
