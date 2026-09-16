@@ -4109,6 +4109,14 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       predate the code consolidating those two arms into `B2D`; they are not a currently-live
       arm and don't count for or against criterion 2.
 
+      ⚠️ **That last sentence is wrong, and so is the same claim in the 2026-09-04 note
+      below.** Measured 2026-09-16: `D` and `B2` are live labels the code emits today —
+      `refuse_command D "$EFF_ROOT"` at `hooks/lib/worktree_guard_bash_arms.sh:528` and the
+      literal `B2` at `:420` — and there was never a pre-consolidation era inside the log
+      window to predate. The rest of both notes, including the `A` and `B2D` counts, is
+      unaffected; only the sentence dismissing `D`/`B2` is. Full correction and the arm
+      inventory it came from: the 2026-09-16 progress note at the end of this task.
+
       **Layer 2 was found unarmed and has been armed today.** `git config --get
       core.hooksPath` read empty before this note — `hooks/install-layer2.sh` had been built
       (task 6e) but never run on this machine, so layer 2's arm (`D-L2`) had zero
