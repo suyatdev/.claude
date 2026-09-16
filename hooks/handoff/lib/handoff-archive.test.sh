@@ -61,16 +61,17 @@ SCRATCH_ERR="$TMP/scratch.err"   # a throwaway err sink for calls that don't che
 # shellcheck disable=SC2034 # only used inside the sourced *.test.d/ part files below
 REAL_SCANNER="$(cd "$LIB_DIR/../.." && pwd)/scan-secrets.sh"
 
-# shellcheck source=hooks/handoff/lib/handoff-archive.test.d/10-definitions-and-sanitize.sh
-source "$LIB_DIR/handoff-archive.test.d/10-definitions-and-sanitize.sh"
-# shellcheck source=hooks/handoff/lib/handoff-archive.test.d/20-constants-and-fence.sh
-source "$LIB_DIR/handoff-archive.test.d/20-constants-and-fence.sh"
-# shellcheck source=hooks/handoff/lib/handoff-archive.test.d/30-membership.sh
-source "$LIB_DIR/handoff-archive.test.d/30-membership.sh"
-# shellcheck source=hooks/handoff/lib/handoff-archive.test.d/40-rotation-and-snapshot-copy.sh
-source "$LIB_DIR/handoff-archive.test.d/40-rotation-and-snapshot-copy.sh"
-# shellcheck source=hooks/handoff/lib/handoff-archive.test.d/50-secrets-quarantine-and-contract.sh
-source "$LIB_DIR/handoff-archive.test.d/50-secrets-quarantine-and-contract.sh"
+# source_test_parts (this directory's own test-parts.sh) fails loudly -- FAIL line, exit
+# 2 -- on a missing/unreadable/syntax-broken part or a part count mismatch, instead of
+# `source` silently skipping forward. See that helper's header and its test suite for why.
+# (This IS test-parts.sh's own sibling directory, so the helper sources itself here as a
+# sibling, not via a "lib/" prefix the way the other three consumers reach it.)
+source "$LIB_DIR/test-parts.sh" || exit 2
+command -v source_test_parts >/dev/null 2>&1 || {
+  printf 'FAIL — source_test_parts not defined after sourcing test-parts.sh\n'
+  exit 2
+}
+source_test_parts "$LIB_DIR/handoff-archive.test.d" 5
 
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \

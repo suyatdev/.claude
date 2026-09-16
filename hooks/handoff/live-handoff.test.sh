@@ -124,14 +124,15 @@ envelope_wraps() {
   ' "$file"
 }
 
-# shellcheck source=hooks/handoff/live-handoff.test.d/10-snapshot-and-keep-envelope.sh
-source "$HOOK_DIR/live-handoff.test.d/10-snapshot-and-keep-envelope.sh"
-# shellcheck source=hooks/handoff/live-handoff.test.d/20-library-failure-and-suppression.sh
-source "$HOOK_DIR/live-handoff.test.d/20-library-failure-and-suppression.sh"
-# shellcheck source=hooks/handoff/live-handoff.test.d/30-session-identity-and-strike-survival.sh
-source "$HOOK_DIR/live-handoff.test.d/30-session-identity-and-strike-survival.sh"
-# shellcheck source=hooks/handoff/live-handoff.test.d/40-preexisting-and-task-bug-wording.sh
-source "$HOOK_DIR/live-handoff.test.d/40-preexisting-and-task-bug-wording.sh"
+# source_test_parts (hooks/handoff/lib/test-parts.sh) fails loudly -- FAIL line, exit 2 --
+# on a missing/unreadable/syntax-broken part or a part count mismatch, instead of `source`
+# silently skipping forward. See that helper's header and its test suite for why.
+source "$HOOK_DIR/lib/test-parts.sh" || exit 2
+command -v source_test_parts >/dev/null 2>&1 || {
+  printf 'FAIL — source_test_parts not defined after sourcing lib/test-parts.sh\n'
+  exit 2
+}
+source_test_parts "$HOOK_DIR/live-handoff.test.d" 4
 
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \

@@ -824,3 +824,16 @@ at `cb4190b` (the four hook test suites all over the 800-line cap); the user cho
 rather than waive. Each suite was cut at its own scenario boundaries into an entry runner plus
 sourced `*.test.d/*.sh` parts, all under 400 lines, with no test reordered or reworded — proof
 per suite (`N/N passed`, call-site counts, description-diff) is in its own commit.
+
+Observability round 13 (verdict 2026-09-16 on `e19fc78`) found the split itself introduced a
+gap: bare `source` on a part is not fatal, so a deleted or syntax-broken part still let a
+runner print `N/N passed`, exit 0, and write its test marker (measured on the unmodified
+runners, last part deleted: `slim-session-start`=64/64, `pre-compact-handoff`=47/47,
+`live-handoff`=57/57, `handoff-archive`=62/62 — all rc 0). Fixed by
+`hooks/handoff/lib/test-parts.sh`'s `source_test_parts()`, which every runner now calls
+instead of sourcing its parts directly: it refuses a missing/unreadable/syntax-broken part or
+a part-count mismatch with a `FAIL —` line and `exit 2`, before the runner's own summary or
+marker write can run. **Not fixed, and out of this card's scope:** the test marker itself
+(`hooks/lib/write-test-marker.py`) still names only the entry-runner and hook blobs as the
+paired subject, so editing a `*.test.d/` part file alone does not force a re-run before commit
+— a `hooks/lib/write-test-marker.py` concern, recorded here rather than fixed.

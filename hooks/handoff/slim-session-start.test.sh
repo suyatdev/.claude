@@ -17,7 +17,8 @@ set -u
 MARKER_SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 MARKER_ROOT="$(git rev-parse --show-toplevel)" || exit 1
 
-HOOK="$(cd "$(dirname "$0")" && pwd)/slim-session-start.sh"
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+HOOK="$HOOK_DIR/slim-session-start.sh"
 # Physical path, not the one mktemp hands back — mirrors phase-guard.test.sh's note:
 # on macOS mktemp -d returns the /var symlink form while `git rev-parse --show-toplevel`
 # resolves to /private/var, and stat/mtime math below needs a path git actually agrees on.
@@ -82,14 +83,15 @@ write_fixed_lines() {
   done
 }
 
-# shellcheck source=hooks/handoff/slim-session-start.test.d/10-envelope-and-tag.sh
-source "$(dirname "$0")/slim-session-start.test.d/10-envelope-and-tag.sh"
-# shellcheck source=hooks/handoff/slim-session-start.test.d/20-truncation.sh
-source "$(dirname "$0")/slim-session-start.test.d/20-truncation.sh"
-# shellcheck source=hooks/handoff/slim-session-start.test.d/30-snapshot-reaper.sh
-source "$(dirname "$0")/slim-session-start.test.d/30-snapshot-reaper.sh"
-# shellcheck source=hooks/handoff/slim-session-start.test.d/40-contract-and-guard-liveness.sh
-source "$(dirname "$0")/slim-session-start.test.d/40-contract-and-guard-liveness.sh"
+# source_test_parts (hooks/handoff/lib/test-parts.sh) fails loudly -- FAIL line, exit 2 --
+# on a missing/unreadable/syntax-broken part or a part count mismatch, instead of `source`
+# silently skipping forward. See that helper's header and its test suite for why.
+source "$HOOK_DIR/lib/test-parts.sh" || exit 2
+command -v source_test_parts >/dev/null 2>&1 || {
+  printf 'FAIL — source_test_parts not defined after sourcing lib/test-parts.sh\n'
+  exit 2
+}
+source_test_parts "$HOOK_DIR/slim-session-start.test.d" 4
 
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
