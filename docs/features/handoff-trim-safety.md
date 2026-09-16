@@ -23,7 +23,7 @@ seventeen, then eighteen), and the full spec live in
 [`handoff-trim-safety.spec.md`](handoff-trim-safety.spec.md).** Read it before implementing;
 do not read it at session start.
 
-Status: **review** — all 18 tasks ticked at `659569d`, entered 2026-09-16 after the model-switch checkpoint; the
+Status: **implementation** — re-opened 2026-09-16 for the judge-round-12 fixes (review was entered at `cb4190b` and reverted in `5aba8ac`: `hooks/phase-guard.sh` only treats `implementation` as claiming a branch, so `review` made every source write refusable while any planning card exists — flip back to `review` in the final docs commit before the PR); the
 frontmatter `phase` is the authority and this line must agree with it. Both judges PASSED
 on the spec and must run again after implementation, before any PR.
 

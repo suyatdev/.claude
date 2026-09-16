@@ -326,7 +326,7 @@ if [ "$PROTECTED_OK" -eq 0 ]; then
       if UNFILED_PATH="$(unfile_snapshot "$PRETRIM_FILE")"; then
         ARCHIVE_NOTE=" The archive append also failed, so the snapshot was moved to ${UNFILED_PATH} and kept there as the copy of last resort."
       else
-        ARCHIVE_NOTE=" The archive append also failed, and the snapshot could not be moved to a safe copy; it was kept at ${PRETRIM_FILE} as the copy of last resort."
+        ARCHIVE_NOTE=" The archive append also failed, and the snapshot could not be moved to a safe copy; it is still at ${PRETRIM_FILE}, which the next prompt's snapshot WILL overwrite -- copy it elsewhere now."
       fi
     fi
     rm -f -- "$STRIKE_FILE" 2>/dev/null || true
@@ -410,7 +410,7 @@ rm -f -- "$REMOVED_TMP" 2>/dev/null || true
 if UNFILED_PATH="$(unfile_snapshot "$PRETRIM_FILE")"; then
   WARN="The archive append failed for ${REMOVED_COUNT} removed line(s). The snapshot was moved to ${UNFILED_PATH} and kept there so the text is not lost."
 else
-  WARN="The archive append failed for ${REMOVED_COUNT} removed line(s). The snapshot could not be moved to a safe copy; it was kept at ${PRETRIM_FILE} so the text is not lost."
+  WARN="The archive append failed for ${REMOVED_COUNT} removed line(s). The snapshot could not be moved to a safe copy; it is still at ${PRETRIM_FILE}, which the next prompt's snapshot WILL overwrite -- copy it elsewhere now."
 fi
 [ -n "$LOG_FAIL_NOTE" ] && WARN="${WARN}
 ${LOG_FAIL_NOTE}"
