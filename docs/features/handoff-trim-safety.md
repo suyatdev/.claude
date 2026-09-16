@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
 branch: feat/handoff-trim-safety
 worktree: ~/.worktrees/.claude/handoff-trim-safety
@@ -23,11 +23,11 @@ seventeen, then eighteen), and the full spec live in
 [`handoff-trim-safety.spec.md`](handoff-trim-safety.spec.md).** Read it before implementing;
 do not read it at session start.
 
-Status: **implementation** — re-opened 2026-09-16 for the round-13 fixes (the judge findings
-on the file-size split at `e19fc78`: the split runners' `source`-is-not-fatal blind spot,
-the mislabeled `archive_failed` test, and the stale task-number/self-heal claims below); the
-frontmatter `phase` is the authority and this line must agree with it. Both judges PASSED
-on the spec and must run again after implementation, before any PR.
+Status: **review** — the round-13 fixes are done, final source commit `c562f58` (the
+strike-cap `archive_failed` test; the split-runner loud-failure fix is `cc08576`, the
+task-number/task-10-mirror/unfiled-row doc fixes are `0681951`); the frontmatter `phase` is
+the authority and this line must agree with it. Both judges PASSED on the spec and must run
+again on this round's implementation, before any PR.
 
 Compliance, on the **spec**: FAILED seven times (9, 8, 7, 4, 1, 5, 1 violations across rounds
 1 to 7), then **PASSED with zero violations in round 8**. On the **implementation**: FAILED
