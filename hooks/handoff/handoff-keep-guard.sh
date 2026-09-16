@@ -120,7 +120,7 @@ KEEP_HEADING_PATTERN='^#{1,6}[[:space:]].*\[KEEP\][[:space:]]*$'
 # only; this covers the WHOLE file, for the "verbatim removed lines, in original order"
 # archive entry (spec, "Archive entry format").
 removed_lines_in_order() {
-  local snapshot="$1" current="$2" current_arg="$2"
+  local snapshot="$1" current_arg="$2"
   [ -f "$current_arg" ] || current_arg=/dev/null
   awk '
     NR == FNR { cnt[$0]++; next }

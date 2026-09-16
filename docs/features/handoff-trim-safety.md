@@ -785,3 +785,27 @@ degraded-but-safe, because the reader truncates rather than blanks; a *blank* is
 **Explicitly not proven by any of the above:** that a secret is never archived (gap 7), that a
 subagent edit is caught (gap 1), or that a determined model cannot delete the snapshot first
 (gap 2). Those are stated limits, not test targets.
+
+**Carried test-fixture gaps (recorded, not fixed).** Three defects in the test fixtures
+themselves, judge-flagged in earlier rounds, re-measured here rather than re-fixed:
+
+- `hooks/handoff/live-handoff.test.sh`'s "restore" assertion (`ok "restore: the unmodified
+  hook and library produce a matching-tag envelope again"`, currently lines 298-299)
+  re-compares the exact same `$KEEP_OPEN_TAG`/`$KEEP_CLOSE_TAG` variables the earlier
+  assertion at lines 238-239 already checked; nothing between the two reassigns them (the
+  intervening mutant run writes to `$MUT_OPEN_TAG`/`$MUT_CLOSE_TAG` instead), so the
+  "restore" assertion cannot fail independently of the one it duplicates.
+- `live-handoff.test.sh` and `pre-compact-handoff.test.sh` drive their KEEP-region fixtures
+  with plain ASCII headings only (e.g. `Decisions [KEEP]`) and carry no envelope-mimicking or
+  non-ASCII heading — unlike `handoff-keep-guard.test.sh`, which already has its own mimic
+  scenario ("A heading that mimics the envelope marker is defanged"). A mutant that skips the
+  `sanitize_line` call inside `keep_trim_directive`/`envelope_keep_headings` (the shared
+  reinject library both of these two hooks call into) would therefore stay green at the
+  hook level for both of them; only `hooks/handoff/lib/handoff-keep-reinject.test.sh`'s own
+  mimic test (currently lines 188-198, "A heading that mimics an envelope closer is defanged")
+  would catch it.
+- None of the three hook-level suites (`handoff-keep-guard.test.sh`, `live-handoff.test.sh`,
+  `pre-compact-handoff.test.sh`) has a fixture forcing a `gen_tag` failure (e.g. via
+  `SLIM_HANDOFF_URANDOM=/dev/null`). Only `handoff-keep-reinject.test.sh` exercises that path
+  (currently lines 200-207, "a tag-generation failure makes envelope_keep_headings return 1,
+  never an untagged envelope").

@@ -129,7 +129,14 @@ if [ ! -f "$STATE_FILE" ]; then
 elif [ -f "$STRIKE_FILE" ] && [ -r "$PRETRIM_FILE" ]; then
     SNAPSHOT_OK=true
 elif [ "$ARCHIVE_LIB_OK" != true ]; then
-    SNAPSHOT_REASON="the snapshot library ${ARCHIVE_LIB} could not be loaded"
+    # No SNAPSHOT_REASON assignment here on purpose: it would never be read. This branch
+    # exists only to keep SNAPSHOT_OK false and skip the snapshot_notepad call below
+    # (undefined when the library failed to load) -- ARCHIVE_LIB_OK false implies
+    # REINJECT_LIB_OK false too (REINJECT_LIB is only ever attempted after ARCHIVE_LIB
+    # sources cleanly, above), so the DEGRADED_REASON branch further down (same ordering
+    # rationale, see its comment) always takes the "library could not be loaded" path in
+    # this case and never reads SNAPSHOT_REASON.
+    :
 elif snapshot_notepad "$STATE_FILE" "$PRETRIM_FILE"; then
     SNAPSHOT_OK=true
 else
