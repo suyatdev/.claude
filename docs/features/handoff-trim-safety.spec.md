@@ -1152,10 +1152,13 @@ that ignores them, in two repos measured as not covering them today.
       **Done 2026-09-14.** Test-first: `hooks/handoff/handoff-keep-guard.test.sh` gained a
       registration assertion plus mutation control (modeled on
       `slim-session-start.test.sh`'s own "Registration assertion" block and its
-      "registration check can fail" mutant self-check, near the end of the file — the
-      `slim-session-start.test.sh:733-760` line range this task originally cited has since
-      moved and now holds task 13's "Guard liveness" scenario instead; re-measured
-      2026-09-16), confirmed RED at **48/49** (the 47 pre-existing
+      "registration check can fail" mutant self-check — the `slim-session-start.test.sh:733-760`
+      line range this task originally cited has since moved and now holds task 13's "Guard
+      liveness" scenario instead; after the file-size split both scenarios live in
+      `slim-session-start.test.d/40-contract-and-guard-liveness.sh`, sourced by the entry
+      file, and are found by the "Registration assertion:" / "Guard liveness" section
+      comments rather than a line number; re-measured 2026-09-16), confirmed RED at
+      **48/49** (the 47 pre-existing
       assertions plus the new mutation control both passing, only the registration check
       failing) before the edit, committed separately under `TEST_EXEMPT`. `settings.json`'s
       single `Stop` group gained a second `hooks[]` entry,
