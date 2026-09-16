@@ -400,9 +400,13 @@ else bad "secret-flagged block -> still decision=allow (quarantine is not a bloc
 #    guard's own warning said it was safe. Data-loss bug, observability verdict 2026-09-16
 #    on cb4190b; see docs/features/handoff-trim-safety.md task 10.
 #
-#    This scenario is the OTHER archive_failed path from 12 above: a [KEEP] region intact
-#    (so the block/strike branch never fires) with a non-KEEP line removed since the
-#    snapshot, landing in the "survived, archive it" branch at the bottom of the hook.
+#    This scenario drives the SAME archive_failed branch as 12 above -- the bottom
+#    "survived, text removed" branch at the end of the hook: a [KEEP] region intact (so
+#    the block/strike branch never fires) with a non-KEEP line removed since the
+#    snapshot. (Compliance finding, core-conduct/failopen-archive-failed-path-unpinned:
+#    12 and 15 were both believed to cover the two distinct archive_failed call sites, but
+#    a revert of only the OTHER site -- the strike-cap fail-open branch, below -- left
+#    this suite 55/55; see 16 below for that branch's own test.)
 # ==========================================================================================
 new_repo
 LIVE_HOOK="$HOOK_DIR/live-handoff.sh"
@@ -453,6 +457,64 @@ else
   bad "cross-hook: the removed line still exists on disk after the next prompt" \
     "unfiled=$UNFILED_T15 content=$(cat "$UNFILED_T15" 2>/dev/null)"
 fi
+
+# ==========================================================================================
+# 16. Strike cap reached AND the archive append also fails -- the OTHER archive_failed
+#    path (the strike-cap fail-open branch), never exercised by 12 or 15 above, both of
+#    which drive the bottom "survived, text removed" branch instead. Compliance finding
+#    core-conduct/failopen-archive-failed-path-unpinned: the judge proved the gap by
+#    reverting only THIS branch's unfile_snapshot call to the old data-loss wording and
+#    getting the suite still 55/55 (12 and 15 stayed green because neither touches this
+#    branch at all). decision=archive_failed, PRETRIM_FILE moved aside (not left in
+#    place), an unfiled-*.md copy holding the snapshot bytes, and the warning carrying
+#    BOTH the strike-cap wording and the archive-failure note -- distinct from 12/15's
+#    wording ("The archive append failed for N removed line(s)...").
+# ==========================================================================================
+new_repo
+SNAP=$'## Standing rules [KEEP]\n- distinctive-protected-line-16\n'
+CUR=$'## Standing rules [KEEP]\n'
+printf '%s' "$SNAP" > "$(snapshot_file "$REPO" sess16)"
+printf '%s' "$CUR" > "$(state_file "$REPO")"
+printf '2' > "$(strike_file "$REPO" sess16)"
+mkdir -p "$(archive_file "$REPO")"    # a directory where the archive file must go: writes fail
+run_guard "$REPO" "$(payload sess16)"
+if [ "$got" -eq 0 ]; then ok "strike cap + archive failure -> hook still exits 0"
+else bad "strike cap + archive failure -> hook still exits 0" "got $got"; fi
+
+DEC="$(last_decision "$REPO")"
+if [ "$DEC" = "archive_failed" ]; then
+  ok "strike cap + archive failure -> liveness logs decision=archive_failed"
+else
+  bad "strike cap + archive failure -> liveness logs decision=archive_failed" "got '$DEC'"
+fi
+
+if [ ! -f "$(snapshot_file "$REPO" sess16)" ]; then
+  ok "strike cap + archive failure -> PRETRIM_FILE moved aside, not left in place"
+else
+  bad "strike cap + archive failure -> PRETRIM_FILE moved aside, not left in place" "still present"
+fi
+
+UNFILED_T16="$(find "$REPO/.claude" -maxdepth 1 -name 'session-state.pretrim.sess16.unfiled-*.md' 2>/dev/null | head -1)"
+if [ -n "$UNFILED_T16" ] && cmp -s "$UNFILED_T16" <(printf '%s' "$SNAP"); then
+  ok "strike cap + archive failure -> the unfiled copy holds the snapshot bytes"
+else
+  bad "strike cap + archive failure -> the unfiled copy holds the snapshot bytes" \
+    "unfiled=$UNFILED_T16 content=$(cat "$UNFILED_T16" 2>/dev/null)"
+fi
+
+SYSMSG_T16="$(jq_field "$out" '.systemMessage')"
+case "$SYSMSG_T16" in
+  *"Strike cap"*) ok "strike cap + archive failure -> warning carries the strike-cap wording" ;;
+  *) bad "strike cap + archive failure -> warning carries the strike-cap wording" "$SYSMSG_T16" ;;
+esac
+case "$SYSMSG_T16" in
+  *"$UNFILED_T16"*)
+    [ -n "$UNFILED_T16" ] \
+      && ok "strike cap + archive failure -> warning names the unfiled copy's actual path" \
+      || bad "strike cap + archive failure -> warning names the unfiled copy's actual path" \
+        "no unfiled copy to match" ;;
+  *) bad "strike cap + archive failure -> warning names the unfiled copy's actual path" "$SYSMSG_T16" ;;
+esac
 
 # --- Registration assertion: this hook must actually be wired into settings.json -----
 # A hook can pass every test above while sitting unregistered in settings.json, in which
