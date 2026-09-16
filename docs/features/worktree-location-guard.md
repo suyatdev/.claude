@@ -1,7 +1,9 @@
 ---
 phase: implementation
 model_tier: xhigh
-branch: fix/worktree-guard-tilde-path
+branch: chore/worktree-guard-criterion3
+worktree: ~/.worktrees/.claude/wg-criterion3
+previous_branch: fix/worktree-guard-tilde-path merged as PR #103 (270a0b9) on 2026-09-14
 ---
 
 # worktree-guard.sh — worktrees are mandatory, and they live in one place
