@@ -1143,10 +1143,46 @@ that ignores them, in two repos measured as not covering them today.
       every `UserPromptSubmit`, so in a normal turn `.claude/` already exists before `Stop`
       fires — an **ordering dependency between two hooks, not a guarantee**. Recorded here as a
       gap, not fixed: closing it belongs to task 10's hook, and a drive-by fix is its own task.
-- [ ] 13. Guard-liveness reporting in `slim-session-start.sh`, above the early exits, reading
+- [x] 13. Guard-liveness reporting in `slim-session-start.sh`, above the early exits, reading
       **both** the mtime comparison **and the last line's decision token** — mtime alone cannot
       see `unprotected`, because a guard heartbeating it every turn keeps the log looking
       fresh while nothing is protected.
+      **Done 2026-09-15.** Test-first: `slim-session-start.test.sh` gained the task-13 Gherkin
+      scenarios (never-run/rotated/unreadable/unrecognised log states, all five `decision=`
+      tokens, the mtime "notepad changed after that run" append, last-line-wins ordering, the
+      missing/empty-notepad bare report line) plus two mutation controls (a token-mapping
+      falsifier and an "above the early exits" ordering falsifier), confirmed RED at **78/97**
+      against the pre-task-13 hook (19 of the 30 new assertions failing as expected; the other
+      11 passed vacuously, since the absent behaviour trivially satisfies "no leak"/"discriminates
+      nothing" checks) before either implementation edit, committed separately under
+      `TEST_EXEMPT` (a red suite cannot carry a test marker by construction). `guard_liveness_state`,
+      `keepguard_log_kind` and `report_missing_notepad` added to `slim-session-start.sh`;
+      `guard_state` is computed in `main()` immediately after `reap_stale_snapshots` — above every
+      early exit, same C6 ordering as the reaper — and appended to the one-line header as
+      `guard: <state>`. Re-run GREEN at **97/97**; `hooks/handoff/lib/handoff-archive.test.sh`
+      (**79/79**) and `hooks/handoff/handoff-keep-guard.test.sh` (**49/49**) measured unchanged
+      from their pre-edit baselines. `shellcheck hooks/handoff/slim-session-start.sh` clean (exit 0).
+      Four deliberate choices: (1) every state names itself — a positive `ok (last run allow)`
+      signal, never silent success, so a broken reader can't look like health (O2's own thesis);
+      (2) a bare, non-enveloped stdout line when the notepad is missing or empty, but ONLY when a
+      keepguard log (main or rotated) exists — a fresh repo with no log at all stays fully silent,
+      matching every other early exit; (3) `log rotated, no run recorded since` is distinguished
+      from `never run here` so a rotation is not misread as a dead guard; (4) the five decision
+      tokens are mapped through a fixed `case` allowlist, so an unrecognised or adversarial log
+      line can only ever select one of five fixed phrases — the log's raw bytes never reach the
+      printed header.
+      **Gap, recorded not fixed:** the report reads only the log's *last* line. A run of
+      `unprotected` lines followed by one `allow` reads as `ok (last run allow)` — the spec's "a
+      run of unprotected lines" language is not implemented beyond the last line, exactly as this
+      task's own wording ("the last line's decision token") scopes it.
+      **Also fixed in the RED commit:** `backdate()` (and its inline copy in the "Handoff whose
+      writer stopped" fixture) built its `touch -t` stamp with `date -u -r`, but `touch -t` parses
+      LOCAL time — measured skew on this machine (TZ -0400): +14400s (4h) into the future with
+      `-u`, 0s without. Every pre-existing caller backdates by 24-40h, so the 4h skew never
+      flipped a result and the defect was masked in every count this card has reported until now;
+      this task's own 1-2h fixtures would have silently measured the wrong condition. Fixed by
+      dropping `-u` from both call sites (the GNU fallback already took an epoch, not a formatted
+      stamp, so it was never wrong).
 - [x] 14. `pre-compact.sh` injects `session-state.md` first (D7).
       **Done 2026-09-10.** New suite `hooks/handoff/pre-compact.test.sh`, **20/20**, written
       before the hook changed and confirmed RED at **12/20** first — the eight failures were
