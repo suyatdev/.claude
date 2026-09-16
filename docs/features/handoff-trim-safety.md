@@ -430,8 +430,57 @@ that ignores them, in two repos measured as not covering them today.
       needs
       checking.) Anchored to `^Warning: 2 protected …` and falsified by substituting `3`,
       which does fail.
-- [ ] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
+- [x] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
       the original bug report came from.
+      **Done 2026-09-16.** Before this task the hook had zero references to
+      `snapshot_notepad`/`PRETRIM_FILE` — it ordered its REWRITE directive on the reinject
+      library alone, with nothing backing up the notepad it was about to tell the model to
+      cut from. It now reads session identity and derives `PRETRIM_FILE`/`STRIKE_FILE` the
+      same three-step way `live-handoff.sh` does (stdin `session_id` via `/usr/bin/jq`, then
+      `$CLAUDE_CODE_SESSION_ID`, then the `nosession` literal, sanitized to the portable
+      filename set) — the same byte-for-byte filenames `handoff-keep-guard.sh:99-104` derives
+      independently, so the three hooks agree on one snapshot per session. A byte-identical
+      `snapshot_notepad()` copy is taken before any directive is emitted, with the same
+      strike-retention rule as task 4: a strike file with its snapshot still readable is left
+      alone (it is the pre-damage copy the guard blocked on); no strike refreshes normally;
+      a strike with no snapshot beside it still snapshots, so a deleted copy plus a stale
+      strike file cannot leave a session unprotected. The REWRITE directive now fires only
+      when the snapshot succeeded **and** the reinject library loaded; otherwise the existing
+      append-only directive fires (no line target, as before — a target invites a cut it
+      cannot back up), and the explanatory sentence names whichever of the two independent
+      causes actually applies: the pre-existing `FAILED_LIB` mechanism is kept unchanged for
+      a corrupt/missing library (covers both an unloadable snapshot library and an unloadable
+      reinject library, since the reinject library is only ever sourced after the snapshot
+      library loads cleanly), and a new, differently-worded reason
+      (`A pre-trim snapshot could not be taken this run: …`) fires when both libraries loaded
+      fine but `snapshot_notepad()` itself failed (an unwritable `.claude`) — pinned by a test
+      asserting neither wording leaks into the other's output.
+      One difference from `live-handoff.sh`, called out because it changes the gate: this
+      hook has no INIT template and never creates the notepad, so a fresh repo with no prior
+      turn reaches the snapshot gate with nothing to back up. That is guarded explicitly
+      (`[ ! -f "$STATE_FILE" ]` → `SNAPSHOT_OK=true`, skip the copy) rather than folded into
+      the write-failure branch — there is nothing this hook failed to protect, and
+      `keep_trim_directive` already prints the filing rule alone for a missing notepad
+      (pre-existing behaviour, task 8), so treating a missing notepad as a failure would have
+      wrongly forced every fresh repo's first compaction into append-only mode.
+      Measured rather than reported: RED was **62/77** (the pre-existing 47 plus 30 new
+      assertions, 15 of the 30 failing against the no-op hook; the other 15 — including
+      "hook exits 0" and "a retained snapshot is not overwritten" — passed vacuously since
+      the old hook wrote nothing at all). GREEN after the implementation is **77/77**, and
+      the three untouched siblings read what they read before: `live-handoff.test.sh`
+      **69/69**, `handoff-keep-guard.test.sh` **49/49**, `handoff-archive.test.sh` **79/79**
+      — the evidence the shared library and the other two hooks were not disturbed.
+      `shellcheck hooks/handoff/pre-compact-handoff.sh` exits 0. The falsifier strips the
+      `SNAPSHOT_OK` conjunct from a scratch copy and reruns it against an unwritable
+      `.claude`; run by hand once outside the suite too, it printed the full REWRITE
+      directive, `Line targets: general 120-150, task 140-170, bug 160-190 (if needed).`
+      included, against a repo whose `.claude` held only the original `session-state.md` —
+      no pretrim file — proving the no-rewrite assertion above is falsifiable, not vacuous.
+      ⚠️ **The jq-absent degradation task 4 recorded applies here unchanged**: if
+      `/usr/bin/jq` is missing, this hook's session id falls back to
+      `$CLAUDE_CODE_SESSION_ID` and then `nosession` exactly like `live-handoff.sh`, so every
+      session in a repo would share one pretrim file under that condition. Not a new gap —
+      the same one, inherited by using the same fallback chain on purpose.
 - [x] 10. `hooks/handoff/handoff-keep-guard.sh` as a `Stop` hook: protected-block check, strike
       cap with reset on both exits, mechanical archive append, liveness heartbeat with the full
       set of decision tokens. Every notepad-derived string it emits is sanitized and enveloped.

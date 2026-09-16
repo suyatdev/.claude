@@ -1069,8 +1069,12 @@ that ignores them, in two repos measured as not covering them today.
       deliberate fail-closed/fail-open asymmetry between the two hooks, and the false
       `set -e` safety claim it uncovered in already-committed code are all recorded against
       task 8 in `handoff-trim-safety.md`; not restated here.
-- [ ] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
-      the original bug report came from.
+- [x] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
+      the original bug report came from. **Done 2026-09-16** — full record (measured
+      RED/GREEN counts, the missing-notepad exception to the snapshot gate, the
+      distinguishable snapshot-vs-library failure wording, the falsifier, and the
+      jq-absent degradation this hook inherits from task 4) against task 9 in
+      `handoff-trim-safety.md`; not restated here.
 - [x] 10. `hooks/handoff/handoff-keep-guard.sh` as a `Stop` hook: protected-block check, strike
       cap with reset on both exits, mechanical archive append, liveness heartbeat with the full
       set of decision tokens. Every notepad-derived string it emits is sanitized and enveloped.

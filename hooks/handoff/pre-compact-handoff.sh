@@ -15,6 +15,19 @@
 # keep_trim_directive() fragment (hooks/handoff/lib/handoff-keep-reinject.sh): anything
 # removed from the notepad must be filed into the archive first, and any [KEEP]-tagged
 # heading is re-injected verbatim so the model sees exactly what must survive the rewrite.
+#
+# Locally patched by docs/features/handoff-trim-safety.md, task 9: this hook ordered a
+# REWRITE with no snapshot behind it at all -- the one hook in this card's scope that
+# never copied the notepad aside before telling the model to cut from it. It now takes
+# the same per-session pre-trim snapshot as live-handoff.sh (snapshot_notepad(), the
+# same PRETRIM_FILE/STRIKE_FILE filename contract, the same strike-retention rule) BEFORE
+# any directive is emitted, and the REWRITE directive fires only when that snapshot
+# succeeded -- not just when the reinject library loaded. A snapshot failure (or a
+# snapshot library that cannot be loaded) degrades to the same append-only directive a
+# reinject-library failure already used, with its own distinct reason. Unlike
+# live-handoff.sh, this hook has no INIT template and never creates the notepad -- a
+# repo with no session-state.md yet has nothing to back up, so a missing notepad is
+# guarded explicitly and is NOT treated as a snapshot failure.
 
 set -euo pipefail
 
@@ -23,8 +36,37 @@ set -euo pipefail
 [ -n "${CLAUDE_PANE_AGENT:-}" ] && exit 0
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+STATE_FILE="$REPO_ROOT/.claude/session-state.md"
 
 mkdir -p "$REPO_ROOT/.claude"
+
+# --- Session identity ---------------------------------------------------------------
+# PreCompact hooks receive the payload on stdin, same as UserPromptSubmit. Same
+# three-step fallback and the same "nosession" literal as live-handoff.sh and
+# hooks/secret-command-guard.sh: a payload with no session_id, or no payload at all,
+# still gets a working (if less specific) snapshot rather than none.
+JQ_BIN="/usr/bin/jq"
+HOOK_PAYLOAD=""
+[ -t 0 ] || HOOK_PAYLOAD="$(cat 2>/dev/null || true)"
+SESSION_RAW=""
+if [ -n "$HOOK_PAYLOAD" ] && [ -x "$JQ_BIN" ]; then
+  SESSION_RAW="$(printf '%s' "$HOOK_PAYLOAD" | "$JQ_BIN" -er '.session_id // empty' 2>/dev/null)" \
+    || SESSION_RAW=""
+fi
+[ -n "$SESSION_RAW" ] || SESSION_RAW="${CLAUDE_CODE_SESSION_ID:-}"
+[ -n "$SESSION_RAW" ] || SESSION_RAW="nosession"
+
+# The id reaches a filename, so everything outside the portable-filename set becomes an
+# underscore -- a payload is untrusted input, and "../../x" must not steer a write out of
+# .claude. Real ids are UUID-shaped, so in practice this substitutes nothing. Same rule,
+# byte-for-byte, as live-handoff.sh -- these two filenames are a CONTRACT with
+# handoff-keep-guard.sh (hooks/handoff/handoff-keep-guard.sh:99-104), which derives the
+# identical SESSION_SLUG independently and must land on the same filenames.
+SESSION_SLUG="$(printf '%s' "$SESSION_RAW" | tr -c 'A-Za-z0-9_-' '_' | cut -c1-64)"
+[ -n "$SESSION_SLUG" ] || SESSION_SLUG="nosession"
+
+PRETRIM_FILE="$REPO_ROOT/.claude/session-state.pretrim.${SESSION_SLUG}.md"
+STRIKE_FILE="$REPO_ROOT/.claude/session-state.keepguard-strikes.${SESSION_SLUG}"
 
 # Same literal handoff-keep-guard.sh:105 uses for its own archive path.
 ARCHIVE_FILE="$REPO_ROOT/.claude/session-state.archive.md"
@@ -35,6 +77,7 @@ ARCHIVE_FILE="$REPO_ROOT/.claude/session-state.archive.md"
 HOOK_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ARCHIVE_LIB="$HOOK_DIR/lib/handoff-archive.sh"
 REINJECT_LIB="$HOOK_DIR/lib/handoff-keep-reinject.sh"
+ARCHIVE_LIB_OK=false
 REINJECT_LIB_OK=false
 # FAILED_LIB names whichever library actually failed to load, for the degraded directive
 # below to cite. It starts at ARCHIVE_LIB (the first one attempted) and only advances to
@@ -52,6 +95,7 @@ FAILED_LIB="$ARCHIVE_LIB"
 set +e
 # shellcheck disable=SC1090  # libraries live beside this hook, not user input
 if [ -r "$ARCHIVE_LIB" ] && . "$ARCHIVE_LIB"; then
+    ARCHIVE_LIB_OK=true
     FAILED_LIB="$REINJECT_LIB"
     if [ -r "$REINJECT_LIB" ] && . "$REINJECT_LIB"; then
         # A library that sources cleanly but whose function never landed (a partial or
@@ -62,15 +106,45 @@ if [ -r "$ARCHIVE_LIB" ] && . "$ARCHIVE_LIB"; then
 fi
 set -e
 
+# --- Snapshot, before any directive is emitted ----------------------------------------
+# Mirrors live-handoff.sh's snapshot gate and its strike-retention rule: a keep-guard
+# strike still holding its pre-damage copy must not have that copy overwritten by the
+# damaged notepad in front of us; a strike with no snapshot beside it is not that case,
+# so it snapshots normally (a deleted PT plus a stale strike file must not leave the
+# session permanently unprotected).
+#
+# One case this hook has that live-handoff.sh does not: a notepad that does not exist
+# yet. live-handoff.sh always has one by this point -- it creates STATE_FILE from an
+# INIT template above if missing. This hook never creates the notepad; it only reads it
+# (via keep_trim_directive/extract_keep_lines), so a fresh repo with no prior turn
+# reaches here with nothing to back up. That is not a snapshot FAILURE -- there is
+# nothing to protect, so there is nothing this hook failed to protect -- and
+# keep_trim_directive already handles a missing notepad on its own (it prints the filing
+# rule with no [KEEP] fragment). Treating it as a failure would wrongly force every
+# fresh repo's first compaction into append-only mode.
+SNAPSHOT_OK=false
+SNAPSHOT_REASON=""
+if [ ! -f "$STATE_FILE" ]; then
+    SNAPSHOT_OK=true
+elif [ -f "$STRIKE_FILE" ] && [ -r "$PRETRIM_FILE" ]; then
+    SNAPSHOT_OK=true
+elif [ "$ARCHIVE_LIB_OK" != true ]; then
+    SNAPSHOT_REASON="the snapshot library ${ARCHIVE_LIB} could not be loaded"
+elif snapshot_notepad "$STATE_FILE" "$PRETRIM_FILE"; then
+    SNAPSHOT_OK=true
+else
+    SNAPSHOT_REASON="${PRETRIM_FILE} could not be written"
+fi
+
 # KEEP_TRIM_FRAGMENT is computed BEFORE the heredoc below, not inside it: a command
 # substitution written directly inside a heredoc still runs at heredoc-expansion time,
 # still under `set -e`, and a failure there would kill this hook exactly when compaction
 # is imminent -- the one moment it must not silently exit non-zero. Computing it into a
 # plain variable first means the heredoc only ever does a variable interpolation, which
-# cannot fail. Only the healthy (REINJECT_LIB_OK) branch needs this -- the fallback branch
-# below has no fragment to compute, because it orders no rewrite at all.
-if [ "$REINJECT_LIB_OK" = true ]; then
-    KEEP_TRIM_FRAGMENT="$(keep_trim_directive "$REPO_ROOT/.claude/session-state.md" "$ARCHIVE_FILE")"
+# cannot fail. Only the healthy (SNAPSHOT_OK and REINJECT_LIB_OK) branch needs this -- the
+# fallback branch below has no fragment to compute, because it orders no rewrite at all.
+if [ "$SNAPSHOT_OK" = true ] && [ "$REINJECT_LIB_OK" = true ]; then
+    KEEP_TRIM_FRAGMENT="$(keep_trim_directive "$STATE_FILE" "$ARCHIVE_FILE")"
 fi
 
 # Detect current work mode
@@ -122,7 +196,7 @@ else
     MODE_DIRECTIVE=""
 fi
 
-if [ "$REINJECT_LIB_OK" = true ]; then
+if [ "$SNAPSHOT_OK" = true ] && [ "$REINJECT_LIB_OK" = true ]; then
     cat << DIRECTIVE
 <pre-compact-handoff>
 CRITICAL: Context compaction is about to happen. You MUST update .claude/session-state.md NOW.
@@ -144,8 +218,9 @@ ${KEEP_TRIM_FRAGMENT}
 </pre-compact-handoff>
 DIRECTIVE
 else
-    # Still emit a directive, but order APPEND-ONLY: the protected [KEEP] headings could
-    # not be listed, so nothing can be safely identified as removable this run, and
+    # Still emit a directive, but order APPEND-ONLY: either the protected [KEEP] headings
+    # could not be listed, or the pre-trim snapshot that would back up a cut could not be
+    # taken -- either way nothing can be safely identified as removable this run, and
     # authorising a cut here is exactly the promise this card exists to stop making.
     # Withholding this directive entirely would be wrong HERE: compaction is imminent and
     # this hook fires once, so suppressing it would forfeit the whole notepad rather than
@@ -160,12 +235,28 @@ else
     # target, and this hook's only other directive does.
     # Rationale and the measurement:
     # docs/decisions/0046-neither-trim-hook-orders-a-cut-it-cannot-back-up.md
+    #
+    # The two possible reasons are kept distinguishable (task 9): a library failure
+    # (REINJECT_LIB_OK false, which also covers an unloadable ARCHIVE_LIB via the
+    # FAILED_LIB mechanism above) keeps its pre-existing wording unchanged; a snapshot
+    # that could not be written while both libraries loaded fine gets its own wording
+    # naming the pretrim path, so a reader can tell "fix a library" from "fix a
+    # write failure" apart. Checked in this order because when ARCHIVE_LIB_OK is false,
+    # REINJECT_LIB_OK is false too (REINJECT_LIB is only ever sourced after ARCHIVE_LIB
+    # loads cleanly) -- so an unloadable snapshot library always falls into the
+    # library-failure branch below, consistent with "Keep the existing FAILED_LIB
+    # behaviour for the library cases."
+    if [ "$REINJECT_LIB_OK" != true ]; then
+        DEGRADED_REASON="The archive-filing helper library (${FAILED_LIB}) could not be loaded here, so the protected [KEEP] heading(s) in the notepad could not be listed -- nothing can be safely identified as removable this run. Fix that library, then let this hook run again."
+    else
+        DEGRADED_REASON="A pre-trim snapshot could not be taken this run: ${SNAPSHOT_REASON}. Ordering a cut with no backup behind it is exactly the unbacked promise this hook exists to stop making. Fix the write failure (usually an unwritable .claude directory), then let this hook run again."
+    fi
     cat << DIRECTIVE
 <pre-compact-handoff>
 CRITICAL: Context compaction is about to happen. You MUST update .claude/session-state.md NOW.
 ${MODE_DIRECTIVE}
 
-The archive-filing helper library (${FAILED_LIB}) could not be loaded here, so the protected [KEEP] heading(s) in the notepad could not be listed -- nothing can be safely identified as removable this run. Fix that library, then let this hook run again.
+${DEGRADED_REASON}
 
 REQUIRED action for session-state.md:
 1. APPEND ONLY. Do not rewrite, shorten, reorder, or delete any existing part of .claude/session-state.md this run.
