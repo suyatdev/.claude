@@ -932,7 +932,9 @@ labelling it as one would repeat the fault it was written to correct.
 Ordered so every step is independently useful and nothing depends on a later step. **The list
 skips 7 on purpose** — the read-cap step was folded into the write-cap step so both caps rise in
 one commit, and the numbers were deliberately not re-flowed, because re-flowing them is what made
-cross-references stale before. Steps are referred to by what they do, never by number. The ignore
+cross-references stale before. Steps are referred to primarily by what they do, not by number;
+the bounded set of numbered mentions is measured (not asserted empty) in the cross-reference
+note near the end of this file, which records the current `grep -nE "task [0-9]"` count. The ignore
 rules come **first**, before anything writes a file they are meant to cover — an earlier
 ordering created per-turn byte-identical copies of the notepad seventeen tasks before the rule
 that ignores them, in two repos measured as not covering them today.
@@ -1097,9 +1099,10 @@ that ignores them, in two repos measured as not covering them today.
       are global hooks with no opt-in, so the window is not theoretical.
 - [x] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
       the protected headings are re-injected verbatim. **Done 2026-09-12** — evidence, the
-      deliberate fail-closed/fail-open asymmetry between the two hooks, and the false
-      `set -e` safety claim it uncovered in already-committed code are all recorded against
-      task 8 in `handoff-trim-safety.md`; not restated here.
+      fail-direction asymmetry this task first claimed between the two hooks (since retired
+      by D18 and ADR 0046: both hooks now degrade to append-only, only the route differs),
+      and the false `set -e` safety claim it uncovered in already-committed code are all
+      recorded against task 8 in `handoff-trim-safety.md`; not restated here.
 - [x] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
       the original bug report came from. **Done 2026-09-16** — full record (measured
       RED/GREEN counts, the missing-notepad exception to the snapshot gate, the

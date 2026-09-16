@@ -227,7 +227,9 @@ count_keep_headings() {
 #
 # The new name matches slim-session-start.sh's reap_stale_snapshots glob
 # (session-state.pretrim.*.md), so an unfiled copy self-heals into the archive on a later
-# session start with no new state machine, and is covered by the same /.claude/ gitignore
+# session start -- the first one once the ORIGINAL snapshot is REAP_AFTER_HOURS (24h) old,
+# since `mv` keeps the mtime, so not necessarily the very next start -- with no new state
+# machine, and is covered by the same /.claude/ gitignore
 # entry as every other file under .claude/.
 #
 # Prints the destination path and returns 0 on success. Returns 1 (prints nothing) if the

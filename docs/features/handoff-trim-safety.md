@@ -842,3 +842,16 @@ marker write can run. **Not fixed, and out of this card's scope:** the test mark
 (`hooks/lib/write-test-marker.py`) still names only the entry-runner and hook blobs as the
 paired subject, so editing a `*.test.d/` part file alone does not force a re-run before commit
 — a `hooks/lib/write-test-marker.py` concern, recorded here rather than fixed.
+
+**Final judge round and the stop rule (2026-09-16, on the merge commit `33328e7`).** Observability
+run 3: risk low, confidence high, nothing gating — it re-broke the part-loading guard and the
+fail-open `unfile_snapshot` call in scratch copies and watched both go red, and proved the
+throwaway-repo falsifiers cannot write a marker into this worktree. Compliance round 14: FAIL on
+two findings, both inherited prose in the spec half, neither code — the task-8 entry still
+called the retired fail-direction thesis "deliberate" (unchanged since `f7d570f`), and a third
+copy of the "never by number" sentence had survived the round-13 fix. Both fixed in the commit
+after PR #105 opened; the loop was stopped there under the standing rule that a round returning
+only prose-only or inherited findings ends it. Non-blocking notes carried, not fixed:
+`test-parts.test.sh`'s marker-store hash can go red if another process writes a marker during
+its ~15 s window (safe direction); and the absolute path in `handoff-keep-guard.sh`'s contract
+header names the binary the Stop contract was measured against — a measurement record, kept.
