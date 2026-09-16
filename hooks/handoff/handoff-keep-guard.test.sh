@@ -315,7 +315,8 @@ else
 fi
 
 # ==========================================================================================
-# 12. Archive append fails -> decision=archive_failed, snapshot kept, escalated in output
+# 12. Archive append fails -> decision=archive_failed, snapshot UNFILED (not left at
+#    PRETRIM_FILE -- see 15 below for why), escalated in output
 # ==========================================================================================
 new_repo
 printf 'line1\nline2\n' > "$(snapshot_file "$REPO" sess1)"
@@ -327,8 +328,18 @@ else bad "archive append failure -> hook still exits 0" "got $got"; fi
 DEC="$(last_decision "$REPO")"
 if [ "$DEC" = "archive_failed" ]; then ok "archive append failure -> decision=archive_failed"
 else bad "archive append failure -> decision=archive_failed" "got '$DEC'"; fi
-if [ -f "$(snapshot_file "$REPO" sess1)" ]; then ok "archive append failure -> snapshot NOT deleted"
-else bad "archive append failure -> snapshot NOT deleted" "snapshot was deleted"; fi
+if [ ! -f "$(snapshot_file "$REPO" sess1)" ]; then
+  ok "archive append failure -> PRETRIM_FILE moved aside, not left in place"
+else
+  bad "archive append failure -> PRETRIM_FILE moved aside, not left in place" "still present"
+fi
+UNFILED_T12="$(find "$REPO/.claude" -maxdepth 1 -name 'session-state.pretrim.sess1.unfiled-*.md' 2>/dev/null | head -1)"
+if [ -n "$UNFILED_T12" ] && cmp -s "$UNFILED_T12" <(printf 'line1\nline2\n'); then
+  ok "archive append failure -> the unfiled copy holds the snapshot bytes"
+else
+  bad "archive append failure -> the unfiled copy holds the snapshot bytes" \
+    "unfiled=$UNFILED_T12 content=$(cat "$UNFILED_T12" 2>/dev/null)"
+fi
 if [ -s "$out" ]; then ok "archive append failure -> escalated in Stop output (non-empty)"
 else bad "archive append failure -> escalated in Stop output (non-empty)" "stdout was empty"; fi
 
@@ -378,6 +389,70 @@ fi
 DEC="$(last_decision "$REPO")"
 if [ "$DEC" = "allow" ]; then ok "secret-flagged block -> still decision=allow (quarantine is not a block)"
 else bad "secret-flagged block -> still decision=allow (quarantine is not a block)" "got '$DEC'"; fi
+
+# ==========================================================================================
+# 15. Cross-hook: an archive_failed snapshot must not be silently overwritten by the NEXT
+#    prompt's live-handoff.sh snapshot_notepad call. The two archive_failed paths both
+#    delete STRIKE_FILE, and live-handoff.sh only preserves an existing PRETRIM_FILE when a
+#    STRIKE_FILE sits beside it -- so a snapshot left in place at PRETRIM_FILE after
+#    archive_failed gets overwritten by the CURRENT (already-cut) notepad on the very next
+#    turn, and the text this whole hook exists to protect ends up nowhere on disk while the
+#    guard's own warning said it was safe. Data-loss bug, observability verdict 2026-09-16
+#    on cb4190b; see docs/features/handoff-trim-safety.md task 10.
+#
+#    This scenario is the OTHER archive_failed path from 12 above: a [KEEP] region intact
+#    (so the block/strike branch never fires) with a non-KEEP line removed since the
+#    snapshot, landing in the "survived, archive it" branch at the bottom of the hook.
+# ==========================================================================================
+new_repo
+LIVE_HOOK="$HOOK_DIR/live-handoff.sh"
+# The KEEP region must be bounded by a following heading (per extract_keep_lines: an
+# unbounded region runs to EOF and would swallow "removed non-keep line" too, making it
+# protected and routing into the block branch instead of the survived-and-removed one).
+SNAP=$'## Standing rules [KEEP]\n- must survive\n\n## Other\nremoved non-keep line\n'
+CUR=$'## Standing rules [KEEP]\n- must survive\n\n## Other\n'
+printf '%s' "$SNAP" > "$(snapshot_file "$REPO" sess15)"
+printf '%s' "$CUR" > "$(state_file "$REPO")"
+mkdir -p "$(archive_file "$REPO")"    # a directory where the archive file must go: writes fail
+run_guard "$REPO" "$(payload sess15)"
+DEC="$(last_decision "$REPO")"
+if [ "$DEC" = "archive_failed" ]; then ok "cross-hook: guard reports decision=archive_failed"
+else bad "cross-hook: guard reports decision=archive_failed" "got '$DEC'"; fi
+
+if [ ! -f "$(snapshot_file "$REPO" sess15)" ]; then
+  ok "cross-hook: PRETRIM_FILE is moved aside on archive_failed, not left in place"
+else
+  bad "cross-hook: PRETRIM_FILE is moved aside on archive_failed, not left in place" \
+    "still present at $(snapshot_file "$REPO" sess15)"
+fi
+
+UNFILED_T15="$(find "$REPO/.claude" -maxdepth 1 -name 'session-state.pretrim.sess15.unfiled-*.md' 2>/dev/null | head -1)"
+if [ -n "$UNFILED_T15" ] && [ -f "$UNFILED_T15" ]; then
+  ok "cross-hook: an unfiled copy exists beside the snapshot"
+else
+  bad "cross-hook: an unfiled copy exists beside the snapshot" "none found under $REPO/.claude"
+fi
+
+REASON_T15="$(jq_field "$out" '.reason')"
+case "$REASON_T15" in
+  *"$UNFILED_T15"*) [ -n "$UNFILED_T15" ] && ok "cross-hook: the warning names the unfiled copy's actual path" \
+    || bad "cross-hook: the warning names the unfiled copy's actual path" "no unfiled copy to match" ;;
+  *) bad "cross-hook: the warning names the unfiled copy's actual path" "$REASON_T15" ;;
+esac
+
+# Simulate the next prompt: live-handoff.sh runs for the same session, same recipe as
+# live-handoff.test.sh's run_hook() (that file is not modified by this suite).
+LIVE_PAYLOAD="$(printf '{"hook_event_name":"UserPromptSubmit","session_id":"sess15","cwd":"%s"}' "$REPO")"
+( cd "$REPO" && printf '%s' "$LIVE_PAYLOAD" \
+    | env -u CLAUDE_PANE_AGENT CLAUDE_CODE_SESSION_ID=sess15 bash "$LIVE_HOOK" ) \
+    >"$TMP/live15.out" 2>"$TMP/live15.err"
+
+if [ -n "$UNFILED_T15" ] && grep -qx 'removed non-keep line' "$UNFILED_T15" 2>/dev/null; then
+  ok "cross-hook: the removed line still exists on disk after the next prompt"
+else
+  bad "cross-hook: the removed line still exists on disk after the next prompt" \
+    "unfiled=$UNFILED_T15 content=$(cat "$UNFILED_T15" 2>/dev/null)"
+fi
 
 # --- Registration assertion: this hook must actually be wired into settings.json -----
 # A hook can pass every test above while sitting unregistered in settings.json, in which
