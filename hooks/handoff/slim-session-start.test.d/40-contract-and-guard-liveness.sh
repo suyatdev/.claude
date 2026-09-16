@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+# shellcheck disable=SC2154  # got/out/err are assigned by the entry file's run helper (slim-session-start.test.sh) before this part is sourced
 # 40-contract-and-guard-liveness.sh — sourced by ../slim-session-start.test.sh — not runnable on its own.
 # Covers the session-state.md-only read contract, guard-liveness reporting, and settings.json registration.
 

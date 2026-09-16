@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 50-secrets-quarantine-and-contract.sh — sourced by ../handoff-archive.test.sh — not runnable on its own.
 # Covers block_has_secret/secret_labels/archive_append/file_removed_block quarantine behavior, and the missing/unreadable/corrupt-library contract for slim-session-start.sh.
 

@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 20-constants-and-fence.sh — sourced by ../handoff-archive.test.sh — not runnable on its own.
 # Covers ARCHIVE_ROTATE_AT_BYTES/SCAN_SECRETS_CMD constants and [KEEP] region fence tracking (uses call_lib/SCRATCH_ERR/REAL_SCANNER from the entry file setup).
 

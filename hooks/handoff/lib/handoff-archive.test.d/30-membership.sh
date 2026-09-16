@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 30-membership.sh — sourced by ../handoff-archive.test.sh — not runnable on its own.
 # Covers missing_protected_lines() set-membership between a snapshot's protected [KEEP] lines and the current file.
 

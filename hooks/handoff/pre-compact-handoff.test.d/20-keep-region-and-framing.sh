@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 20-keep-region-and-framing.sh — sourced by ../pre-compact-handoff.test.sh — not runnable on its own.
 # Covers the [KEEP]-region/no-[KEEP]/no-notepad new behaviour and the "REWRITE qualified by the filing rule" wording check. Writes $TMP/good-keep.out, read by 40-envelope-falsifiers.sh.
 

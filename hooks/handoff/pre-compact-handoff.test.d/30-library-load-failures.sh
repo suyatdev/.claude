@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 30-library-load-failures.sh — sourced by ../pre-compact-handoff.test.sh — not runnable on its own.
 # Covers the fail-OPEN append-only behaviour when a required library is unloadable, Finding B (two libraries gate the directive), and the filing rule living in exactly one place. Reads $REPO_KEEP from 20-keep-region-and-framing.sh.
 

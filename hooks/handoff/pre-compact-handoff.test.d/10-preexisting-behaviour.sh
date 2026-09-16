@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 10-preexisting-behaviour.sh — sourced by ../pre-compact-handoff.test.sh — not runnable on its own.
 # Covers pre-existing behaviour: the CLAUDE_PANE_AGENT short-circuit, the no-task/no-bug directive, and the three MODE_DIRECTIVE branches.
 

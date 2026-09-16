@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+# shellcheck disable=SC2154  # got/out/err are assigned by the entry file's run helper (slim-session-start.test.sh) before this part is sourced
 # 30-snapshot-reaper.sh — sourced by ../slim-session-start.test.sh — not runnable on its own.
 # Covers pane-agent handling and the stale/fresh/orphaned snapshot reaper falsifiers.
 

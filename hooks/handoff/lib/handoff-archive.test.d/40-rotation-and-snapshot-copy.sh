@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 40-rotation-and-snapshot-copy.sh — sourced by ../handoff-archive.test.sh — not runnable on its own.
 # Covers archive_rotate_if_needed() boundary/gap-numbering/no-bytes-lost tests and the atomic snapshot_notepad copy contract.
 

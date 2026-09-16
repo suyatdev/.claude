@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 30-session-identity-and-strike-survival.sh — sourced by ../live-handoff.test.sh — not runnable on its own.
 # Covers two-sessions-do-not-blind-each-other (C2), the session-id fallback chain, traversal-shaped id sanitization, and a keep-guard-held snapshot surviving the next turn.
 

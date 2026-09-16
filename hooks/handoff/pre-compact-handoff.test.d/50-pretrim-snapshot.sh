@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 50-pretrim-snapshot.sh — sourced by ../pre-compact-handoff.test.sh — not runnable on its own.
 # Task 9: routes this hook through the same pre-trim snapshot as live-handoff.sh -- healthy run, missing-notepad, and library-failure interaction with the snapshot. Reads $REPO_KEEP from 20-keep-region-and-framing.sh.
 

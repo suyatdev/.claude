@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 10-snapshot-and-keep-envelope.sh — sourced by ../live-handoff.test.sh — not runnable on its own.
 # Covers the every-turn snapshot (under and over the write cap), the Task 8 filing rule, the [KEEP] envelope with matching-tag falsifier, and the CONTAINMENT falsifier.
 

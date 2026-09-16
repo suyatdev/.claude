@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 20-library-failure-and-suppression.sh — sourced by ../live-handoff.test.sh — not runnable on its own.
 # Covers fail-closed reinject/archive library failures (missing function, corrupt parse), the snapshot-cannot-be-written suppression scenario and its falsifier, and a missing snapshot library.
 

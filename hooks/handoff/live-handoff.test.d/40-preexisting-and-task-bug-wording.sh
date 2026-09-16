@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 40-preexisting-and-task-bug-wording.sh — sourced by ../live-handoff.test.sh — not runnable on its own.
 # Covers pre-existing behaviour that must not regress, and Finding A -- the task/bug directive keeps its removal wording on the healthy path but never orders removal on a suppressed path.
 

@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 40-envelope-falsifiers.sh — sourced by ../pre-compact-handoff.test.sh — not runnable on its own.
 # Falsifiers proving envelope_wraps (tag-match and containment) can actually fail. Reads $REPO_KEEP and $TMP/good-keep.out from 20-keep-region-and-framing.sh.
 

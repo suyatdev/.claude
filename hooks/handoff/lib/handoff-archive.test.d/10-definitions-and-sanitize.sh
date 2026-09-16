@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # 10-definitions-and-sanitize.sh — sourced by ../handoff-archive.test.sh — not runnable on its own.
 # Covers the library-is-pure-definitions contract, gen_tag(), and sanitize_line() (including the case-insensitivity falsifier).
 
