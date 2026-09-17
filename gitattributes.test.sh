@@ -317,5 +317,57 @@ for p in $patterns; do
   fi
 done
 
+# ── 10. LIMIT, pinned — an IN-PLACE ROW EDIT duplicates. Measured on a real incident. ─────
+# Section 6 pins duplication for a row that is byte-identical on both sides. This section pins the
+# shape that actually happened, which section 6 does not reach: one side REWRITES an existing row
+# in place while the other keeps the old copy and appends.
+#
+# The incident (2026-09-17, merging PR #106 into chore/judge-ledger-commitability): #106 was a
+# backfill, setting `outcome` on 5 existing rows rather than appending any. This branch carried the
+# pre-backfill copies. `union` keeps both sides lines by definition, so the stale row AND the
+# rewritten row both survived — 5 verdicts present twice, with a clean auto-merge and no conflict
+# marker anywhere. Neither a line-uniqueness check nor a row count sees it, because the two copies
+# differ textually; it is only visible by grouping on (ts, head_sha, stage).
+#
+# This is why the `.gitattributes` prose no longer calls these files append-only. The premise was
+# false, and it was falsified by a merged PR on the first real merge after it was written.
+EDIT_OLD="$(row 2026-09-01T10:00:00Z repo-c 7777777 pending)"
+EDIT_NEW="$(row 2026-09-01T10:00:00Z repo-c 7777777 rework)"
+LATER="$(row     2026-09-01T11:00:00Z repo-c 8888888 pass)"
+
+new_repo attrs; repo="$REPO"
+# Put EDIT_OLD in the shared base, so each side starts from a row that already exists.
+printf '%s\n' "$EDIT_OLD" >> "$repo/$OBS" || exit 3
+must git -C "$repo" commit -q -am 'base: a row whose outcome is not yet filled in'
+
+# side: rewrite that row in place, changing only `outcome` — what the backfill PR did.
+must git -C "$repo" checkout -q -b side
+awk -v old="$EDIT_OLD" -v new="$EDIT_NEW" '{print ($0==old ? new : $0)}' "$repo/$OBS" > "$repo/$OBS.t" || exit 3
+must mv "$repo/$OBS.t" "$repo/$OBS"
+# Assert the fixture really rewrote the row. A no-op edit here would make the whole section vacuous.
+eq "LIMIT(edit): fixture rewrote the row in place, old copy gone" \
+   "$(nmatch "$repo/$OBS" "$EDIT_OLD")" "0"
+eq "LIMIT(edit): fixture wrote the new copy"                      \
+   "$(nmatch "$repo/$OBS" "$EDIT_NEW")" "1"
+must git -C "$repo" commit -q -am 'side: backfill outcome on an existing row'
+
+# main: keep the old copy untouched and append a later verdict — what this branch did.
+must git -C "$repo" checkout -q main
+printf '%s\n' "$LATER" >> "$repo/$OBS" || exit 3
+must git -C "$repo" commit -q -am 'main: append a later verdict'
+
+merge_side "$repo"
+eq "LIMIT(edit): the merge is CLEAN — nothing warns"        "$MERGE_RC" "0"
+eq "LIMIT(edit): ...the STALE copy survives"                 "$(nmatch "$repo/$OBS" "$EDIT_OLD")" "1"
+eq "LIMIT(edit): ...alongside the rewritten copy"            "$(nmatch "$repo/$OBS" "$EDIT_NEW")" "1"
+eq "LIMIT(edit): ...so one verdict identity now appears TWICE" \
+   "$(( $(nmatch "$repo/$OBS" "$EDIT_OLD") + $(nmatch "$repo/$OBS" "$EDIT_NEW") ))" "2"
+eq "LIMIT(edit): the appended verdict is unaffected"         "$(nmatch "$repo/$OBS" "$LATER")" "1"
+if json_ok "$repo/$OBS"; then ok "LIMIT(edit): every row still parses as JSON — corruption is semantic, not textual"
+else bad "LIMIT(edit): every row still parses as JSON" "$(cat "$repo/$OBS")"; fi
+# The point of the section: a duplicate-LINE check cannot see this, because the two copies differ.
+eq "LIMIT(edit): a duplicate-LINE check is blind to it — 0 repeated lines" \
+   "$(sort "$repo/$OBS" | uniq -d | awk 'NF{n++} END{print n+0}')" "0"
+
 printf '\ngitattributes: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

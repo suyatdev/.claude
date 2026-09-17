@@ -2,10 +2,14 @@
 #
 # Judge ledgers: let concurrent appends concatenate instead of conflicting.
 #
-# Both files are append-only JSONL written by the two judge subagents across many repos,
-# worktrees and parallel sessions. Two branches each appending a row to the same ledger is the
-# normal case here, not an anomaly, and a plain three-way merge turns every one of those into a
-# textual conflict over the last line. Git's built-in `union` driver keeps both sides' lines.
+# Both files are JSONL written by the two judge subagents across many repos, worktrees and
+# parallel sessions. Two branches each appending a row to the same ledger is the normal case here,
+# not an anomaly, and a plain three-way merge turns every one of those into a textual conflict over
+# the last line. Git's built-in `union` driver keeps both sides' lines.
+#
+# ⚠️ These files are NOT append-only. An earlier revision of this comment said they were, and used
+# that to argue the duplicate risk below was merely "not expected". A merged PR falsified it: see
+# the second LIMIT.
 # No custom merge script: a driver that only ever needs "keep both, in order" is exactly what
 # the built-in already does, and a script would be one more thing to install per clone.
 #
@@ -22,11 +26,28 @@
 #
 # LIMIT — union concatenates, it does not deduplicate. Measured, that is narrower than "any
 # byte-identical row duplicates": when both sides append the SAME single row, the three-way merge
-# resolves the identical change itself and one row comes out, no driver involved. A row survives
-# twice only when it sits in two hunks the merge cannot align. Rows carry distinct `ts`/`head_sha`
-# so neither shape is expected here, but "not expected" is not "prevented".
+# resolves the identical change itself and one row comes out, no driver involved. A byte-identical
+# row survives twice only when it sits in two hunks the merge cannot align.
 #
-# Both limits, and the union behaviour itself, are pinned by gitattributes.test.sh — which
-# merges real commits in a throwaway repo rather than asserting any of this from the docs.
+# LIMIT — and the shape that actually bit, which the paragraph above does not cover. When one side
+# REWRITES an existing row in place and the other keeps the old copy, union keeps BOTH: the stale
+# row and the rewritten row, same identity, different bytes. The merge is clean, there is no
+# conflict marker, every row still parses, and a duplicate-LINE check sees nothing, because the two
+# copies are not identical. It is visible only by grouping rows on (ts, head_sha, stage).
+#
+# Not hypothetical. Measured 2026-09-17 merging PR #106 into this branch: #106 backfilled the
+# `outcome` field on 5 EXISTING rows rather than appending, and all 5 came out of the merge twice.
+# The previous wording of this comment predicted exactly this shape and rated it "not expected" on
+# the append-only premise; it happened on the first real merge after that sentence was written.
+# So: `union` is right for the concurrent-append case it was chosen for, and it is NOT safe across
+# an in-place row edit. Detecting that automatically is deliberately out of scope here and is
+# tracked as its own card, rather than bolted onto this one.
+#
+# Both shapes are pinned by gitattributes.test.sh — sections 6 and 10 — which merge real commits in
+# a throwaway repo rather than asserting any of this from the docs.
+#
+# The fast-forward and dedup limits above, and the union behaviour itself, are all pinned by
+# gitattributes.test.sh, which merges real commits in a throwaway repo rather than asserting any of
+# this from the docs.
 coding-memory/observability-judge/verdicts.jsonl merge=union
 coding-memory/compliance-judge/verdicts.jsonl    merge=union
