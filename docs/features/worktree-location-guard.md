@@ -5700,3 +5700,53 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
       column and a third E4 row (a `Bash` payload), so the state the defect lived in is now
       observable. ⚠️ The probe is therefore **29 rows, not the 28** the before/after diff above
       measured — re-running it today will not reproduce that row count, and should not.
+
+- [ ] 18. **Stop the two leaking test suites contaminating the machine-wide layer-2 log.**
+      Opened 2026-09-17 by task 10's attribution work. It is a **prerequisite for the flip**,
+      not a tidy-up, and should land before criterion 3 is re-run for either layer.
+
+      `hooks/git-guard.test.sh` and `hooks/verify-hook-wiring.test.sh` build git repositories
+      under `mktemp -d` and drive real HEAD moves in them, with **zero** isolation from the
+      machine's git configuration. Because `core.hooksPath` is set in the **global** config
+      only (measured 2026-09-16: `git config --global --get core.hooksPath` returns the store,
+      `--system` returns nothing), every one of those fixtures reaches the live layer-2 hook.
+      They account for **1062 of the 1066** `var/folders` would-deny lines — 941 from
+      `git-guard.test.sh`, 95 from `verify-hook-wiring.test.sh` — leaving a machine-wide log
+      that is largely its own machinery talking to itself.
+
+      **The fix is the line the two non-leaking suites already use**, at the top of each:
+
+          export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+
+      `hooks/reference-transaction.test.sh:58` and `hooks/worktree-guard.test.sh:29` both do
+      exactly this — that is why neither appears in the log, and why the timing-side
+      attribution could not have been right that `worktree-guard.test.sh` emitted any of it.
+
+      **Why this is believed safe for `git-guard.test.sh`, measured rather than assumed:** it
+      never reads the global config. Every identity it needs is set per-repository with
+      `git -C "$dir" config user.email` / `user.name` (`:27-28`, `:93-94`, `:734-735`).
+      Confirm the same for `verify-hook-wiring.test.sh` before editing it — that has **not**
+      been checked, and a suite whose whole purpose is verifying hook wiring is far more
+      likely than `git-guard.test.sh` to depend on real configuration on purpose. **If it
+      does, do not sever it** — isolate only the two fixture scenarios (`rebasing`,
+      `detached`, around `:100` and `:435-454`), or leave it alone and record that here.
+
+      Steps. Tests and implementation are never edited in the same step, and here the tests
+      **are** the thing being changed, so the check is a before/after run rather than a red
+      test:
+      1. Record both suites' current pass/fail counts, and the current line count of
+         `hooks/state/reference-transaction.log`.
+      2. Add the export to `git-guard.test.sh`. Re-run it. The counts must be **identical** —
+         a changed count means the suite was depending on the machine config, and the change
+         is not safe as written.
+      3. Re-run it a second time and confirm the log line count does **not** move. That is the
+         real falsifier for this task; a passing suite alone proves nothing about the leak.
+      4. Decide `verify-hook-wiring.test.sh` on its own evidence, per the caution above.
+      5. Only then is a clean layer-2 window available.
+
+      ⚠️ **This removes evidence as well as noise.** Afterwards layer 2's log will be nearly
+      empty, and an empty log is not proof the guard works — it is the absence of
+      observations. Criterion 2 for `D-L2` is already satisfied from the existing window and
+      should be read as satisfied *there*, historically, rather than re-litigated against a
+      clean log that may hold nothing for weeks. Record that reading here when the fix lands,
+      or a later session will read the empty log as a regression.
