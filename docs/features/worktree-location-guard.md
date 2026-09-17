@@ -5701,9 +5701,11 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
       observable. ⚠️ The probe is therefore **29 rows, not the 28** the before/after diff above
       measured — re-running it today will not reproduce that row count, and should not.
 
-- [ ] 18. **Stop the two leaking test suites contaminating the machine-wide layer-2 log.**
+- [x] 18. **Stop the two leaking test suites contaminating the machine-wide layer-2 log.**
       Opened 2026-09-17 by task 10's attribution work. It is a **prerequisite for the flip**,
       not a tidy-up, and should land before criterion 3 is re-run for either layer.
+      **DONE 2026-09-17 — both suites severed, measured before and after. Results at the end
+      of this task.**
 
       `hooks/git-guard.test.sh` and `hooks/verify-hook-wiring.test.sh` build git repositories
       under `mktemp -d` and drive real HEAD moves in them, with **zero** isolation from the
@@ -5750,3 +5752,42 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
       should be read as satisfied *there*, historically, rather than re-litigated against a
       clean log that may hold nothing for weeks. Record that reading here when the fix lands,
       or a later session will read the empty log as a regression.
+
+      **Result, 2026-09-17.** Both suites severed. The falsifier is the log line count, not a
+      green suite, and it was run as specified — measured on the **live**
+      `hooks/state/reference-transaction.log`, one suite at a time:
+
+      | run | suite result | live log | delta |
+      |---|---|---|---|
+      | baseline | — | 8697 | — |
+      | `git-guard.test.sh`, before fix | 171 passed, 0 failed | 8751 | **+54** |
+      | `git-guard.test.sh`, after fix | 171 passed, 0 failed | 8751 | **0** |
+      | `verify-hook-wiring.test.sh`, before fix | 37/37 passed | 8791 | **+40** |
+      | `verify-hook-wiring.test.sh`, after fix | 37/37 passed | 8791 | **0** |
+      | `worktree-guard.test.sh` (untouched) | 243 passed, 0 failed, 1 skipped | 8791 | **0** |
+      | `reference-transaction.test.sh` (untouched) | 182 passed, 0 failed, 1 skipped | 8791 | **0** |
+
+      Both pass counts are **identical** across the change, which is what shows neither suite
+      was depending on the machine configuration it lost. The two untouched sibling suites are
+      unchanged from their recorded figures and still contribute nothing to the live log.
+
+      **`verify-hook-wiring.test.sh` needed a different fix, and finding out why corrected a
+      wrong comment.** Its header asserted that because the fixture repos live under a fake
+      `$HOME`, "there is no `~/.gitconfig` to name a committer and no system config to
+      inherit". The second half was handled (`GIT_CONFIG_NOSYSTEM=1`); the first half is
+      **false**, and that belief is why the leak went unnoticed. `$HOME` is only ever a *path*
+      in that suite — the fixture-building commands (`git -C "$G" checkout|commit|rebase`) run
+      in the script's own environment, where `HOME` is the real one, so git read the real
+      `~/.gitconfig`, which is where `core.hooksPath` is set (`git config --global --list
+      --show-origin` → `file:/Users/marksuyat/.gitconfig core.hookspath=…`). Severing was safe
+      only because that suite takes its identity from `GIT_AUTHOR_*`/`GIT_COMMITTER_*`
+      environment variables rather than from any config file — checked before editing, exactly
+      as the caution above demanded. The comment is corrected in place.
+
+      **What this does NOT do.** It removes the *contamination*, not the underlying refusal:
+      layer 2 still refuses a HEAD write in any primary checkout, so the three arming costs in
+      task 10's 2026-09-17 note stand unchanged — the user's own `git pull`, every judge
+      scratch clone, and layer 1's `SEG_UNPARSED`/`SEG_OPAQUE` false-denial rate. What has
+      changed is that the layer-2 log will now record **only** those, so the next criterion-3
+      pass reads real events instead of 87% machinery. The standing recommendation not to flip
+      is unaffected by this task.
