@@ -266,7 +266,7 @@ remedy_line() {
         esac
       else
         case "$kind" in
-          commit) printf 'Create a feature branch instead (git switch -c <name>), or stage only documentation.' ;;
+          commit) printf 'Create a feature branch instead (git switch -c <name>), or stage only docs/*.md or a judge ledger.' ;;
           push)   printf 'Push from a feature branch instead (git switch -c <name>).' ;;
         esac
       fi ;;

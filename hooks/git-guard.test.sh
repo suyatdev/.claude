@@ -261,7 +261,7 @@ stage src/app.sh
 
 run_case "plain commit, source staged on main -> block"      2 'git commit -m msg'
 assert_stderr "$REPO" "  ...remedy line matches state 1 (named branch, no sequencer), commit" \
-  'git commit -m msg' 'Create a feature branch instead (git switch -c <name>), or stage only documentation.'
+  'git commit -m msg' 'Create a feature branch instead (git switch -c <name>), or stage only docs/*.md or a judge ledger.'
 run_case "CHAINED commit, source staged on main -> block"    2 'git add -- src/app.sh && git commit -m msg'
 run_case "chained with ; separator -> block"                 2 'git add -- src/app.sh ; git commit -m msg'
 run_case "chained with || separator -> block"                2 'false || git commit -m msg'

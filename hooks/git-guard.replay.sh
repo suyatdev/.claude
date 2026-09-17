@@ -315,7 +315,9 @@ is_expected_relaxed() {
 # Every case where main BLOCKS and the candidate ALLOWS is a relaxation. Each one
 # has to be inspected: a relaxation is intended ONLY where the commit names its own
 # documentation paths, or names one of the two judge ledgers declared in
-# EXPECTED_RELAXED. Printed once per distinct command, not once per state.
+# EXPECTED_RELAXED. Printed once per (state, command) pair -- the same command can
+# appear on several lines, one per state where it relaxed, which is also why
+# `relaxed` and `relaxed_undeclared` below are pair counts, not command counts.
 #
 # `relaxed` still counts EVERY relaxation, declared or not, so the summary line
 # never under-reports how far this branch has moved; `relaxed_undeclared` is what

@@ -864,3 +864,30 @@ The observability judge still gates the PR, and that gate is not waived.
 - **Open, deliberately, per ADR 0026:** `merge`/`cherry-pick`/`revert`/`am`/`rebase` still bypass the
   commit allowlist entirely (pre-existing, unrelated to this fix); the sequencer carve-out knowingly
   widens that gap slightly for a hand-written commit mid-conflict on a detached HEAD.
+
+---
+
+## Superseded quoted strings — appended 2026-09-17, nothing above this line edited
+
+This card quotes `hooks/git-guard.sh`'s refusal and remedy text as **exact** strings in three
+places. All three have since been changed by later work. They are left standing above because two
+of them are records of what was measured at the time, and rewriting a past measurement to match a
+present one destroys the only evidence that the measurement happened. This note is appended rather
+than spliced in for the same reason anchors are named rather than numbered: three other cards cite
+line ranges in the second half of this file, and an insert would move every one of them.
+
+| Line | Quoted as | Superseded by | Changed in |
+|---|---|---|---|
+| 341 | `...commits are restricted to documentation (CODING_MEMORY.md, coding-memory/*, docs/*.md).` | `...commits are restricted to documentation (docs/*.md) and the two judge verdict ledgers.`, followed by a second line naming both ledger paths in full | PR #59 narrowed it to `docs/*.md` alone; PR #104 re-added the two ledgers |
+| 350 | `Create a feature branch instead (git switch -c <name>), or stage only documentation.` | `Create a feature branch instead (git switch -c <name>), or stage only docs/*.md or a judge ledger.` | PR #104 |
+| 732 | same text as 341 and 350, inside an implementation log | — | not superseded: this one is a **historical record** of a rendered-output check run at that time, not a contract. It is correct as history and must not be rewritten |
+
+The live strings are in `hooks/git-guard.sh` — the `commit)` arm of `remedy_line()`, and the Guard 1
+refusal block. `hooks/git-guard.test.sh` pins the remedy string exactly, so that file, not this one,
+is what fails if the text drifts again.
+
+⚠️ **Why 350 changed.** PR #104 allowlisted two judge ledgers for commits on the default branch, so
+"stage only documentation" became advice that would fail. The first replacement drafted was
+"stage only one of the paths named above" — rejected on inspection, because the text printed
+immediately above the remedy line is the list of files the commit was *refused* for, so it read as
+"re-stage what was just rejected". The shipped wording is self-contained instead.

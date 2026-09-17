@@ -111,7 +111,10 @@ new_repo() { # $1 = attrs | noattrs | stripped
     attrs)    must cp "$ATTRS" "$dir/.gitattributes" ;;
     # Comments kept, both `merge=union` lines dropped: isolates the two lines from the file's
     # mere existence, so a future .gitattributes that keeps the prose and loses the rules fails.
-    stripped) awk '!/merge=union/' "$ATTRS" > "$dir/.gitattributes" || exit 3 ;;
+    # Anchored to a non-comment line start: the prose above also says "merge=union" in a comment
+    # (explaining why it is inert on a fast-forward), and a bare `!/merge=union/` drops that
+    # comment line too, leaving a file that no longer isolates the rules from the prose.
+    stripped) awk '!/^[^#[:space:]].*merge=union/' "$ATTRS" > "$dir/.gitattributes" || exit 3 ;;
     noattrs)  ;;
   esac
   for f in "$OBS" "$CMP" "$NEIGHBOUR"; do printf '%s\n' "$BASE_ROW" > "$dir/$f" || exit 3; done

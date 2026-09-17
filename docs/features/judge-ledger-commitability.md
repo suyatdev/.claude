@@ -261,18 +261,53 @@ replacement edits both, leaves the declaration count unchanged, and the run exit
 occurrence count, not by the result looking wrong. Any future mutation of this file must be scoped
 to the declaration block **and must assert the block shrank**.
 
-## Carried forward — deliberately not fixed in this round
+## Carried forward — resolved 2026-09-17, deferral reversed
 
-- `hooks/git-guard.sh`, the `commit)` arm of the remedy `case` inside `refuse()` — it still reads
-  "or stage only documentation". Changing it would break the exact-string assertion in
-  `hooks/git-guard.test.sh`, and the refusal line directly above it now prints both ledger paths
-  in full.
+Both entries below were carried forward as "deliberately not fixed". A GitHub Copilot review of
+PR #104 raised the first of them independently, and the user directed that the review be addressed,
+so the deferral is **reversed**. The original entries are kept in full below the strikethrough
+reasoning so that what was deferred, and why the reason did not hold, are both legible.
+
+- **RESOLVED.** `hooks/git-guard.sh`, the `commit)` arm of the `case` inside **`remedy_line()`** —
+  it read "or stage only documentation", which went stale the moment this PR allowlisted the two
+  ledgers. It now reads "or stage only docs/*.md or a judge ledger."
+  The stated reason for deferring — that changing it "would break the exact-string assertion in
+  `hooks/git-guard.test.sh`" — was **not a reason to defer**: an assertion breaking is the
+  assertion doing its job. The fix was applied implementation-first, the suite was run and observed
+  to go **175 passed, 1 failed** on exactly that assertion (which is the proof the pin binds to
+  this string and is not unreachable), and only then was the pinned string updated — **176 passed,
+  0 failed**.
+  ⚠️ **A first replacement was drafted and rejected.** "or stage only one of the paths named above"
+  reads as correct in isolation and is wrong in place: the text printed immediately above the
+  remedy line is the `Staged files:` list — the paths the commit was *refused* for — so the advice
+  resolves to "re-stage what was just rejected". Caught by rendering the actual refusal rather than
+  by reading the diff. The shipped wording is self-contained.
+  > ⚠️ **Second correction, 2026-09-17.** The 2026-09-14 correction block below fixed this entry's
+  > dead `:234` citation but left a **wrong function name standing beside it**: the entry said the
+  > remedy `case` lives inside `refuse()`. There is no `refuse()` in `hooks/git-guard.sh` at all —
+  > measured, 0 occurrences; `refuse()` is a function in `hooks/worktree-guard.sh`, a different
+  > hook. So the name-based anchor adopted *to survive line drift* pointed at the wrong file's
+  > function for three days, inside the very entry that announced the switch to name-based anchors.
+  > A correction marker makes the surrounding text look audited when it is not. The anchor is now
+  > `remedy_line()`, verified present in `hooks/git-guard.sh`.
   > **Corrected 2026-09-14 (observability judge, verified).** This entry cited
   > `hooks/git-guard.sh:234`, which is `return 1` in an unrelated helper; the remedy line is ~35
   > lines further down. The number was right when written and died in the 496-commit merge. Anchors
   > here are now **function and case-arm names**, per ADR 0047's own rule — the same rule ADR 0044
   > adopted after every `:NNN` in a card died at once.
   > This is the six-site drift the ADR warns about, arriving inside the change that documented it.
-- `docs/features/git-guard-detached-head.md:341` and `:732` quote the refusal message as
-  `(CODING_MEMORY.md, coding-memory/*, docs/*.md)` — stale since PR #59, now stale twice over.
-  Outside every worker's assigned file set this round.
+- **RESOLVED, by annotation rather than rewrite.** `docs/features/git-guard-detached-head.md:341`
+  and `:732` quote the refusal message as `(CODING_MEMORY.md, coding-memory/*, docs/*.md)` — stale
+  since PR #59, now stale twice over. Its `:350` quotes the old remedy string as well, which the
+  earlier entry did not notice.
+  These were **not rewritten in place.** `:732` sits inside an implementation log recording a
+  rendered-output check that was actually run at the time; editing it to match today's text would
+  destroy the evidence that the check happened, which is the one thing that entry is for. `:341`
+  and `:350` are that card's own "exact" contract tables, historical in the same way.
+  Instead a dated **"Superseded quoted strings"** table is **appended at the end of that file**,
+  naming all three lines, what each is superseded by, and which of the three is history rather than
+  contract. Appending was chosen over splicing because two other cards carry three line-range
+  citations into that file's second half (`global-option-blindness.md` twice, at its own lines 417
+  and 782; `memsearch-freshness.md` once, at 1898) and an insert would have moved every one of
+  them. Verified after the append: lines 341 and 350 still
+  land on their original rows.
