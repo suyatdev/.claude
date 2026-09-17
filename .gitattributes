@@ -43,11 +43,10 @@
 # an in-place row edit. Detecting that automatically is deliberately out of scope here and is
 # tracked as its own card, rather than bolted onto this one.
 #
-# Both shapes are pinned by gitattributes.test.sh — sections 6 and 10 — which merge real commits in
-# a throwaway repo rather than asserting any of this from the docs.
-#
-# The fast-forward and dedup limits above, and the union behaviour itself, are all pinned by
-# gitattributes.test.sh, which merges real commits in a throwaway repo rather than asserting any of
-# this from the docs.
+# Everything above is pinned by gitattributes.test.sh, which merges real commits in a throwaway repo
+# rather than asserting any of it from these comments: the union behaviour itself (sections 1-5),
+# both duplication shapes (6 for a byte-identical row, 10 for an in-place row edit), and the
+# fast-forward limit (7). Stated once, here, deliberately — an earlier revision made this claim in
+# two adjacent paragraphs with different wording, which is how the two drift apart.
 coding-memory/observability-judge/verdicts.jsonl merge=union
 coding-memory/compliance-judge/verdicts.jsonl    merge=union
