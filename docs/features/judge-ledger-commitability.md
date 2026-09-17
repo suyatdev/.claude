@@ -265,8 +265,12 @@ to the declaration block **and must assert the block shrank**.
 
 Both entries below were carried forward as "deliberately not fixed". A GitHub Copilot review of
 PR #104 raised the first of them independently, and the user directed that the review be addressed,
-so the deferral is **reversed**. The original entries are kept in full below the strikethrough
-reasoning so that what was deferred, and why the reason did not hold, are both legible.
+so the deferral is **reversed**. Each entry below states what was deferred and why the stated
+reason did not hold. ⚠️ The original wording is **not** reproduced verbatim — it was replaced by
+the paraphrase you are reading. An earlier revision of this paragraph claimed the originals were
+"kept in full below the strikethrough reasoning"; there were no strikethroughs and nothing was kept
+verbatim, so the claim was false in two ways at once. `git show` on this file is the record of the
+original text.
 
 - **RESOLVED.** `hooks/git-guard.sh`, the `commit)` arm of the `case` inside **`remedy_line()`** —
   it read "or stage only documentation", which went stale the moment this PR allowlisted the two
