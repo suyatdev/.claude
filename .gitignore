@@ -71,6 +71,14 @@ tasks/
 # GitHub PR status cache (machine-specific)
 /gh-pr-status-cache.json
 
+# Root-level running log and its backups. Machine-local, hand-kept, 95 KB as of
+# 2026-09-08, and a DIFFERENT file from the hook-managed /.claude/session-state.md.
+# It was untracked but NOT ignored, so a `git add .` in this PUBLIC repo would have
+# published raw session narrative. Found by the compliance judge, 2026-09-08.
+/session-state.md
+/session-state.backup-*.md
+/session-state.archive*.md
+
 # memsearch index cache (regenerable, potentially sensitive)
 /memory-index/
 
