@@ -4347,14 +4347,41 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       regression" here means *the tilde path was exercised and behaved*, not *no tilde
       commands occurred*.
 
-      **Criterion 3, layer 2 — the population is almost entirely synthetic.** 1226 would-deny
-      lines over 15 days, but they dedupe to 331 distinct targets of which **327 are throwaway
-      test fixtures** in `mktemp` and `/tmp` directories. Only **4 are real repositories**, and
-      their 19 lines all fall between 2026-09-01 and **2026-09-08** — layer 2 has recorded no
-      real-world refusal in the eight days since. A per-row review was dispatched and had not
-      landed when this note was written; when it does it belongs in
-      `evidence/worktree-location-guard/layer2-criterion3-review.md`, and this paragraph
-      should be updated to cite it rather than restate it.
+      **Criterion 3, layer 2 — PARTIAL. Satisfied for the 19 real-repository lines, not for
+      the window.** Review at `evidence/worktree-location-guard/layer2-criterion3-review.md`.
+
+      ⚠️ **A sentence that stood here was wrong, and correcting it is the most useful thing
+      this pass produced.** It read: of 331 distinct targets, "327 are throwaway test
+      fixtures". That was inferred from path shape alone — `/private/var/folders/…` and
+      `/private/tmp/…` look like scratch — and **a temporary directory is not a test
+      fixture.** Asked to find positive evidence rather than assume it, the review found:
+      the 141 `/private/tmp` lines are **judge-subagent scratch clones doing real
+      verification work**; 95 lines are genuine test leakage but from
+      `hooks/verify-hook-wiring.test.sh`, a suite neither of us had named; and **971 lines,
+      79% of the population, remain unattributed** and are explicitly not called fixtures.
+      The two suites that looked like the obvious source are ruled out — confirmed here:
+      `verify-hook-wiring.test.sh` carries **zero** isolation directives while
+      `reference-transaction.test.sh` and `worktree-guard.test.sh` carry 14 and 19.
+
+      All **19 real-repository refusals are judged CORRECT**, each matched against that
+      repository's own reflog. Spot-checked independently: the three lines at
+      `2026-09-08T16:05:12Z` correspond exactly to three HEAD writes from a single
+      `pull --rebase origin main` in the primary `.claude` checkout — and the reflog author
+      is the **user**, not an agent. Those 19 fall between 2026-09-01 and 2026-09-08; layer 2
+      has recorded no real-repository refusal since.
+
+      **The judge-clone finding is what bears on arming, and it is new.** A judge subagent
+      clones a repo into a scratch directory to verify a commit. A fresh clone *is* a primary
+      checkout, so the `checkout` that follows it is exactly what layer 2 refuses — traced
+      through the log for `/private/tmp/obsjudge-r10/at-2cb5aec`, two would-deny lines in the
+      same second. Arming layer 2 therefore breaks the judge verification workflow, and since
+      `hooks/judge-guard.sh` gates `gh pr create` on a fresh verdict, that reaches the
+      pull-request path. Two ordinary things break on arming, not one: the user's own
+      `git pull` in a primary checkout (the 19 lines above) and every judge scratch clone.
+
+      Criterion 3 for layer 2 is therefore **not** satisfiable from this window until the 971
+      unattributed lines are attributed. Doing that is the next piece of work, and it is a
+      prerequisite for the flip, not an optional tidy-up.
 
       **What changed about the flip decision.** The 2026-09-04 note worried that arming would
       block ordinary work in repos that had no worktree yet. That specific worry has eased —
@@ -4362,9 +4389,16 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       `vibe-scape`, `.claude`) now have linked worktrees under `~/.worktrees/`. It has been
       replaced by a sharper one: the dominant refusal in the current window is not a misplaced
       worktree but an **unparseable or opaque Bash line**, and arming today would block most
-      ordinary heredoc-and-pipeline work at a rate the earlier notes never measured. Whether
-      that cost is acceptable is a judgement for the user, not a criterion this card can
-      settle on its own. **Do not flip without asking.**
+      ordinary heredoc-and-pipeline work at a rate the earlier notes never measured.
+
+      Counting both layers, arming today would break three ordinary things, none of which is
+      a misplaced worktree: opaque or unlexable Bash commands (layer 1, ~70 of 76 lines in
+      the current window), the user's own `git pull` in a primary checkout (layer 2, the 19
+      real-repository lines), and every judge subagent's scratch clone (layer 2, which via
+      `judge-guard.sh` reaches `gh pr create`). Whether that cost is acceptable is a
+      judgement for the user, not a criterion this card can settle on its own. **Do not flip
+      without asking.** The recommendation from this pass is not to flip: teach the guard to
+      recognise these three shapes first, then re-measure.
 - [x] 11. ADR under `docs/decisions/` — this changes a machine-wide invariant and pivots the
       standing worktree rule from advisory to enforced. Verify the next free number against the
       deciding ref, not stale local `main`.
