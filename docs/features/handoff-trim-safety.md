@@ -23,11 +23,13 @@ seventeen, then eighteen), and the full spec live in
 [`handoff-trim-safety.spec.md`](handoff-trim-safety.spec.md).** Read it before implementing;
 do not read it at session start.
 
-Status: **review** — the round-13 fixes are done, final source commit `c562f58` (the
-strike-cap `archive_failed` test; the split-runner loud-failure fix is `cc08576`, the
-task-number/task-10-mirror/unfiled-row doc fixes are `0681951`); the frontmatter `phase` is
-the authority and this line must agree with it. Both judges PASSED on the spec and must run
-again on this round's implementation, before any PR.
+Status: **review** — **PR #105 is open and ready for review** (opened 2026-09-16 on the
+merge commit `33328e7`; merging happens in the GitHub UI). Last behaviour change `c562f58`
+(the strike-cap `archive_failed` test; the split-runner loud-failure fix is `cc08576`, the
+task-number/task-10-mirror/unfiled-row doc fixes are `0681951`); the last edit to a hook file
+is `7965e40`, comment only. The frontmatter `phase` is the authority and this line must agree
+with it. Both judges ran on the implementation three times on 2026-09-16 — outcome under
+`## Verification` — and the loop was stopped after round 14 under the stop rule.
 
 Compliance, on the **spec**: FAILED seven times (9, 8, 7, 4, 1, 5, 1 violations across rounds
 1 to 7), then **PASSED with zero violations in round 8**. On the **implementation**: FAILED
