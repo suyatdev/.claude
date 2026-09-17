@@ -23,8 +23,10 @@ seventeen, then eighteen), and the full spec live in
 [`handoff-trim-safety.spec.md`](handoff-trim-safety.spec.md).** Read it before implementing;
 do not read it at session start.
 
-Status: **review** — **PR #105 is open and ready for review** (opened 2026-09-16 on the
-merge commit `33328e7`; merging happens in the GitHub UI). Last behaviour change `c562f58`
+Status: **review** — **PR #105 MERGED 2026-09-17** (merge commit `3668c19`; branch tip
+`009d815` verified reachable from `origin/main`). Not live until `~/.claude` pulls `main` —
+hooks run from that checkout. Judge-ledger outcomes backfilled in the post-merge chore
+(observability at `33328e7` = clean, every other row = rework). Last behaviour change `c562f58`
 (the strike-cap `archive_failed` test; the split-runner loud-failure fix is `cc08576`, the
 task-number/task-10-mirror/unfiled-row doc fixes are `0681951`); the last edit to a hook file
 is `7965e40`, comment only. The frontmatter `phase` is the authority and this line must agree
