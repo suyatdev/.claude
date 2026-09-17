@@ -5784,6 +5784,15 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
       environment variables rather than from any config file — checked before editing, exactly
       as the caution above demanded. The comment is corrected in place.
 
+      ⚠️ **The clean window starts at MERGE, not at this commit.** These suites are normally
+      run from whichever checkout a session happens to be in, and the primary still holds the
+      leaking copies — measured immediately after committing: `hooks/git-guard.test.sh` hashes
+      to `04f2c3ce` on this branch and `7bf0e4c2` in the primary. Any run from the primary, or
+      from another worktree branched before this, keeps appending. So when the next
+      criterion-3 pass picks its window start, it must use the **merge** date, and should
+      verify the primary's blob the way task 10 verified the guard's — the same lesson as "a
+      merge does not make a hook live", pointed the other way.
+
       **What this does NOT do.** It removes the *contamination*, not the underlying refusal:
       layer 2 still refuses a HEAD write in any primary checkout, so the three arming costs in
       task 10's 2026-09-17 note stand unchanged — the user's own `git pull`, every judge
