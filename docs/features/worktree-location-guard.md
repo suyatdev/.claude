@@ -4383,6 +4383,63 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       unattributed lines are attributed. Doing that is the next piece of work, and it is a
       prerequisite for the flip, not an optional tidy-up.
 
+      **2026-09-17 — the 971 are attributed, by two independent methods that agree, and the
+      answer changes what the flip costs.** Reports:
+      `evidence/worktree-location-guard/attribution-by-source.md` (which suite builds these
+      fixtures, read out of the test sources) and `attribution-by-time.md` (which activity was
+      running, read out of burst structure and other logs). The two agents never saw each
+      other's work, by design.
+
+      **Nearly all of it is `hooks/git-guard.test.sh`.** That suite builds its per-case
+      fixtures with the literal template `mktemp -d "$TMP/repo.XXXXXX"` (`git-guard.test.sh:91`)
+      — exactly the path shape the log records — and accounts for 941 lines: 435 under the
+      shared `repo` fixture, 506 under the variants, and 26 at a bare mktemp root. The
+      remaining 95 are the `rebasing` and `detached` scenarios in
+      `hooks/verify-hook-wiring.test.sh`, matching what the layer-2 review had already found.
+      **Four lines, under directories named `full` and `shallow`, are still unattributed** and
+      are deliberately left that way rather than guessed at.
+
+      The agreement is stronger than two reports saying the same thing, which can always be
+      one error repeated. Each side produced a fixture fingerprint in different units — the
+      source side as a population (23 directories with one lock, 46 with two, 69 with three,
+      46 with four), the timing side as a single run (8 variant directories with locks
+      `{4,4,3,3,3,2,2,1}`, recurring 23 times) — and those are the same claim only if one
+      scales into the other. `evidence/worktree-location-guard/verify-fixture-fingerprint.py`
+      checks both against **the log** rather than against either report, so the log is the
+      third party: 184 directories, 506 lines, distribution `{1:23, 2:46, 3:69, 4:46}`,
+      184 = 23 × 8, 506 = 23 × 22. Five of five checks pass.
+
+      **Where they disagreed, and how it resolves.** The timing side attributed the bursts to
+      `git-guard.test.sh` *and* `worktree-guard.test.sh` being re-run back-to-back. Both
+      suites did run together — but only one of them can have emitted these lines.
+      `worktree-guard.test.sh:29` exports `GIT_CONFIG_GLOBAL=/dev/null
+      GIT_CONFIG_SYSTEM=/dev/null` suite-wide, and the later cases that override it point at
+      their own fixture configs (`$TMP/live/gc-armed` and friends), never at the machine's.
+      Since `core.hooksPath` is set in the **global** config only (verified), that suite is
+      severed from layer 2 and cannot leak. Timing could see co-occurrence but not emission;
+      source could see emission. The source reading stands, and the disagreement is a limit
+      of the timing method rather than a contradiction.
+
+      **The leak has a one-line fix, and it is worth doing whether or not the guard is ever
+      armed.** Both leaking suites carry **zero** isolation directives;
+      `reference-transaction.test.sh` and `worktree-guard.test.sh` carry 14 and 19. Adding the
+      same `export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null` line the working
+      suites already use would sever both from layer 2, removing 1062 of 1066 lines from a
+      machine-wide log they have been quietly contaminating.
+
+      **And arming has one more cost, the sharpest yet: it would disable another guard's
+      regression suite.** `git-guard.test.sh` exists because `git-guard.sh` once silently
+      stopped matching chained commands and nothing caught it. Its fixtures are primary
+      checkouts by construction, so under `deny` nearly every one of them fails to build.
+      Arming this guard would switch off the alarm on that one. Fixing the isolation removes
+      this too — which is why the isolation fix should come first, and the flip should be
+      re-measured on a clean log afterwards.
+
+      **Standing recommendation, unchanged and now better supported: do not flip.** In order:
+      isolate the two leaking suites, let the log re-accumulate on clean data, re-run
+      criterion 3 for both layers, and only then revisit arming — with the layer-1
+      `SEG_UNPARSED`/`SEG_OPAQUE` false-denial rate as its own separate blocker.
+
       **What changed about the flip decision.** The 2026-09-04 note worried that arming would
       block ordinary work in repos that had no worktree yet. That specific worry has eased —
       all four repositories layer 1 has ever refused (`Snatch-Bracket`, `mtg-wizard`,
