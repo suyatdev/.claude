@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
-branch: none
+branch: feat/guard-loosening-approval
 ---
 
 # Guard-loosening stops and asks for approval
@@ -10,9 +10,13 @@ Spec: `docs/superpowers/specs/2026-09-20-guard-loosening-approval-design.md` —
 design.** This card carries frontmatter, status and the task list only; the two are deliberately not
 duplicated, because two documents describing the same work means a reader cannot tell which is wrong.
 
-**Status 2026-09-20: SPEC WRITTEN, AWAITING HUMAN REVIEW. No branch, no code.**
-The phase stays `planning` and no branch is created until the user types the literal phrase
-`gate confirmed`.
+**Status 2026-09-20: GATE CONFIRMED by the user. Phase is `implementation`, branch
+`feat/guard-loosening-approval` (cut from the spec commit `1d0f03c`). No code written yet — the
+transition was made and the session cleared immediately after, which is the mandatory `/clear`
+point the gate calls for.**
+
+⚠️ The spec has **not** been amended since review. If the user's reading of it produces changes,
+those are spec edits and re-trigger the compliance gate before more code is written.
 
 ## The one-line problem
 
