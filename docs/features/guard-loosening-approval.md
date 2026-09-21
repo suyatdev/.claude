@@ -15,8 +15,15 @@ duplicated, because two documents describing the same work means a reader cannot
 transition was made and the session cleared immediately after, which is the mandatory `/clear`
 point the gate calls for.**
 
-⚠️ The spec has **not** been amended since review. If the user's reading of it produces changes,
-those are spec edits and re-trigger the compliance gate before more code is written.
+⚠️ **No DESIGN content in the spec has been amended since it was written.** Two *status* lines were
+corrected on 2026-09-21 — its header and §12 still said "no implementation branch exists" and "no
+branch, no code until the user types `gate confirmed`", both of which the gate transition itself had
+made false. A reader arriving at the spec would have concluded the gate was still shut. The
+correction is marked in place in the spec.
+
+If the user's reading produces changes to the **design**, those re-trigger the compliance gate
+before more code is written. A status line falsified by a transition is bookkeeping, not redesign —
+do not use that distinction to smuggle a design change through.
 
 ## The one-line problem
 

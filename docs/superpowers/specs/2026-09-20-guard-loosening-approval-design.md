@@ -1,7 +1,17 @@
 # Guard-loosening approval — design
 
-**Status: SPEC, awaiting human review. No code exists. No implementation branch exists.**
-Written 2026-09-20. Card: `docs/features/guard-loosening-approval.md`.
+**Status: GATE CONFIRMED 2026-09-20 — implementation is open. NO CODE EXISTS YET.**
+Branch `feat/guard-loosening-approval` (transition commit `ba3ab3c`). Written 2026-09-20.
+Card: `docs/features/guard-loosening-approval.md`.
+
+> **Status corrected 2026-09-21.** This header and §12 previously read "awaiting human review / no
+> implementation branch exists / no branch, no code until the user types `gate confirmed`". The user
+> typed the phrase on 2026-09-20 and the branch was created, so both statements had become false —
+> a reader arriving at the spec would have concluded the gate was still shut.
+> **Only these two status statements were changed. No design content, scenario, requirement or
+> measurement in this document has been amended since it was written.** Design changes under
+> `phase: implementation` would re-trigger the compliance gate; a status line that the gate
+> transition itself falsified is bookkeeping, not redesign.
 
 ---
 
@@ -356,4 +366,9 @@ No new third-party dependency. Adding one is a decision for the user
 reason it exists: a logic error caught here costs a paragraph, and the same error caught after
 implementation costs everything built on it.
 
-**No branch, no code, until the user types `gate confirmed`.**
+⚠️ **This gate is now CLOSED BEHIND US — the user typed `gate confirmed` on 2026-09-20 and the
+branch exists.** The requirement above (a human reads this spec end to end) was satisfied then.
+It is recorded rather than deleted because it is why the spec exists at all.
+
+**What still stands in front of the code: §4, task 0.** It is a blocking spike with a stop
+condition, not a warm-up.
