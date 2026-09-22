@@ -216,7 +216,8 @@ for rel in docs/features/a.md docs/decisions/0011.md CODING_MEMORY.md coding-mem
            projects/-Users-x--claude/memory/feedback_x.md \
            projects/-Users-x--claude/memory/MEMORY.md \
            rules/gates.md rules/core-conduct.md \
-           skills/writing-specs/SKILL.md skills/_standards/authoring.md; do
+           skills/writing-specs/SKILL.md skills/_standards/authoring.md \
+           CLAUDE.md README.md AGENTS.md; do
   allow_silent "unguarded path: $rel" "$OPTED" "$(payload Write file_path "$OPTED/$rel")"
 done
 
@@ -231,6 +232,14 @@ done
 # file merely named for them, and mid-planning that source is what this hook guards.
 deny "a file merely NAMED rules is not exempt" "$OPTED" "$(payload Write file_path "$OPTED/rules.sh")"
 deny "a file merely NAMED skills is not exempt" "$OPTED" "$(payload Write file_path "$OPTED/skills.sh")"
+
+# The top-level-markdown exemption is any *.md file in the repository's top-level
+# directory -- scoped to the top level, not to markdown anywhere. These three prove
+# that scope: markdown nested in a subdirectory stays guarded, and a top-level file
+# that isn't markdown stays guarded too.
+deny "nested markdown stays guarded: frontend/README.md" "$OPTED" "$(payload Write file_path "$OPTED/frontend/README.md")"
+deny "nested markdown stays guarded: agents/judge.md" "$OPTED" "$(payload Write file_path "$OPTED/agents/judge.md")"
+deny "a top-level non-markdown file stays guarded: setup.py" "$OPTED" "$(payload Write file_path "$OPTED/setup.py")"
 
 # projects/*/memory/* is where the harness's own memory tool writes. Omitting it
 # meant EVERY memory write was refused while any feature file sat at planning --
