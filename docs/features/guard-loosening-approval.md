@@ -75,5 +75,37 @@ three guards; refuse when unattended; approval lifetime; **one shared watcher ho
 
 ## Verification
 
-Not started. Nothing here has been run, and no claim in the spec about how the feature *behaves* has
-been demonstrated — only the §3 measurements of the existing code have, on 2026-09-20.
+**Task 0 is half resolved as of 2026-09-21. Its checkbox stays unticked: the design's exit
+condition is the interactive half, and that half is still unmeasured.** No claim about how the
+*feature* behaves has been demonstrated — nothing is built. What follows measures the **existing**
+`ask` machinery the design depends on.
+
+Probe shape: `git-guard.sh` has exactly one `ask` emission site (line 480), reachable only through
+Guard 3 / `SCOPE_UNKNOWN`. `lib/classify-git-command.py:185-189` shows `_walk_globals` returns
+blocking for bucket 2 (`GLOBAL_REDIRECT`) *and* bucket 3 (unrecognised), so a read-only
+`git -c core.pager=cat status --short` reaches it. That command is the only shape proven to reach
+the ask site **unshadowed** — a commit probe is invalid, because another hook's `deny`
+(`doc-guard`, `test-marker-guard`) outranks an `ask` and the run would measure nothing.
+
+| # | Claim | Evidence |
+|---|---|---|
+| 1 | Synthetic `PreToolUse` payload for that command → `permissionDecision: ask`, exit 0 | payload piped to the hook directly |
+| 2 | Control `git status --short` → no output, exit 0 | discriminates; claim 1 is not a constant |
+| 3 | **In a bypass-permissions session the ask command RAN** (printed `?? .local/`) | the `ask` did not block |
+| 4 | Claim 3 is not "the hook never ran" — the hook is live on `Bash` | a deliberately unlexable command was **blocked** by Guard 0 `SEG_UNPARSED` (exit 2), refusal text surfaced |
+| 5 | All four guards are registered `PreToolUse`/`Bash`; `settings.json` `permissions.defaultMode` is `default` | the bypass is a session runtime flag, not configuration |
+| 6 | On the exit-0 `ask` path stderr was **not** surfaced; on the exit-2 deny path it **was** | scoped to bypass mode only — says nothing about the interactive case |
+
+**What this settles.** Spec §4's second scenario is answered: under a pane subagent the `ask` is
+**silently allowed**. The settled decision "refuse outright when unattended" (§2, 2026-09-16) now
+rests on a measurement rather than an assumption. The sharpest consequence for §7: fail-closed must
+mean **exit 2**, never `ask`, on any path required to hold under bypass mode — claims 3 and 4
+together show a `deny` blocks and an `ask` does not, in the same session, from the same hook.
+
+**What remains open.** Whether `ask` blocks in an interactive session at normal permissions. It
+cannot be measured from inside a bypass-mode session, and no subagent lane substitutes: in-process
+agents inherit the parent's mode, pane agents skip permissions by design. Put to the user
+2026-09-21; not yet answered — their reply reported an unrelated `Stop hook` failure
+(`hooks/handoff/handoff-keep-guard.sh` is registered at `settings.json:165,175` but has no execute
+bit), which fires after the turn and therefore carries no information about whether a prompt
+appeared. **Do not infer the outcome from it.**
