@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: fix/phase-guard-root-markdown
 ---
@@ -172,11 +172,15 @@ already returns.
     opt-in from the session's cwd (another repo, not opted in) and exits 0 before judging, so
     `78e2dab`'s `TEST_EXEMPT` was never consumed and neither repo log holds a row. Measured
     2026-09-22 by running the guard on the real payload (rc 0, no row). That commit's message
-    reads as though the gate honoured the exemption; it is true as the reason the flag was set —
-    though what the helper actually returns for this command is FOREIGN_REPO, so the pairing
-    reason itself was never exercised — and wrong as an account of what happened. Left unamended
-    by Mark's call (2026-09-22) — corrected here and in the PR body rather than by rewriting a
-    pushed commit. The gate gap gets its own card.
+    reads as though the gate honoured the exemption; it is true as the reason the flag was set,
+    and wrong as an account of what happened. The pairing reason it gives was never exercised
+    either way: with the flag the helper short-circuits to `EXEMPT`
+    (`hooks/lib/decide-commit-gate.py:310-315`), with the flag stripped it blocks on the
+    command's form as `FOREIGN_REPO` (`:317-318`), and both return upstream of pair formation at
+    `:339`. (Measured. An earlier wording here said the helper "actually returns FOREIGN_REPO for
+    this command" — that is the flag-stripped counterfactual, not the command as typed; the
+    re-review caught it.) Left unamended by Mark's call (2026-09-22) — corrected here and in the
+    PR body rather than by rewriting a pushed commit. The gate gap gets its own card.
 - [x] 4. **Docs** — `rules/gates.md:5`, the Phase gate stub's exemption clause, gains "and any
   `*.md` at the repository root". The deny message's claim ("feature files live under docs/,
   which this guard never blocks") stays true and is not edited. Every `<file>:N` citation on this
@@ -195,11 +199,38 @@ already returns.
   - Known sibling gap, out of scope: `hooks/worktree-guard.sh:676-678` carries the identical
     exempt list, so once that guard leaves `log` mode a top-level markdown edit in a primary
     checkout will be refused there too. Its own card owns that decision; nothing here closes it.
-- [ ] 5. **Judge, PR, handover** — model-switch checkpoint 3 asked; observability judge (Opus,
+- [x] 5. **Judge, PR, handover** — model-switch checkpoint 3 asked; observability judge (Opus,
   high) on the implementation; `gh pr create`; after the GitHub merge, the primary checkout at
   `~/.claude` is on `main` and must pull before any session benefits (`git -C ~/.claude pull
   --ff-only` — another session owns that checkout, so the command is handed to Mark, not run).
+  - Gate 3 asked and answered 2026-09-22: Opus for both the reviewer and the judge. Whole-branch
+    Opus review at `cb0d9ce` — spec compliant, quality approved, 1 Important (the suite pinned
+    three filenames, not the rule) + 6 Minor; fix round in `ee9d4a5`/`5d4f7ad`, scoped Opus
+    re-review: all five addressed. Receipts in `## Verification`.
 
 ## Verification
 
-<Appended during review: pass/fail per area and open issues only.>
+Every number below was run by the orchestrator on the committed bytes, not taken from a
+subagent's report.
+
+| check | result |
+|---|---|
+| `bash hooks/phase-guard.test.sh` at HEAD | **154 passed, 0 failed** |
+| the `*.md` arm deleted | 150 passed, 4 failed — exactly the four top-level-markdown allows (`CLAUDE.md`, `README.md`, `AGENTS.md`, `PORTS.md`); all three deny controls still pass |
+| the arm replaced by the **rejected** closed list `CLAUDE.md\|README.md\|AGENTS.md` | 153 passed, 1 failed — `PORTS.md`. Before the `PORTS.md` assertion this substitution passed 153/0, so the suite pinned three filenames rather than the rule |
+| restored, re-run | 154 passed, 0 failed, identical checksum |
+
+Open issues — decided, not defects:
+
+- **`README.MD` (uppercase) is denied.** The card chose case-sensitive matching, like the
+  `*.spec.md` test in step 7, and this fails closed. Worth knowing that on a case-insensitive
+  filesystem that spelling names the same real file as `README.md`, so the deny fires on a
+  spelling rather than on a different file; the escape is to spell it lowercase.
+- **`CODING_MEMORY.md|` in the second `case` is now unreachable** — every top-level `.md` exits at
+  the new arm first. Left in place: the outcome is identical either way, and `rules/gates.md`
+  lists it separately for the same redundant-but-true reason.
+- **The commit gate never judged this branch's commits.** See the task-3 note; the mechanism has
+  its own card, `docs/features/test-marker-opt-in-from-session-cwd.md` (planning, unfixed).
+- Out of scope and untouched: `hooks/worktree-guard.sh:676-678` carries the identical exempt list,
+  so a top-level markdown edit in a primary checkout will still be refused there once that guard
+  leaves `log` mode.
