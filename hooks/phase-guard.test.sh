@@ -211,13 +211,14 @@ allow_silent "A1.6 path outside the repository root (step 5)"   "$OPTED"  "$(pay
 # is on it because it holds this hook's own registration — a guard that can block edits
 # to its own off switch is a footgun.
 
+# The trailing top-level-markdown entries exercise the rule stated with the deny controls below.
 for rel in docs/features/a.md docs/decisions/0011.md CODING_MEMORY.md coding-memory/x.md \
            .claude/session-state.md settings.json \
            projects/-Users-x--claude/memory/feedback_x.md \
            projects/-Users-x--claude/memory/MEMORY.md \
            rules/gates.md rules/core-conduct.md \
            skills/writing-specs/SKILL.md skills/_standards/authoring.md \
-           CLAUDE.md README.md AGENTS.md; do
+           CLAUDE.md README.md AGENTS.md PORTS.md; do
   allow_silent "unguarded path: $rel" "$OPTED" "$(payload Write file_path "$OPTED/$rel")"
 done
 
