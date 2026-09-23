@@ -67,6 +67,26 @@ happening in a non-opted-in repo and stood down.
   is already visible: 14 of 24 `EXEMPT` rows counted 2026-09-21 name it
   (`docs/features/phase-guard-root-markdown.md`, task 2 gotcha).
 
+## A second hook, same blind spot, opposite direction — measured 2026-09-23
+
+`hooks/judge-guard.sh` has the same shape and it is **not** a variant of this one: it blocks rather
+than standing down. It resolves the repo with a bare `git rev-parse --show-toplevel` in its own
+process (`:234-243`), i.e. from the session's working directory, then looks for the verdict in that
+repo's store (`:249`). Opening the PR for this branch from a session rooted in another project was
+refused — `no fresh observability-judge verdict for bracqueen-rebrand@0db2c6fe3399 (branch
+feat/profile-dressing-room)` — while a fresh verdict for `phase-guard-root-markdown@e615343` sat in
+the target repo's own ledger, matching on repo, branch and HEAD.
+
+`JUDGE_VERDICTS_FILE` does not rescue it: `repo`, `branch` and `head_sha` are still derived from the
+session's git repo, so pointing the guard at the right file only makes it compare the right rows
+against the wrong three values. PR #107 was opened with `JUDGE_EXEMPT` naming exactly that (Mark's
+call, 2026-09-23).
+
+So the question below is not "does `test-marker-guard.sh` have a bug" but "which of these hooks
+should ask where the *work* is going rather than where the *session* is sitting" — and the two
+answer it in opposite directions today, one fail-open and one fail-closed. Whatever planning decides
+here should say what `judge-guard.sh` does too.
+
 ## Open questions for planning — none of these is decided
 
 1. Should the opt-in be resolved from the **target** repo (the one the `git commit` runs in, which
@@ -77,9 +97,9 @@ happening in a non-opted-in repo and stood down.
 3. Is the quiet `exit 0` at node G the correct posture for "cannot tell", or should an
    unresolvable target be visible (logged, not blocked)? Note the sibling guards split both ways:
    `secret-command-guard.sh` fails open, `scan-secrets.sh` fails closed.
-4. Does anything else key off the session cwd the same way? `hooks/lib/decide-commit-gate.py`'s
-   own `FOREIGN_REPO` branch is evidence the layers already disagree about which repo is "this"
-   one.
+4. Does anything else key off the session cwd the same way? Two already do — `judge-guard.sh`
+   (above) and `hooks/lib/decide-commit-gate.py`, whose own `FOREIGN_REPO` branch is evidence the
+   layers already disagree about which repo is "this" one. Census the hooks before designing.
 5. Is a fix worth it at all, or is the honest resolution a documentation change — say so in
    `rules/gates.md`, and stop writing `TEST_EXEMPT` rationales into cross-repo commit messages?
    This is a live option, not a strawman.
