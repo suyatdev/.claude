@@ -291,6 +291,20 @@ esac
 # skill file unwritable repo-wide, so maintaining the rule surface was blocked by
 # work it had nothing to do with. Scoped to the directories for the same reason
 # projects/*/memory/* is: a file merely named rules.sh is source, and stays guarded.
+#
+# A markdown file in the repository's top-level directory -- CLAUDE.md, README.md,
+# AGENTS.md -- is documentation, never implementation code: the project's front page,
+# agent instructions, a port registry, a brainstorm. It is exempt outright, not judged
+# at all. Scoped to the top level only, not *.md anywhere, for the same reason rules/*
+# and projects/*/memory/* above are scoped to directories rather than an extension:
+# nested markdown such as agents/*.md can be a feature's own deliverable and stays
+# guarded. Two arms rather than one glob, because in a case pattern * also matches /, so
+# a single [!/]*.md would also match a nested path like a/b.md.
+case "$rel" in
+  */*) ;;            # nested: judged by the directory rules below
+  *.md) exit 0 ;;    # top-level markdown: documentation, never implementation code
+esac
+
 case "$rel" in
   CODING_MEMORY.md|coding-memory/*|docs/*|.claude/*|settings.json) exit 0 ;;
   projects/*/memory/*) exit 0 ;;

@@ -144,7 +144,7 @@ already returns.
 ## Tasks
 
 - [x] 1. **Measure** — the table above, at HEAD `6a1bcea`. *(planning, done 2026-09-21)*
-- [ ] 2. **Red tests** — `hooks/phase-guard.test.sh`: add `CLAUDE.md README.md AGENTS.md` to the
+- [x] 2. **Red tests** — `hooks/phase-guard.test.sh`: add `CLAUDE.md README.md AGENTS.md` to the
   unguarded-path loop (`:214-219`; these fail today, which is the receipt that the assertions are
   real), and after the `rules.sh`/`skills.sh` pair (`:232-233`) three deny controls:
   `frontend/README.md`, `agents/judge.md`, `setup.py`. Expected run: 150 passed, 3 failed
@@ -160,11 +160,21 @@ already returns.
     git from the session cwd, which here is another repo. If the green commit in task 3 trips
     that, the exemption reason names it; the suite must still have run green on the staged
     bytes first.
-- [ ] 3. **Green** — the two-arm `case` above plus a comment in the file's own voice (what the
+- [x] 3. **Green** — the two-arm `case` above plus a comment in the file's own voice (what the
   rule is, why it is scoped to the top level, the `*` matches `/` point), placed just before
   `:294`. Run the suite: 153 passed, 0 failed. Then the deletion receipt: remove the arm, run
   again, exactly the three new allows fail, restore. The suite run on the final bytes writes the
   test marker the commit gate reads.
+  - Done 2026-09-22, `78e2dab` (tests) then the fix commit. Orchestrator-run receipt:
+    153/0 with the arm, 150/3 with it deleted (exactly the three new allows; all three deny
+    controls still pass), 153/0 restored at the same checksum.
+  - The commit gate did not read that marker here: `hooks/test-marker-guard.sh` resolves its
+    opt-in from the session's cwd (another repo, not opted in) and exits 0 before judging, so
+    `78e2dab`'s `TEST_EXEMPT` was never consumed and neither repo log holds a row. Measured
+    2026-09-22 by running the guard on the real payload (rc 0, no row). That commit's message
+    reads as though the gate honoured the exemption; it is true as rationale, wrong as an
+    account of what happened. Left unamended by Mark's call (2026-09-22) — corrected here and
+    in the PR body rather than by rewriting a pushed commit. The gate gap gets its own card.
 - [ ] 4. **Docs** — `rules/gates.md:5`, the Phase gate stub's exemption clause, gains "and any
   `*.md` at the repository root". The deny message's claim ("feature files live under docs/,
   which this guard never blocks") stays true and is not edited. Every `<file>:N` citation on this
