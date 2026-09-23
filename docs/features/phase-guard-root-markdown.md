@@ -165,16 +165,18 @@ already returns.
   `:294`. Run the suite: 153 passed, 0 failed. Then the deletion receipt: remove the arm, run
   again, exactly the three new allows fail, restore. The suite run on the final bytes writes the
   test marker the commit gate reads.
-  - Done 2026-09-22, `78e2dab` (tests) then the fix commit. Orchestrator-run receipt:
+  - Done 2026-09-22, `78e2dab` (tests) then `5a632a5` (the fix). Orchestrator-run receipt:
     153/0 with the arm, 150/3 with it deleted (exactly the three new allows; all three deny
     controls still pass), 153/0 restored at the same checksum.
   - The commit gate did not read that marker here: `hooks/test-marker-guard.sh` resolves its
     opt-in from the session's cwd (another repo, not opted in) and exits 0 before judging, so
     `78e2dab`'s `TEST_EXEMPT` was never consumed and neither repo log holds a row. Measured
     2026-09-22 by running the guard on the real payload (rc 0, no row). That commit's message
-    reads as though the gate honoured the exemption; it is true as rationale, wrong as an
-    account of what happened. Left unamended by Mark's call (2026-09-22) — corrected here and
-    in the PR body rather than by rewriting a pushed commit. The gate gap gets its own card.
+    reads as though the gate honoured the exemption; it is true as the reason the flag was set —
+    though what the helper actually returns for this command is FOREIGN_REPO, so the pairing
+    reason itself was never exercised — and wrong as an account of what happened. Left unamended
+    by Mark's call (2026-09-22) — corrected here and in the PR body rather than by rewriting a
+    pushed commit. The gate gap gets its own card.
 - [x] 4. **Docs** — `rules/gates.md:5`, the Phase gate stub's exemption clause, gains "and any
   `*.md` at the repository root". The deny message's claim ("feature files live under docs/,
   which this guard never blocks") stays true and is not edited. Every `<file>:N` citation on this

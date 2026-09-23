@@ -292,7 +292,7 @@ esac
 # work it had nothing to do with. Scoped to the directories for the same reason
 # projects/*/memory/* is: a file merely named rules.sh is source, and stays guarded.
 #
-# A markdown file in the repository's top-level directory -- CLAUDE.md, README.md,
+# A markdown file in the repository's top-level directory -- such as CLAUDE.md, README.md,
 # AGENTS.md -- is documentation, never implementation code: the project's front page,
 # agent instructions, a port registry, a brainstorm. It is exempt outright, not judged
 # at all. Scoped to the top level only, not *.md anywhere, for the same reason rules/*
