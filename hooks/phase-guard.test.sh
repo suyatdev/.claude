@@ -218,7 +218,7 @@ for rel in docs/features/a.md docs/decisions/0011.md CODING_MEMORY.md coding-mem
            projects/-Users-x--claude/memory/MEMORY.md \
            rules/gates.md rules/core-conduct.md \
            skills/writing-specs/SKILL.md skills/_standards/authoring.md \
-           CLAUDE.md README.md AGENTS.md PORTS.md; do
+           CLAUDE.md README.md AGENTS.md PORTS.md initial-brainstorm.md; do
   allow_silent "unguarded path: $rel" "$OPTED" "$(payload Write file_path "$OPTED/$rel")"
 done
 

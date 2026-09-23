@@ -6,7 +6,7 @@ branch: fix/phase-guard-root-markdown
 
 # `phase-guard` treats top-level markdown as source
 
-> **Phase: implementation.** Gate confirmed by Mark 2026-09-21 after the compliance judge passed
+> **Phase: review.** Gate confirmed by Mark 2026-09-21 after the compliance judge passed
 > the card (blob `9639155e`; rounds: fail → pass → pass, then re-entered pass → pass after two
 > wording fixes from the architecting judge, whose two reads scored risk low / confidence high).
 > Branch `fix/phase-guard-root-markdown`, worktree `~/.worktrees/.claude/phase-guard-root-markdown`.
@@ -219,6 +219,13 @@ subagent's report.
 | the `*.md` arm deleted | 150 passed, 4 failed — exactly the four top-level-markdown allows (`CLAUDE.md`, `README.md`, `AGENTS.md`, `PORTS.md`); all three deny controls still pass |
 | the arm replaced by the **rejected** closed list `CLAUDE.md\|README.md\|AGENTS.md` | 153 passed, 1 failed — `PORTS.md`. Before the `PORTS.md` assertion this substitution passed 153/0, so the suite pinned three filenames rather than the rule |
 | restored, re-run | 154 passed, 0 failed, identical checksum |
+| after the `initial-brainstorm.md` assertion was added | **155 passed, 0 failed**; under the rejected closed list, 153 passed, 2 failed (`PORTS.md`, `initial-brainstorm.md`) |
+| the same suite under `LC_ALL=C`, with the arm narrowed to `[A-Z]*.md` | 154 passed, 1 failed — `initial-brainstorm.md`; 155/0 on the clean tree in that locale |
+
+A judge read reported the suite passing under an `[A-Z]*.md` mutant as slack. Measured instead: in
+bash under `en_US.UTF-8` a bracket range matches by collation, so `[A-Z]` also matches lowercase and
+that mutant never narrowed the rule — the suite was correct, not blind. Under `LC_ALL=C` the range
+behaves as written and the new assertion catches the narrowing, which is where it earns its place.
 
 Open issues — decided, not defects:
 
