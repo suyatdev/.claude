@@ -175,7 +175,7 @@ already returns.
     reads as though the gate honoured the exemption; it is true as rationale, wrong as an
     account of what happened. Left unamended by Mark's call (2026-09-22) — corrected here and
     in the PR body rather than by rewriting a pushed commit. The gate gap gets its own card.
-- [ ] 4. **Docs** — `rules/gates.md:5`, the Phase gate stub's exemption clause, gains "and any
+- [x] 4. **Docs** — `rules/gates.md:5`, the Phase gate stub's exemption clause, gains "and any
   `*.md` at the repository root". The deny message's claim ("feature files live under docs/,
   which this guard never blocks") stays true and is not edited. Every `<file>:N` citation on this
   card is as of the pre-fix tree `6a1bcea`: task 2 inserts lines in the test file and task 3
@@ -186,6 +186,10 @@ already returns.
   that precedent and documented on its own card instead. Its step-6 list (`:114-115`,
   `:248-249`) already lags the hook by the two entries `f5c8862` and `f99b975` added, so this
   card makes it three; `rules/gates.md:5` is the living statement (architecting judge, round 1).
+  - Done 2026-09-22: the clause now reads "plus the retired
+    `CODING_MEMORY.md`/`coding-memory/*`, and any `*.md` at the repository root". Nothing
+    else on that line moved; `docs/features/phase-guard-hook.md` and the deny message are
+    untouched, and no citation on this card was rewritten.
   - Known sibling gap, out of scope: `hooks/worktree-guard.sh:676-678` carries the identical
     exempt list, so once that guard leaves `log` mode a top-level markdown edit in a primary
     checkout will be refused there too. Its own card owns that decision; nothing here closes it.
