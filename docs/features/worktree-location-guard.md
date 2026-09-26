@@ -4440,6 +4440,21 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       criterion 3 for both layers, and only then revisit arming — with the layer-1
       `SEG_UNPARSED`/`SEG_OPAQUE` false-denial rate as its own separate blocker.
 
+      **2026-09-26 status check, no new analysis.** Criterion 1 for layer 1 has now **elapsed**
+      — the window opened `2026-09-14T20:41:44Z` and its seven days completed 2026-09-21.
+      Layer 1's post-fix window is **577 lines** (555 `B2D`, 17 `A`, 5 `D`), up from the 76 the
+      2026-09-17 first pass read. **That first pass is therefore no longer criterion 3**: it
+      covered 13% of the window that now exists, and the re-run must read all 577. Its
+      *findings* still stand as far as they went — no tilde regression, and the
+      `SEG_UNPARSED`/`SEG_OPAQUE` false-denial rate — but its *coverage* does not.
+
+      ⚠️ **Task 18 is committed and still not in effect**, because this branch is unmerged and
+      the suites run from whichever checkout a session is in. Layer 2's log went 8791 → **9774**
+      (+983) over the same nine days, which is the leak continuing exactly as the merge caveat
+      above predicted. **Merge this branch before starting the criterion-3 re-run**, or the
+      re-run will measure contaminated data again and the window start will be wrong twice
+      over.
+
       **What changed about the flip decision.** The 2026-09-04 note worried that arming would
       block ordinary work in repos that had no worktree yet. That specific worry has eased —
       all four repositories layer 1 has ever refused (`Snatch-Bracket`, `mtg-wizard`,
