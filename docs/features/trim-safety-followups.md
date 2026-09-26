@@ -152,7 +152,8 @@ has parts (nothing sources them); the writer does not look.
 What the receipt asserts about a part is **the same thing it asserts about the runner** — these
 bytes were present when the suite exited 0 — and no more. That a folder beside a runner is
 sourced *by* that runner is a convention, not something the writer observes; it holds for all
-four folders today (each runner passes `$HOOK_DIR/<stem>.test.d` to `source_test_parts`), and
+four folders today (each runner passes its own directory variable plus `<stem>.test.d` to
+`source_test_parts` — `$HOOK_DIR` in three, `$LIB_DIR` in `handoff-archive.test.sh:74`), and
 task 9b's count check is what would notice if it stopped holding.
 
 **The glob lives in one Python place.** `write-test-marker.py` defines `PARTS_GLOB` (and the
@@ -329,10 +330,15 @@ Measured 2026-09-21, before any task runs — the card must not assume a receipt
 
 | suite | today | writes its own receipt? |
 |---|---|---|
-| `bash hooks/handoff/handoff-keep-guard.test.sh` | not re-measured by this card | **yes** — calls the writer at rc 0 (`:548`) |
+| `bash hooks/handoff/handoff-keep-guard.test.sh` | 61 passed, 0 failed | **yes** — calls the writer at rc 0 (`:548`) |
 | `bash hooks/phase-guard.test.sh` | 147 passed, 0 failed | **yes** — same shape (`:1240`) |
 | `python3 hooks/lib/write-test-marker.test.py` | 70 passed, **2 failed** | only at rc 0 — so **no**, today |
 | `bash hooks/test-marker-guard.test.sh` | 249 passed, 0 failed | **no** — it only `cp`s the writer into fixtures; it never calls it on itself |
+
+⚠️ **Run task 1's suite as `env -u CLAUDE_PANE_AGENT bash hooks/handoff/handoff-keep-guard.test.sh`.**
+`handoff-keep-guard.sh:62` exits 0 immediately when `CLAUDE_PANE_AGENT` is set, so inside a pane
+agent the suite measures 19/61 instead of 61/61 — a worker would read that red and wrongly file
+task 1 under "cannot have a receipt". Only this suite was checked for the interaction.
 
 The writer suite's two failures are a **known false positive on `origin/main`** (commit
 `a668c2f`, 2026-09-17): its `wired` check greps each runner's body for a writer call, and the two
@@ -342,9 +348,10 @@ see. Fixing that check is its own card, not this one.
 **The rule is: exempt only where a receipt is impossible, and name the reason.** Not "this card
 runs on exemptions" — that reading is what the table is here to prevent. Concretely: **task 1
 and task 3 must carry real receipts** (their suites write one, and both are GREEN commits); a
-RED commit cannot, by construction, since the writer only runs at rc 0; **task 5 cannot**, because
-the writer suite is red from a defect this card does not own; **task 8 cannot**, because the guard
-suite never writes one at all. Any commit that *can* have a receipt and does not is a defect in
+RED commit cannot, by construction, since the writer only runs at rc 0; **tasks 5, 7 and 9b cannot** — 5 because the
+writer suite is red from a defect this card does not own, 7 and 9b because their commits land
+while the decider suite is still red by construction; **task 8 cannot**, because the guard suite
+never writes one at all. Any commit that *can* have a receipt and does not is a defect in
 this card, not a row in the table. This follows the prior card's precedent
 (`docs/features/handoff-trim-safety.md`, its RED commits), written down here rather than
 rediscovered per task. Task 10 re-runs the suites for freshness and states, in Verification,
@@ -368,9 +375,15 @@ with `TEST_EXEMPT` per the table above.
   `.test.d/` folder gets `parts` in path order with the folder's `[0-9][0-9]-*.sh` only; an
   empty folder gets `[]`; a runner without one gets no `parts` key; a `.test.py` runner never
   gets one; and `PARTS_GLOB` equals the glob string read out of
-  `hooks/handoff/lib/test-parts.sh` (the bash copy that cannot import it).
+  **line 43 of** `hooks/handoff/lib/test-parts.sh` — the `for part in "$parts_dir"/…` loop that
+  actually runs. The same glob also sits in a comment at `:25`; a test taking the first match
+  would stay green while the real loop drifted, so the assertion anchors on the `for` line.
 - [ ] Task 5 — C GREEN (writer): `PARTS_GLOB`, `parts_folder_for`, `is_part` beside
-  `PAIR_SUFFIXES`; `write_marker` enumerates the folder and writes `parts`; suite green apart
+  `PAIR_SUFFIXES`; **split `build_marker(root, test_rel)` — enumerates the folder and returns
+  the receipt dict, touching nothing on disk — from `write_marker`, which becomes the thin
+  caller that persists what `build_marker` returns.** Task 9b depends on that split existing:
+  calling the persisting half against the live checkout would stamp four real receipts for
+  suites that never ran. Suite green apart
   from the two pre-existing `wired` failures named above (record the before/after counts —
   70/2 must stay 2, not grow).
 - [ ] Task 6 — C RED (decider): new sibling `hooks/lib/decide-commit-gate.test.py`, throwaway
@@ -396,7 +409,11 @@ with `TEST_EXEMPT` per the table above.
   `dispatch-pane-agent.<concern>.test.sh` convention as still outside the receipt.
 - [ ] Task 9b — the differential check the two new suites cannot give each other: writer and
   decider derive `<stem>.test.d/` the same way, so a wrong derivation makes both agree on "no
-  parts" and both suites stay green. RED then GREEN as two commits, in
+  parts" and both suites stay green. **One commit, not RED-then-GREEN**: it checks the
+  derivation task 5 already shipped, so it passes on its first run and no red state is
+  reachable — a RED commit here would be an empty one. What replaces the red step is a
+  falsifiability check run by hand and recorded in Verification: point `parts_folder_for` at a
+  wrong folder, confirm the assertion fails and names the runner, revert. It lives in
   `hooks/lib/write-test-marker.test.py` (the writer owns the derivation under test). It neither
   reads nor writes `hooks/state/`: receipts are gitignored, this worktree holds only
   phase-guard's, and **calling `write_marker` against the live checkout would stamp four real
