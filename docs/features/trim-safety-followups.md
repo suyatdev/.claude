@@ -38,7 +38,7 @@ and step 8 disagree with each other, and step 8 is right.
 
 **C. The test receipt does not cover split test parts.** `hooks/lib/write-test-marker.py`
 writes a receipt naming two blobs — the subject and its `.test.sh`/`.test.py` runner
-(`PAIR_SUFFIXES`). The handoff-trim-safety card split four runners into a thin `X.test.sh` plus
+(`PAIR_SUFFIXES`; ADR 0027 puts it as "the subject **and** the test file"). The handoff-trim-safety card split four runners into a thin `X.test.sh` plus
 an `X.test.d/NN-*.sh` folder sourced by `hooks/handoff/lib/test-parts.sh`
 (`source_test_parts`, glob `[0-9][0-9]-*.sh`). Four such folders exist today:
 `hooks/handoff/{live-handoff,pre-compact-handoff,slim-session-start}.test.d` and
@@ -111,11 +111,19 @@ Scenario: a review card does not unlock any other branch
   Then the write is denied naming P
 
 Scenario: a review card with no branch claims nothing
-  Given P and a card at phase review with branch: none
+  Given P and a card at phase review whose frontmatter has NO branch: line at all
   And the current branch is b
   When a source file is written
   Then the write is denied
 ```
+
+The third scenario's fixture omits the `branch:` line rather than writing `branch: none`.
+`FRONTMATTER_AWK` accepts any non-space token (`/^branch:[[:space:]]*[^[:space:]]+/`), so
+`none` parses as a branch *literally named* `none` and the deny would come from `b != none`,
+not from the `-n "$file_branch"` guard — an implementation that dropped that guard would pass
+all three. An absent line is what makes the guard the thing under test. (This card's own
+frontmatter says `branch: none`; that is the house convention for "not yet gated" and is
+unaffected — it only means this card claims a branch nobody is on.)
 
 Spec amendment, made by this card and said so in the row: `docs/features/phase-guard-hook.md`'s
 decision table gains the row "A file is `review` with `branch: B` | `B` | **allow**", and the
@@ -137,6 +145,12 @@ and the runner agree on what "the suite" is. Each entry is `{"path": <repo-relat
 today stays valid for a runner that has no parts. The decider reads an absent key and `[]` as
 the same thing — the empty set — so the two never need telling apart. A `.test.py` runner never
 has parts (nothing sources them); the writer does not look.
+
+What the receipt asserts about a part is **the same thing it asserts about the runner** — these
+bytes were present when the suite exited 0 — and no more. That a folder beside a runner is
+sourced *by* that runner is a convention, not something the writer observes; it holds for all
+four folders today (each runner passes `$HOOK_DIR/<stem>.test.d` to `source_test_parts`), and
+task 9b's count check is what would notice if it stopped holding.
 
 **The glob lives in one Python place.** `write-test-marker.py` defines `PARTS_GLOB` (and the
 `parts_folder_for(test_rel)` / `is_part(path)` helpers beside `PAIR_SUFFIXES`); the decider
@@ -208,11 +222,17 @@ Scenario: a new part the receipt has never seen is blocked
   When git commit runs
   Then BLOCK MSG_STALE_PART with detail R.test.d/30-c.sh
 
-Scenario: a deleted part is blocked until the suite reruns
+Scenario: a deleted part is blocked when the pair is in the commit
   Given a receipt naming 10-a.sh and 20-b.sh
-  And 20-b.sh is deleted (git rm) and the deletion staged
+  And 20-b.sh is deleted (git rm), and R.sh is also staged
   When git commit runs
-  Then BLOCK MSG_STALE_PART with detail R.test.d/20-b.sh
+  Then BLOCK MSG_STALE_PART naming R.test.d/20-b.sh
+
+Scenario: a lone part deletion is NOT gated
+  Given a receipt naming 10-a.sh and 20-b.sh
+  And only the deletion of 20-b.sh is staged
+  When git commit runs
+  Then ALLOW — no path in the set forms a pair, so none is read
 
 Scenario: a pre-card receipt for a runner that HAS parts is stale by definition
   Given a version-1 receipt with no parts key, for a runner whose folder holds parts
@@ -262,17 +282,54 @@ door. The count that matters is **distinct** constants the decider can emit, not
 against 9 call sites. After this card the recipe gives 9. The word "eight" appears on ten lines
 of the marker card (`grep -nw eight`), plus one Scenario Outline row per door; task 9 updates
 every one it finds by that grep, not a remembered list. `hooks/test-marker-guard.sh` prints the
-new door in the style of `MSG_STALE_TEST`: `MSG_STALE_PART -- <pair> would ship test part
-<detail> that was never run.` Its "door this version of the gate does not recognise" fallback
-keeps catching anything else.
+new door **saying only what is known** — the receipt and the commit disagree — because three of
+the blocked shapes did not "ship an unrun part" at all (a deletion ships nothing; a pre-card
+receipt never recorded parts that did run). It carries its remedy the way `MSG_NO_MARKER` does:
+`MSG_STALE_PART -- <pair>: the receipt's part list differs from what this commit ships (first
+difference: <detail>). Re-run: bash <test>`. Its "door this version of the gate does not
+recognise" fallback keeps catching anything else.
+
+**A lone deletion stays ungated — deliberately, and not this card's call to change.** All four
+collectors in `_collect_path_set` pass `--diff-filter=d`, and
+`docs/features/verification-marker-gate.md` states the rule in Scope ("removing a file needs no
+test run") and pins it with its own scenario. So a commit staging *only* the removal of a part
+forms no pair and is allowed, exactly as removing the runner itself is. A deleted part is caught
+the moment the pair forms through any other staged path — the committed set then lacks it and
+the sets differ. Widening `--diff-filter` is a change to the marker card's rule, not a
+follow-up this card may make on its own.
 
 **Fail direction, unchanged.** A part folder the decider cannot enumerate (a `git ls-tree` that
 fails) raises `_GitFailure` → `MSG_GIT_FAILED`, as every other git failure in the file does.
 
+### How these commits get past the marker gate
+
+Measured 2026-09-21, before any task runs — the card must not assume a receipt it cannot get:
+
+| suite | today | writes its own receipt? |
+|---|---|---|
+| `bash hooks/phase-guard.test.sh` | 147 passed, 0 failed | yes (`phase-guard.test.sh` calls the writer at rc 0) |
+| `python3 hooks/lib/write-test-marker.test.py` | 70 passed, **2 failed** | only at rc 0 — so **no**, today |
+| `bash hooks/test-marker-guard.test.sh` | 249 passed, 0 failed | **no** — it only `cp`s the writer into fixtures; it never calls it on itself |
+
+The writer suite's two failures are a **known false positive on `origin/main`** (commit
+`a668c2f`, 2026-09-17): its `wired` check greps each runner's body for a writer call, and the two
+`panes/` runners write theirs through `panes/test-lib.sh`'s `tl_finish`, which a body grep cannot
+see. Fixing that check is its own card, not this one.
+
+So: **task 3 and task 5 are the only commits that can carry a fresh receipt**, and task 5's
+depends on the writer suite going green, which it will not. Every commit in this card that
+stages a file with a sibling test therefore carries `TEST_EXEMPT='<reason>'`, with the reason
+naming which of the three rows above applies — a RED commit by construction cannot have a
+receipt, and neither can a subject whose suite never writes one. This is the prior card's
+precedent (`docs/features/handoff-trim-safety.md`, the RED commits), written down here rather
+than rediscovered per task. Task 10 re-runs the suites for freshness where a receipt exists
+and says plainly, in Verification, which pairs still have none.
+
 ## Tasks
 
 Order is the spec's: A, B, C. RED and GREEN are separate commits (`rules/core-conduct.md`:
-never tests and implementation in one step). Every commit is `git commit -F <msg> -- <paths>`.
+never tests and implementation in one step). Every commit is `git commit -F <msg> -- <paths>`,
+with `TEST_EXEMPT` per the table above.
 
 - [ ] Task 1 — A: rewrite the header line in `hooks/handoff/handoff-keep-guard.sh` to
   `~/.local/bin/claude`, keep the version; record `grep -c '/Users/'` = 0 in Verification.
@@ -288,7 +345,9 @@ never tests and implementation in one step). Every commit is `git commit -F <msg
   gets one; and `PARTS_GLOB` equals the glob string read out of
   `hooks/handoff/lib/test-parts.sh` (the bash copy that cannot import it).
 - [ ] Task 5 — C GREEN (writer): `PARTS_GLOB`, `parts_folder_for`, `is_part` beside
-  `PAIR_SUFFIXES`; `write_marker` enumerates the folder and writes `parts`; suite green.
+  `PAIR_SUFFIXES`; `write_marker` enumerates the folder and writes `parts`; suite green apart
+  from the two pre-existing `wired` failures named above (record the before/after counts —
+  70/2 must stay 2, not grow).
 - [ ] Task 6 — C RED (decider): new sibling `hooks/lib/decide-commit-gate.test.py`, throwaway
   repos in the `write-test-marker.test.py` pattern, one assertion per scenario above (the
   malformed-parts outline included), each of the three commit forms for the changed-part case,
@@ -303,8 +362,15 @@ never tests and implementation in one step). Every commit is `git commit -F <msg
 - [ ] Task 9 — C docs: row 2a, and every "eight" the door-table grep finds, in
   `docs/features/verification-marker-gate.md` (each marked as this card's amendment); ADR
   `docs/decisions/0048-*.md`, titled and scoped to the `.test.d/` convention — "the receipt
-  covers the parts a `.test.d/` runner sources" — amending 0027's "two blobs", and naming the
+  covers the parts a `.test.d/` runner sources" — amending ADR 0027's rule that "a marker records `git hash-object` of the subject **and** the
+  test file" (`0027…md:27` — the phrase "two blobs" is the writer's docstring, not the ADR's),
+  and naming the
   `dispatch-pane-agent.<concern>.test.sh` convention as still outside the receipt.
+- [ ] Task 9b — the differential check the two new suites cannot give each other: writer and
+  decider derive `<stem>.test.d/` the same way, so a wrong derivation makes both agree on "no
+  parts" and both suites stay green. Assert against the four **real** runners that the receipt's
+  `len(parts)` equals the count each runner hard-codes in its own `source_test_parts "<dir>" N`
+  call — an oracle neither new module produces.
 - [ ] Task 10 — re-run every suite this card touched so their receipts are fresh, then run the
   observability judge; retire memory `reference_review_phase_card_blocks_source_edits` (it
   documents the workaround B removes) — a `~/.claude/projects/…/memory/` edit, outside git.
