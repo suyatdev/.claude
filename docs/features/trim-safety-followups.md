@@ -18,9 +18,10 @@ deliberately left out of scope. Each is small; together they are one card becaus
 together, share a reviewer, and none earns a card alone. Ordered smallest first.
 
 **A. A machine-specific path in a committed comment.** `hooks/handoff/handoff-keep-guard.sh`'s
-contract header names the binary the Stop contract was measured against as
-`/Users/marksuyat/.local/bin/claude` (grep `measured against the installed binary`). The prior
-card kept it on purpose as a measurement record. `rules/core-conduct.md` forbids absolute paths
+contract header names the binary the Stop contract was measured against by its absolute path
+under the user's home directory (locate it with `grep -n 'measured against the installed
+binary'`; the path is deliberately not repeated here, or this card would carry what it removes).
+The prior card kept it on purpose as a measurement record. `rules/core-conduct.md` forbids absolute paths
 in committed files, and the identifying fact is the **version** (`2.1.267 (2026-09-10)`), which
 the same sentence already carries — the path adds a username and nothing else.
 
@@ -52,11 +53,24 @@ the bytes that run.
 - `hooks/phase-guard.test.sh` (1242 lines) and `hooks/test-marker-guard.test.sh` (1122) are
   both over the 800-line hard cap. Already enumerated by
   `docs/features/pane-dispatch-test-suite-split.md`, which fixes only its own file on purpose.
-  This card adds one assertion to the first and one to the second, and splits neither.
+  This card grows **neither** `test-marker-guard.test.sh` (C's hook-level assertion lives in the
+  new Python sibling, task 6, which runs the real bash hook) **nor** any other oversize file,
+  with one exception: B's three assertions have no home but `phase-guard.test.sh` — there is no
+  sibling suite and no parts convention for it — so they go there, roughly fifteen lines. That
+  growth is a **user-granted waiver** recorded in the compliance verdict, not a silent deferral;
+  splitting that suite is the test-split card's work.
 - `hooks/lib/decide-commit-gate.py` has no Python sibling suite; it is exercised only through
   the bash hook suite. Task 6 gives it one because the new part-comparison tests need a home
   and the oversize bash file is the wrong one — the side effect that the decider itself becomes
-  receipted is welcome but was not the reason.
+  receipted is welcome but was not the reason. The decider is 392 lines; C adds to it and it
+  will pass the 400-line preference while staying well under the 800 maximum. Accepted: the
+  alternative is a third module with its own sibling suite for ~40 lines.
+- **A second split convention has the same gap and is not fixed here.**
+  `panes/dispatch-pane-agent.test.sh` fans out to six `panes/dispatch-pane-agent.<concern>.test.sh`
+  files through its `SUITES` list (ADR 0044's residual). Those basenames end in `.test.sh`, so the
+  decider reads each as a runner whose subject `dispatch-pane-agent.<concern>.sh` is untracked —
+  skipped, never gated, today. Row 2a does not match them and this card does not claim to. The
+  ADR in task 9 is scoped to the `.test.d/` convention by name, so that its title is true.
 - Which guards the *approval* design should watch (`project_guard_loosening_approval_pending`)
   is a different, unapproved card.
 
@@ -124,8 +138,25 @@ today stays valid for a runner that has no parts. The decider reads an absent ke
 the same thing — the empty set — so the two never need telling apart. A `.test.py` runner never
 has parts (nothing sources them); the writer does not look.
 
+**The glob lives in one Python place.** `write-test-marker.py` defines `PARTS_GLOB` (and the
+`parts_folder_for(test_rel)` / `is_part(path)` helpers beside `PAIR_SUFFIXES`); the decider
+imports them through its existing `_load()` rather than restating them. The bash copy in
+`test-parts.sh` cannot share a constant, so a writer test reads that file and asserts its glob
+string equals `PARTS_GLOB` — a drifted copy fails a test instead of silently receipting a
+different set of files than the runner sources.
+
+**A malformed `parts` is a malformed receipt.** The receipt is a file read from disk, and every
+other bad shape already lands on `MSG_BAD_MARKER`; `parts` joins that rule. Malformed means:
+present but not a list; an entry that is not an object; a missing or non-string `path` or
+`blob`; a `blob` failing the existing `_BLOB_RE`; a `path` that is not under this pair's
+`<stem>.test.d/` folder or does not match the glob; a duplicate `path`. All → `MSG_BAD_MARKER`,
+before any comparison, exactly as a bad `subject` or `test` does today.
+
+The block below is an **illustration in YAML for readability**; the writer emits JSON
+(`json.dumps(…, indent=2, sort_keys=True)`), unchanged.
+
 ```yaml
-# hooks/state/test-markers/hooks%2Fhandoff%2Flive-handoff.sh — after this card
+# hooks/state/test-markers/hooks%2Fhandoff%2Flive-handoff.sh — after this card (illustration)
 version: 1
 subject: {path: hooks/handoff/live-handoff.sh, blob: <sha>}
 test:    {path: hooks/handoff/live-handoff.test.sh, blob: <sha>}
@@ -208,13 +239,32 @@ Scenario: a .test.py runner never has parts
   Given a receipt for X.py|X.test.py and a folder X.test.d/ someone created by hand
   When X.py is committed
   Then the folder is ignored — no parts key is written and none is compared
+
+Scenario Outline: a malformed parts key is a bad receipt, not a stale one
+  Given a receipt whose parts is <shape>
+  When git commit runs for its pair
+  Then BLOCK MSG_BAD_MARKER, before any part is enumerated or compared
+  Examples:
+    | shape                                                   |
+    | a string instead of a list                              |
+    | a list holding a string                                 |
+    | an entry with no blob                                   |
+    | an entry whose blob is not 40 or 64 hex characters      |
+    | an entry whose path is outside <stem>.test.d/           |
+    | an entry whose path is inside the folder but not NN-*.sh|
+    | two entries with the same path                          |
 ```
 
-**Door table.** `docs/features/verification-marker-gate.md`'s field-2 domain grows by one:
-count the `_emit("BLOCK", "MSG_` call sites in the decider rather than trusting the word
-"eight" (it becomes nine). `hooks/test-marker-guard.sh` prints the new door in the style of
-`MSG_STALE_TEST`: `MSG_STALE_PART -- <pair> would ship test part <detail> that was never run.`
-Its "door this version of the gate does not recognise" fallback keeps catching anything else.
+**Door table.** `docs/features/verification-marker-gate.md`'s field-2 domain grows by one
+door. The count that matters is **distinct** constants the decider can emit, not call sites
+(`MSG_GIT_FAILED` is emitted from two places): measured 2026-09-21 with
+`grep -o '_emit("BLOCK", "MSG_[A-Z_]*' hooks/lib/decide-commit-gate.py | sort -u | wc -l` = 8
+against 9 call sites. After this card the recipe gives 9. The word "eight" appears on ten lines
+of the marker card (`grep -nw eight`), plus one Scenario Outline row per door; task 9 updates
+every one it finds by that grep, not a remembered list. `hooks/test-marker-guard.sh` prints the
+new door in the style of `MSG_STALE_TEST`: `MSG_STALE_PART -- <pair> would ship test part
+<detail> that was never run.` Its "door this version of the gate does not recognise" fallback
+keeps catching anything else.
 
 **Fail direction, unchanged.** A part folder the decider cannot enumerate (a `git ls-tree` that
 fails) raises `_GitFailure` → `MSG_GIT_FAILED`, as every other git failure in the file does.
@@ -233,21 +283,28 @@ never tests and implementation in one step). Every commit is `git commit -F <msg
   the decision-table row in `docs/features/phase-guard-hook.md`, marked "added by
   trim-safety-followups".
 - [ ] Task 4 — C RED (writer): in `hooks/lib/write-test-marker.test.py`, a runner with a
-  `.test.d/` folder gets `parts` in path order with the folder's `[0-9][0-9]-*.sh` only; a
-  runner without one gets no `parts` key; a `.test.py` runner never gets one.
-- [ ] Task 5 — C GREEN (writer): `write_marker` enumerates the folder with the
-  `source_test_parts` glob and writes `parts`; suite green.
+  `.test.d/` folder gets `parts` in path order with the folder's `[0-9][0-9]-*.sh` only; an
+  empty folder gets `[]`; a runner without one gets no `parts` key; a `.test.py` runner never
+  gets one; and `PARTS_GLOB` equals the glob string read out of
+  `hooks/handoff/lib/test-parts.sh` (the bash copy that cannot import it).
+- [ ] Task 5 — C GREEN (writer): `PARTS_GLOB`, `parts_folder_for`, `is_part` beside
+  `PAIR_SUFFIXES`; `write_marker` enumerates the folder and writes `parts`; suite green.
 - [ ] Task 6 — C RED (decider): new sibling `hooks/lib/decide-commit-gate.test.py`, throwaway
-  repos in the `write-test-marker.test.py` pattern, one assertion per scenario above, each of
-  the three commit forms for the changed-part case. Runs red on the unchanged decider.
-- [ ] Task 7 — C GREEN (decider): `_classify_role` row 2a, the per-form part enumeration, the
-  set comparison, `MSG_STALE_PART`; suite green.
-- [ ] Task 8 — C hook: `hooks/test-marker-guard.sh` prints `MSG_STALE_PART`; one hook-level
-  assertion in `hooks/test-marker-guard.test.sh` (a staged part with a stale receipt blocks
-  through the real hook). RED then GREEN as two commits.
-- [ ] Task 9 — C docs: row 2a and the door count in `docs/features/verification-marker-gate.md`
-  (marked as this card's amendment); ADR `docs/decisions/0048-*.md` — the receipt covers the
-  parts the runner sources, amending 0027's "two blobs".
+  repos in the `write-test-marker.test.py` pattern, one assertion per scenario above (the
+  malformed-parts outline included), each of the three commit forms for the changed-part case,
+  and one hook-level assertion that runs the real `hooks/test-marker-guard.sh` with a
+  PreToolUse payload and sees `MSG_STALE_PART` on stderr with exit 2 — here, not in the
+  oversize bash suite. Runs red on the unchanged decider and hook.
+- [ ] Task 7 — C GREEN (decider): `_classify_role` row 2a via the imported `is_part`, the
+  per-form part enumeration, `MSG_BAD_MARKER` for a malformed `parts`, the set comparison,
+  `MSG_STALE_PART`; suite green except the hook-level assertion.
+- [ ] Task 8 — C hook GREEN: `hooks/test-marker-guard.sh` prints `MSG_STALE_PART`; the task-6
+  hook-level assertion goes green. No change to `hooks/test-marker-guard.test.sh`.
+- [ ] Task 9 — C docs: row 2a, and every "eight" the door-table grep finds, in
+  `docs/features/verification-marker-gate.md` (each marked as this card's amendment); ADR
+  `docs/decisions/0048-*.md`, titled and scoped to the `.test.d/` convention — "the receipt
+  covers the parts a `.test.d/` runner sources" — amending 0027's "two blobs", and naming the
+  `dispatch-pane-agent.<concern>.test.sh` convention as still outside the receipt.
 - [ ] Task 10 — re-run every suite this card touched so their receipts are fresh, then run the
   observability judge; retire memory `reference_review_phase_card_blocks_source_edits` (it
   documents the workaround B removes) — a `~/.claude/projects/…/memory/` edit, outside git.
