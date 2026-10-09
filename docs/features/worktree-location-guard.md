@@ -4471,6 +4471,37 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       judgement for the user, not a criterion this card can settle on its own. **Do not flip
       without asking.** The recommendation from this pass is not to flip: teach the guard to
       recognise these three shapes first, then re-measure.
+
+      **2026-10-09 — `origin/main` merged into this branch; the leak is closed on the branch
+      and measured closed.** Merge commit `c4ec0f7`, now `0` behind / `13` ahead of
+      `origin/main`, pushed. The merge was **conflict-free**, which corrects a prediction made
+      earlier the same day: `hooks/git-guard.test.sh` had been edited on both sides — task 18's
+      isolation line here, and `ab5b658 fix(jlc): act on the Copilot review` on `main` — and I
+      expected a conflict in it. Git auto-merged the two hunks; the merged blob is `41e072c`
+      and carries both changes (`grep -c GIT_CONFIG_GLOBAL` = 1, and the `main` edit intact).
+
+      Post-merge verification, run in this worktree: `hooks/git-guard.test.sh` **176 passed,
+      0 failed**; `hooks/verify-hook-wiring.test.sh` **37/37**. The falsifier is the live log,
+      not the green suites — `hooks/state/reference-transaction.log` measured **9826 lines
+      before both runs and 9826 after**, i.e. **zero growth**, where pre-fix those same two
+      runs appended 54 + 40 = 94 lines. Task 18 holds across the merge.
+
+      ⚠️ **Still not in effect on this machine.** The suites run from whichever checkout a
+      session is in, and `origin/main` is unchanged at `54129e2`; nothing on the remote
+      contains this branch. The primary checkout copy of `hooks/git-guard.test.sh` is still
+      blob `2d4282f` with **0** isolation lines. So the clean-window start is the *merge to
+      `main`*, not this merge *from* it, and layer 2 keeps accumulating fixture noise until
+      then. Growth since the fix was committed: 8791 (09-17) → 9774 (09-26) → **9826** (10-09).
+
+      The layer-1 post-fix window has meanwhile grown to the point where the 2026-09-17 first
+      pass reads **76 of over a thousand lines**. Re-measure the window size at the start of
+      the re-run rather than trusting any figure in this card — every one of them has been a
+      snapshot that aged within days.
+
+      **Next action is the observability judge**, not the PR: `hooks/judge-guard.sh` blocks
+      `gh pr create` until a fresh implementation-stage verdict matches `HEAD`, and `HEAD` is
+      now `c4ec0f7`. Opening the PR is also the implementation → review model-switch
+      checkpoint, which is its own ask.
 - [x] 11. ADR under `docs/decisions/` — this changes a machine-wide invariant and pivots the
       standing worktree rule from advisory to enforced. Verify the next free number against the
       deciding ref, not stale local `main`.
