@@ -134,6 +134,7 @@ be confirmed — `tmutil latestbackup` requires Full Disk Access, which this she
 
 | D16 | A cut block that looks like it holds a secret | **Separate quarantine file** — `session-state.quarantine.md`. Never indexed, never in the main archive, and deletable by hand, so the never-delete rule holds for ordinary notes while the one risky category has an exit. Rejected: redaction, because a false positive destroys text permanently and unrecoverably, which is the failure this whole card exists to stop; and archive-as-normal, because it puts a secret in a store the design calls permanent and feeds it to the search index. Asked of the user 2026-09-08 after the compliance judge found the trade-off had been settled inside the spec rather than routed out, which `rules/core-conduct.md` forbids |
 | D17 | Read cap, superseding the ~12,000 in D6 | **24,576 bytes.** Worst measured case is 190 lines at 87.2 b/line = 16,568, which 12,000 would truncate; 24,576 leaves 48% headroom. Cost accepted knowingly: up to 3x context injection at session start for an overrun notepad, unchanged for a healthy one. Rejected: 16,384, which sits just below the number it must clear |
+| D18 | What `pre-compact-handoff.sh` does when it cannot list the protected `[KEEP]` headings | **Emit a directive, but order append-only** — write the handoff, remove nothing this run. The handoff is never forfeited (the hook gets one chance before compaction, unlike `live-handoff.sh` which fires again next prompt), and no cut is authorised that cannot be backed up, so finding O-C's rule holds for both hooks rather than being traded away for one. Rejected: **fail open** — emit the full rewrite directive with a warning, which authorises exactly the unbacked cut O-C forbids, yields self-conflicting instructions (the directive said `REWRITE it completely` while its embedded warning said `Nothing under any [KEEP] heading may be removed.` — both quoted from `f7d570f`), and needs a hand-copied filing rule that had already drifted from the library's; and **fail closed** — emit nothing, which does not defer the cut but forfeits the whole handoff, the original bug. Asked of the user 2026-09-12 after the compliance judge found round 9 had settled the fail-direction trade-off inside the ADR's own voice rather than routing it out, which `rules/core-conduct.md` forbids — the same shape as D16 |
 
 Triage (`triaging-new-instructions`, 2026-09-08): every item classifies as **hook** (tier 1,
 script-decidable from observable facts). No new `core-conduct.md` rule, no new `gates.md`
@@ -224,6 +225,7 @@ All paths relative to `<repo>/.claude/`.
 |---|---|---|---|
 | `session-state.md` | model | `slim-session-start.sh` | live |
 | `session-state.pretrim.<session-id>.md` | `live-handoff.sh`, `pre-compact-handoff.sh` | `handoff-keep-guard.sh` | one turn; reaped at session start if older than 24h — **reaping runs before the reader early-exits**, see below |
+| `session-state.pretrim.<session-id>.unfiled-<UTC timestamp>.md` | `handoff-keep-guard.sh` (`unfile_snapshot`, both `archive_failed` paths) | nothing reads it directly — `slim-session-start.sh`'s reaper matches it via the same `session-state.pretrim.*.md` glob as the plain snapshot | until the reaper files it into the archive on a later session start, once its `mv`-preserved mtime is older than `REAP_AFTER_HOURS` (24h, same constant as the row above) — **not** "on the next session start" unqualified; see the self-heal note below |
 | `session-state.archive.md` | `handoff-keep-guard.sh` (auto) and model (curated) | humans, memsearch | until rotation |
 | `session-state.archive.<N>.md` | rotation | humans, memsearch | forever, never modified again |
 | `session-state.keepguard-strikes.<session-id>` | `handoff-keep-guard.sh` | itself | cleared on success **and** on fail-open |
@@ -416,10 +418,35 @@ distinguishable on sight and by grep.
 **Archive-append failure (finding O-a).** The design specified what happens when the *snapshot*
 cannot be written and said nothing about the archive append failing, which is the same disk
 and the same permissions. A failed append means text was removed from the notepad and captured
-nowhere. It is escalated in the guard Stop output, the block is retained in the snapshot by
-**not** deleting the snapshot, and the liveness line records `decision=archive_failed`. The
-turn is not blocked — blocking cannot make the disk writable — but the failure is never
-silent, and the snapshot survives as the copy of last resort.
+nowhere. It is escalated in the guard Stop output, and the liveness line records
+`decision=archive_failed`. The turn is not blocked — blocking cannot make the disk writable —
+but the failure is never silent.
+
+The original wording here said the block was retained "by **not** deleting the snapshot" and
+that "the snapshot survives as the copy of last resort." That was false: leaving the snapshot
+in place at `PRETRIM_FILE` is not the same as it surviving, because `live-handoff.sh` only
+skips overwriting `PRETRIM_FILE` on the next prompt when a keep-guard strike file sits beside
+it, and both `archive_failed` paths delete that strike file. A snapshot left at `PRETRIM_FILE`
+was therefore silently clobbered by the very next prompt's `snapshot_notepad` call — the text
+this whole card exists to protect ended up nowhere on disk while this paragraph, and the
+guard's own Stop-output warning, both claimed it was safe (observability verdict 2026-09-16 on
+`cb4190b`; see `docs/features/handoff-trim-safety.md` task 10). The fix: on both
+`archive_failed` paths the guard now `mv`s the snapshot, before anything else can overwrite it,
+to a distinct **unfiled** copy in the same `.claude/` directory
+(`session-state.pretrim.<session>.unfiled-<UTC timestamp>.md`). That name matches
+`slim-session-start.sh`'s `reap_stale_snapshots` glob (`session-state.pretrim.*.md`), so an
+unfiled copy self-heals into the archive with no new state machine — qualified: `mv` preserves
+the file's original mtime rather than resetting it, and the reaper only files a snapshot whose
+age exceeds `REAP_AFTER_HOURS` (24h, `slim-session-start.sh`'s
+`SLIM_HANDOFF_REAP_AFTER_HOURS`-overridable constant). The unfiled copy therefore self-heals on
+the **first session start at or after the original snapshot turns 24h old**, not necessarily
+the very next one — a session that starts minutes after the `archive_failed` turn will not reap
+it yet; one that starts a day later will.
+`PRETRIM_FILE` no longer exists once the `mv` succeeds, so the next prompt snapshots fresh and
+strike handling is unaffected. The guard's warning names the unfiled path, not `PRETRIM_FILE`.
+If the `mv` itself fails, the warning says so and names `PRETRIM_FILE` instead — which the
+failed `mv` left untouched, so that path genuinely still exists — rather than repeating the
+same false "kept" claim about a path a later prompt is about to erase.
 
 **Secret handling (finding C9, revised after round 2).** The archive makes notepad text
 permanent and search-indexed, on a path that never passes through `scan-secrets.sh` — that
@@ -741,7 +768,9 @@ Scenario: The archive append fails
   When the guard files a removal
   Then the liveness line records decision=archive_failed
   And the guard says so in its Stop output
-  And the snapshot is NOT deleted, so the removed text still has a copy
+  And the snapshot is moved to a distinct unfiled copy in the same directory, not left at
+    PRETRIM_FILE where the next prompt's snapshot would silently overwrite it
+  And the guard's warning names the unfiled copy's actual path
 
 Scenario: The liveness log cannot be written
   Given the log file cannot be written
@@ -903,7 +932,9 @@ labelling it as one would repeat the fault it was written to correct.
 Ordered so every step is independently useful and nothing depends on a later step. **The list
 skips 7 on purpose** — the read-cap step was folded into the write-cap step so both caps rise in
 one commit, and the numbers were deliberately not re-flowed, because re-flowing them is what made
-cross-references stale before. Steps are referred to by what they do, never by number. The ignore
+cross-references stale before. Steps are referred to primarily by what they do, not by number;
+the bounded set of numbered mentions is measured (not asserted empty) in the cross-reference
+note near the end of this file, which records the current `grep -nE "task [0-9]"` count. The ignore
 rules come **first**, before anything writes a file they are meant to cover — an earlier
 ordering created per-turn byte-identical copies of the notepad seventeen tasks before the rule
 that ignores them, in two repos measured as not covering them today.
@@ -1018,46 +1049,289 @@ that ignores them, in two repos measured as not covering them today.
       back to the environment variable and then to `nosession`, so every session in one repo
       would share one snapshot — the exact C2 blinding the per-session filename exists to
       prevent. Degraded rather than silent: one shared snapshot still beats none.
-- [ ] 5. Stale-snapshot reaper in `slim-session-start.sh`, running **above every early
+- [x] 5. Stale-snapshot reaper in `slim-session-start.sh`, running **above every early
       exit** in that function, and deleting a snapshot only after confirming the archive append
       succeeded.
-- [ ] 6. Raise **both caps in one commit**: `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) with the
+      **Done 2026-09-10.** `reap_stale_snapshots` takes `REPO_ROOT` directly and never reads
+      `state_file`, so it still reaches the orphaned-snapshot case — notepad gone, snapshot the
+      only surviving copy — that every early exit below it would otherwise skip (finding C6).
+      Measured rather than reported: `slim-session-start.test.sh` reads **48/48**, which is the
+      29 assertions standing when task 4 closed plus 19 new ones (fourteen scenario, five
+      falsifier); both untouched siblings still read what they read before —
+      `handoff-archive.test.sh` **79/79** and `live-handoff.test.sh` **31/31**, the whole
+      evidence that the library and the per-turn snapshotter were not disturbed.
+      Two falsifiers, each built from a **copy** of the real hook and each asserting its own
+      mutation changed something first. **A** moves the reaper call below the `session-state.md`
+      early exit and confirms the orphaned snapshot then goes unarchived — the whole evidence
+      that the ordering assertion tests ordering rather than mere presence; it also asserts the
+      mutant still holds exactly one call, so a mutation that deleted the call instead would be
+      caught rather than counted as proof. **B** makes the delete unconditional and confirms the
+      snapshot is then destroyed by the same append failure the real hook survives. B needed its
+      own fixture: the read-only-`.claude` scenario above blocks the mutant's `rm` too, since
+      removing a file needs write permission on the *directory*, so B leaves `.claude` writable
+      and makes only the archive file unwritable.
+      ⚠️ **Two stated limits.** The reaper reads mtime with BSD `stat -f %m`, the same call
+      `guard_liveness_state` uses for its own staleness comparison, rather than a new
+      portability debt (the `slim-session-start.sh:104` line this task originally cited has
+      since moved — task 13's insertions pushed the file's content down, and that line number
+      now holds an unrelated `return 0` inside `keepguard_log_kind`; re-measured 2026-09-16);
+      where that call fails, both go blind together and the reaper's
+      digit check skips the file, so the failure direction is "nothing is reaped", never
+      "something is deleted unarchived". And the append-failure line is this hook's **one**
+      exception to its silent-on-every-failure contract, now recorded in the file header:
+      staying silent there would delete the last copy of removed text with no record anywhere,
+      this card's own headline disaster reproduced by its own fix.
+- [x] 6. Raise **both caps in one commit**: `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) with the
       oversize body-drop branch in `slim-session-start.sh` replaced by truncate-and-say, **and** the
-      write caps to 150/120, 170/140, 190/160 in `live-handoff.sh:40-49` and
-      `pre-compact-handoff.sh:85`. Deliberately one task, not two. Raising the write caps
+      write caps to 150/120, 170/140, 190/160 in the `MAX_LINES` block of `live-handoff.sh`
+      (the three assignments and the 60-80 / 80-100 / 100-120 comment directly above them)
+      and on the line beginning `Line targets:` inside the directive heredoc of
+      `pre-compact-handoff.sh`. Both are named by content, not by line: the earlier
+      `live-handoff.sh:40-49` citation was measured wrong on 2026-09-10 — the snapshot task
+      had grown the file and 40-49 is now the session-identity block, while the caps had
+      moved to 88-98. The `pre-compact-handoff.sh:85` citation was re-measured at the same
+      time and was exactly right, so this is a de-numbering, not a correction of both.
+      Deliberately one task, not two. Raising the write caps
       first opens a live regression window in every repo: `vibe-scape` is 75 lines / 5,165
       bytes = 68.9 b/line and prints fine today, but at the new 150-line target it is ~10,330
       bytes against a still-8192 read cap, so its entire handoff body would be dropped — the
       exact total-loss failure this card exists to prevent, caused by the fix for it. These
       are global hooks with no opt-in, so the window is not theoretical.
-- [ ] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
-      the protected headings are re-injected verbatim.
-- [ ] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
-      the original bug report came from.
-- [ ] 10. `hooks/handoff/handoff-keep-guard.sh` as a `Stop` hook: protected-block check, strike
+- [x] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
+      the protected headings are re-injected verbatim. **Done 2026-09-12** — evidence, the
+      fail-direction asymmetry this task first claimed between the two hooks (since retired
+      by D18 and ADR 0046: both hooks now degrade to append-only, only the route differs),
+      and the false `set -e` safety claim it uncovered in already-committed code are all
+      recorded against task 8 in `handoff-trim-safety.md`; not restated here.
+- [x] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
+      the original bug report came from. **Done 2026-09-16** — full record (measured
+      RED/GREEN counts, the missing-notepad exception to the snapshot gate, the
+      distinguishable snapshot-vs-library failure wording, the falsifier, and the
+      jq-absent degradation this hook inherits from task 4) against task 9 in
+      `handoff-trim-safety.md`; not restated here.
+- [x] 10. `hooks/handoff/handoff-keep-guard.sh` as a `Stop` hook: protected-block check, strike
       cap with reset on both exits, mechanical archive append, liveness heartbeat with the full
       set of decision tokens. Every notepad-derived string it emits is sanitized and enveloped.
-- [ ] 11. Confirm the `Stop` hook JSON contract against the installed binary, not the docs
+      **Done 2026-09-10.** 371 lines of hook, 385 of suite, **47/47 passing**, and
+      `handoff-archive.test.sh` still **79/79** — the evidence the shared library was called
+      and not grown. The six liveness decision tokens (`allow`, `block`, `unprotected`,
+      `failopen`, `archive_failed`, and the log-write-failure escalation) are each asserted.
+      `MAX_STRIKES=2`, taken from spec Constants, not chosen.
+      The library gap the spec warns about is handled rather than inherited: because
+      `missing_protected_lines` returns rc 0 both when nothing is missing *and* when the
+      snapshot is absent or unreadable, the hook tests for the snapshot **first** and emits
+      `unprotected` — never `allow` — when there is nothing to compare against. For the secret
+      check it goes through `file_removed_block`, which uses the **fail-CLOSED**
+      `block_has_secret`: an unreadable scanner quarantines rather than publishing into a
+      permanent, indexed archive. `secret_labels`, which fails open, is deliberately unused.
+      ⚠️ **Process deviation, recorded rather than hidden.** The implementer wrote the hook and
+      its suite together instead of test-first, which `rules/core-conduct.md` forbids precisely
+      because a co-written test can be shaped to fit the code. It disclosed this rather than
+      claiming TDD. The suite was therefore **re-validated independently by two mutations the
+      implementer did not run**: forcing the survival check to always pass turns **16 of 47**
+      red, and raising `MAX_STRIKES` to 99 turns **6** red — distinct, narrow sets, not a
+      blanket failure. The suite discriminates. That is evidence the tests are real; it is not
+      a substitute for the ordering rule, and the next task should not repeat the shortcut.
+      Two genuine defects surfaced during that work and are fixed: `awk -v` silently mangles
+      `\[KEEP\]` through C-style escape processing, so the regex is inlined in the awk program
+      text as the library itself does; and the ATX `#` prefix must be stripped before
+      `sanitize_line`, whose `MARKER_PATTERN` is anchored and would otherwise never fire on a
+      heading.
+      One judgment call flagged: the heartbeat log rotates on a local timestamp scheme rather
+      than reusing `archive_rotate_if_needed`, which hardcodes a `.md` suffix and would misname
+      `session-state.keepguard.log`. No scenario pins the rotated name, so nothing is violated.
+      ⚠️ **Data-loss defect found and fixed** (observability verdict 2026-09-16 on `cb4190b`):
+      both `archive_failed` paths left the snapshot at `PRETRIM_FILE` and both already deleted
+      `STRIKE_FILE`, but `live-handoff.sh` only preserves an existing `PRETRIM_FILE` when a
+      strike file sits beside it — so the very next prompt's `snapshot_notepad` call silently
+      overwrote the "kept" snapshot, losing the removed text while the guard's own warning
+      claimed it was safe. Fixed by moving the snapshot to a distinct unfiled copy
+      (`unfile_snapshot`, RED at 49/55, GREEN at 55/55) before either warning is printed.
+- [x] 11. Confirm the `Stop` hook JSON contract against the installed binary, not the docs
       page, and pin the finding in a comment.
-- [ ] 12. Register the guard in `settings.json` under `Stop`.
-- [ ] 13. Guard-liveness reporting in `slim-session-start.sh`, above the early exits, reading
+      **Done 2026-09-10**, pinned at the top of `handoff-keep-guard.sh`, attributed to
+      `/Users/marksuyat/.local/bin/claude` **2.1.267** and dated, so a later reader can tell
+      when it was true. Four findings, each read out of the binary rather than the docs site:
+      `decision` accepts **only** `approve` or `block` (the validator string is
+      `Unknown hook decision type: … Valid types are: approve, block`); the four-value
+      `allow/deny/ask/defer` set belongs to `hookSpecificOutput.permissionDecision` and is
+      **PreToolUse-only**; `hookSpecificOutput` for Stop is
+      `{hookEventName, additionalContext}`, and the consumer routes `case "Stop"` through the
+      **same** generic handler as `PostToolUse`, so injected context genuinely reaches the
+      model; and the binary advises returning success while `stop_hook_active` is true.
+      ⚠️ **The load-bearing find:** the runtime **already caps consecutive Stop-hook blocks at
+      8** — `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP ?? 8` — and past that it warns and ends the turn
+      whatever the hook says. This is what makes `keep_guard.max_strikes: 2` a real control
+      rather than dead code, and it means any future proposal to raise that cap to 8 or beyond
+      would silently hand the decision to the runtime. Checked *before* building on it, not
+      after.
+- [x] 12. Register the guard in `settings.json` under `Stop`.
+      **Done 2026-09-14.** Test-first: `hooks/handoff/handoff-keep-guard.test.sh` gained a
+      registration assertion plus mutation control (modeled on
+      `slim-session-start.test.sh`'s own "Registration assertion" block and its
+      "registration check can fail" mutant self-check — the `slim-session-start.test.sh:733-760`
+      line range this task originally cited has since moved and now holds task 13's "Guard
+      liveness" scenario instead; after the file-size split both scenarios live in
+      `slim-session-start.test.d/40-contract-and-guard-liveness.sh`, sourced by the entry
+      file, and are found by the "Registration assertion:" / "Guard liveness" section
+      comments rather than a line number; re-measured 2026-09-16), confirmed RED at
+      **48/49** (the 47 pre-existing
+      assertions plus the new mutation control both passing, only the registration check
+      failing) before the edit, committed separately under `TEST_EXEMPT`. `settings.json`'s
+      single `Stop` group gained a second `hooks[]` entry,
+      `$HOME/.claude/hooks/handoff/handoff-keep-guard.sh`, with no `timeout` key, matching
+      `live-handoff.sh`/`pre-compact-handoff.sh`/`slim-session-start.sh`; the existing orca
+      entry is untouched. Re-run GREEN at **49/49**; `verify-hook-wiring.test.sh` (**37/37**)
+      and `slim-session-start.test.sh` (**67/67**) measured unchanged from their pre-edit
+      baselines.
+      ⚠️ **Not live yet**: `grep -c handoff-keep-guard` on the primary checkout's
+      `/Users/marksuyat/.claude/settings.json` returns **0** — this branch's registration only
+      takes effect after merge.
+      Probed outside this repo (fresh repo/no `.claude/`, fresh repo/`.claude/` present but no
+      notepad, outside any repo): in a repo with **no `.claude/` directory**, the heartbeat-log
+      write fails (`No such file or directory`) and the hook reports it loudly
+      (`systemMessage`/`additionalContext`, "heartbeat was not recorded") but still exits 0 —
+      fail-open, not a crash. `live-handoff.sh:62` (`mkdir -p "$REPO_ROOT/.claude"`) runs on
+      every `UserPromptSubmit`, so in a normal turn `.claude/` already exists before `Stop`
+      fires — an **ordering dependency between two hooks, not a guarantee**. Recorded here as a
+      gap, not fixed: closing it belongs to task 10's hook, and a drive-by fix is its own task.
+- [x] 13. Guard-liveness reporting in `slim-session-start.sh`, above the early exits, reading
       **both** the mtime comparison **and the last line's decision token** — mtime alone cannot
       see `unprotected`, because a guard heartbeating it every turn keeps the log looking
       fresh while nothing is protected.
-- [ ] 14. `pre-compact.sh` injects `session-state.md` first (D7).
-- [ ] 15. memsearch: `archive_roots`/`archive_pattern` via `Path.rglob`, zero-match reporting,
+      **Done 2026-09-15.** Test-first: `slim-session-start.test.sh` gained the task-13 Gherkin
+      scenarios (never-run/rotated/unreadable/unrecognised log states, all five `decision=`
+      tokens, the mtime "notepad changed after that run" append, last-line-wins ordering, the
+      missing/empty-notepad bare report line) plus two mutation controls (a token-mapping
+      falsifier and an "above the early exits" ordering falsifier), confirmed RED at **78/97**
+      against the pre-task-13 hook (19 of the 30 new assertions failing as expected; the other
+      11 passed vacuously, since the absent behaviour trivially satisfies "no leak"/"discriminates
+      nothing" checks) before either implementation edit, committed separately under
+      `TEST_EXEMPT` (a red suite cannot carry a test marker by construction). `guard_liveness_state`,
+      `keepguard_log_kind` and `report_missing_notepad` added to `slim-session-start.sh`;
+      `guard_state` is computed in `main()` immediately after `reap_stale_snapshots` — above every
+      early exit, same C6 ordering as the reaper — and appended to the one-line header as
+      `guard: <state>`. Re-run GREEN at **97/97**; `hooks/handoff/lib/handoff-archive.test.sh`
+      (**79/79**) and `hooks/handoff/handoff-keep-guard.test.sh` (**49/49**) measured unchanged
+      from their pre-edit baselines. `shellcheck hooks/handoff/slim-session-start.sh` clean (exit 0).
+      Four deliberate choices: (1) every state names itself — a positive `ok (last run allow)`
+      signal, never silent success, so a broken reader can't look like health (O2's own thesis);
+      (2) a bare, non-enveloped stdout line when the notepad is missing or empty, but ONLY when a
+      keepguard log (main or rotated) exists — a fresh repo with no log at all stays fully silent,
+      matching every other early exit; (3) `log rotated, no run recorded since` is distinguished
+      from `never run here` so a rotation is not misread as a dead guard; (4) the five decision
+      tokens are mapped through a fixed `case` allowlist, so an unrecognised or adversarial log
+      line can only ever select one of five fixed phrases — the log's raw bytes never reach the
+      printed header.
+      **Gap, recorded not fixed:** the report reads only the log's *last* line. A run of
+      `unprotected` lines followed by one `allow` reads as `ok (last run allow)` — the spec's "a
+      run of unprotected lines" language is not implemented beyond the last line, exactly as this
+      task's own wording ("the last line's decision token") scopes it.
+      **Also fixed in the RED commit:** `backdate()` (and its inline copy in the "Handoff whose
+      writer stopped" fixture) built its `touch -t` stamp with `date -u -r`, but `touch -t` parses
+      LOCAL time — measured skew on this machine (TZ -0400): +14400s (4h) into the future with
+      `-u`, 0s without. Every pre-existing caller backdates by 24-40h, so the 4h skew never
+      flipped a result and the defect was masked in every count this card has reported until now;
+      this task's own 1-2h fixtures would have silently measured the wrong condition. Fixed by
+      dropping `-u` from both call sites (the GNU fallback already took an epoch, not a formatted
+      stamp, so it was never wrong).
+- [x] 14. `pre-compact.sh` injects `session-state.md` first (D7).
+      **Done 2026-09-10.** New suite `hooks/handoff/pre-compact.test.sh`, **20/20**, written
+      before the hook changed and confirmed RED at **12/20** first — the eight failures were
+      exactly the notepad assertions, while the pre-existing three-file behaviour and all
+      three falsifiers stayed green throughout, so the suite was measured against both
+      states rather than only the one it was written for.
+      Two things beyond the one-line task, both deliberate. The notepad is read by `cat`
+      itself rather than behind a `-r` probe, and an unreadable notepad is **named** in the
+      output instead of skipped. Measured on a mutant with that guard removed: a bare `cat`
+      under `set -euo pipefail` exits 1 and takes `context.md` and the other two files down
+      with it, so the vendored pattern would have turned one unreadable notepad into total
+      loss of all four files — this card's own headline failure, reproduced by the fix for
+      it. That mutation is also the receipt that the two unreadable-notepad assertions
+      discriminate at all: **both of them pass while the suite is red**, because a notepad
+      that is never read is never unreadable, and a green run alone would not have shown it.
+      Not done, and recorded rather than silently decided: this hook emits all four files
+      **unsanitized**, exactly as the vendored original did. `slim-session-start.sh`
+      sanitizes the notepad it reads, so the two read paths now disagree. Nothing in D7 or
+      in any scenario asks this path to sanitize, and sanitizing one file of the four would
+      be incoherent, so it is left as an open question for a later card — not a gap this
+      task closed, and not a decision this task was scoped to make.
+- [x] 15. memsearch: `archive_roots`/`archive_pattern` via `Path.rglob`, zero-match reporting,
       `session-state.quarantine.md` excluded by name, `_doc_source_type` widened off the
       retired `CODING_MEMORY.md`, and a `--reclassify` run so `archive_doc` becomes a usable
       health signal.
-- [ ] 16. Document the `[KEEP]` convention in `skills/managing-session-memory/SKILL.md`, and
+      **Done 2026-09-10, with one half of the intent explicitly NOT delivered — see below.**
+      `_iter_archive_docs` walks the three roots with `Path.rglob`, dedupes against the files
+      the `curated_docs` and `repo_roots` walks already yielded, and reports a zero-matching
+      root on stderr instead of indexing as though nothing changed. `_doc_source_type` gained
+      an optional third argument so a file matching `archive_pattern` types as `archive_doc`
+      whichever bucket found it; the existing two-argument call sites are untouched, which is
+      why the pre-existing suite needed no edit.
+      **Measured: 110 passed, 23 deselected.** The 23 are the `golden` and `measurement`
+      marks that `pyproject.toml` deselects by default, and this card has been bitten by that
+      exact line before, so it was checked rather than assumed: neither deselected file
+      mentions archives at all, and all three files that do are in the selected set.
+      **Falsified, not just green.** Swapping `root.rglob` for a non-recursive `root.glob`
+      turns exactly two tests red, one of them
+      `test_archive_roots_are_walked_with_rglob_into_dot_directories`. A suite that stayed
+      green under that mutation would have been measuring nothing.
+      ⚠️ **`archive_doc` is NOT yet a usable health signal, and the checkbox does not claim it
+      is.** The real `--reclassify` run reported `retyped=0`, with the `archive_doc` chunk
+      count at 514 before and 514 after, because **zero `session-state.archive*.md` files
+      exist anywhere on disk** — the hook that writes them has not shipped. The plumbing is
+      wired and proven; the signal turns on by itself once tasks 8 to 12 land. Re-run
+      `--reclassify` then, and only then record what the count did.
+      ⚠️ **A wrong number was caught in this task's own code comment before it committed.**
+      The comment justified `Path.rglob` with "0 matches vs Path.rglob's 7 on the live tree",
+      which is false for the pattern it sits beside: for `session-state.archive*.md` both
+      return **0**. Re-measured on 2026-09-10, the real evidence is two separate facts —
+      `glob.glob` never expands `~` (0 matches for all three roots, any pattern), and with `~`
+      expanded its `**` still will not enter dot-directories (**6** vs `Path.rglob`'s **29**
+      for `session-state*.md`). The comment now states those, and states that the shipped
+      pattern cannot demonstrate the difference today.
+      Unrelated drift seen while measuring, recorded so a later reader does not chase it: the
+      reclassify run printed `vanished_sources=682`, and `repo_doc`/`judge_doc` counts moved
+      between snapshots because the scheduled `launchd` indexer was running against the same
+      live database. `retyped=0` is what shows this change caused none of it.
+- [x] 16. Document the `[KEEP]` convention in `skills/managing-session-memory/SKILL.md`, and
       tag the sections that need protecting in this repo notepad as the first real use.
-- [ ] 17. ADR under `docs/decisions/` for the two structural decisions: D11 (an append-only
+      **Done 2026-09-10.** The convention is written up under the skill's
+      *Protecting Notepad Sections* heading — anchored by heading, not line number, because
+      eleven anchors in this card went stale inside their own implementation phase. It states
+      the ATX-only heading form, the setext exclusion, the region boundary, set-membership
+      survival, and the both-directions fence rule, then names
+      `hooks/handoff/lib/handoff-archive.sh` as authoritative over the summary so the two can
+      never silently disagree.
+      The **first real use** was an audit, not an edit: all eight tagged headings in
+      `.claude/session-state.md` already conform, verified byte-for-byte rather than by eye —
+      ATX form, `[KEEP]` the last non-whitespace on the line, no fenced block anywhere in the
+      file to create a false region boundary. Only the H1 title and its three-line intro are
+      untagged, and they are pointer text with nothing to lose. No corrections were needed, so
+      none were invented.
+      One claim in the first draft of that section was **wrong and was corrected before the
+      commit**: it said the guard holds the turn open until the block is restored. It does not
+      — `keep_guard.max_strikes` is 2, after which it fails open with a loud warning. The
+      corrected text says so, because a doc that overstates a protection is worse than one that
+      omits it.
+- [x] 17. ADR under `docs/decisions/` for the two structural decisions: D11 (an append-only
       store that rotates and is never deleted) and D12 (that store being permanent, gitignored
       and machine-local). `rules/gates.md` requires an ADR for structural decisions.
-- [ ] 18. Write the quarantine purge procedure into `skills/managing-session-memory/SKILL.md`:
+- [x] 18. Write the quarantine purge procedure into `skills/managing-session-memory/SKILL.md`:
       what `session-state.quarantine.md` is, how to read it, and how to delete it safely. D16
       is answered — quarantine file, not redaction, not archive-as-normal — so this task
       documents the decision rather than waiting on it.
+      **Done 2026-09-10.** Written up under the skill's *The Quarantine File* heading. It says
+      what the file is (a flagged block diverted out of the permanent archive, which gets only
+      a stub), that it is never indexed, how to read it (plain Markdown, but treat the contents
+      as live credential material), and how to delete it — and it explains *why* this is the
+      one archive-family file that is safe to delete by hand, which is the part a reader needs
+      to act without asking: routing a suspected secret through a permanent, indexed,
+      never-deleted store would make a false positive searchable forever.
+      **Two gaps were flagged rather than filled.** The design specifies no retention period
+      before deletion, and no migration path for blocks flagged before this file existed. Both
+      are named in the skill as deliberately unspecified. Writing a plausible rule for either
+      would have read as settled design in a document a later session trusts, which is exactly
+      the failure mode this card exists to prevent.
 
 Split into `handoff-trim-safety.spec.md`, exercising the MAY in `rules/gates.md`
 (one-canonical-file discipline). The card keeps frontmatter, tasks and verification — what a
@@ -1076,8 +1350,14 @@ matching edit; adding or removing a task does.
 
 ### A note on cross-references
 
-Task numbers are deliberately **not** cited anywhere in this document — verified by search,
-not asserted; the check is `grep -nE "task [0-9]"` over both halves, which must return nothing.
+Steps are named by what they do, never *primarily* by number — but a task number does show up
+in prose in a bounded, checked set of places, not zero: `grep -nE "task [0-9]"
+docs/features/handoff-trim-safety.md docs/features/handoff-trim-safety.spec.md` returns 17
+lines as of this writing (10 in the card, 7 in this spec), recorded here rather than asserted
+empty. What makes these safe is not their absence but that the checklist entries themselves
+(`- [x] N. ...`) are never re-flowed — a folded/skipped number stays skipped instead of being
+renumbered — so a citation points at a fixed line item rather than a target that keeps moving
+under it.
 The list also has a deliberate numbering gap: the read-cap step was folded into the write-cap
 step so both caps rise in a single commit, and the numbers were not re-flowed afterwards,
 because re-flowing them is what made cross-references stale twice before. Three of them went

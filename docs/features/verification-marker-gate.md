@@ -2979,3 +2979,66 @@ gated on this feature.
 development because the harness loads the primary checkout's copy — the same reason a `judge-guard` fix
 could not be gated by `judge-guard` until the primary checkout pulled it. Expect it to arm only after
 merge, and treat task 14 as the first real test of that.
+
+---
+
+## Finding 2026-09-17 — `check_all_pairs_wired` false-positives on a call through a sourced library
+
+Appended, nothing above edited: four inbound citations point into this file's lines 166-173,
+781-796, 996-1009 and 1089-1102, and a splice would move them.
+
+Found from outside, while reviewing PR #104: that PR's body reported the repo's only red suite as a
+real wiring gap in two `panes/` suites. **It is not a gap. The assertion is wrong.**
+
+### What the assertion does
+
+`hooks/lib/write-test-marker.test.py`, `check_all_pairs_wired()`, records
+`CALL_MARKER in body` — a **literal substring search of each suite file's own text** for
+`hooks/lib/write-test-marker.py`.
+
+### Why that reports a correctly-wired suite as unwired
+
+`panes/dispatch-pane-agent.test.sh` and `panes/run-pane-agent.test.sh` source `panes/test-lib.sh`
+and end in `tl_finish`. `tl_finish` contains the marker-write call verbatim — the same two lines as
+every inlined call site. The library computes `MARKER_SELF` from the **sourcing** script's `$0`,
+deliberately, with a comment at `panes/test-lib.sh` saying exactly why: *"`$0` under `source` is the
+CALLER's `$0` … computing it in the library captures the sourcing script's own path."* So each
+calling suite gets its own marker, and the substring search cannot follow the call.
+
+Six further suites route through the same helper (`panes/dispatch-pane-agent.{routing,subcommands,
+cleanup,policy,scratch,dispatch}.test.sh`), so the same blindness covers them; they are not flagged
+only because their derived subject is not a tracked file.
+
+### Measured, not reasoned
+
+Marker mtimes around a real run of each flagged suite:
+
+| Suite | Result | Marker for its subject | Before | After |
+|---|---|---|---|---|
+| `panes/run-pane-agent.test.sh` | 18 passed, 0 failed | `panes%2Frun-pane-agent.sh` | 2026-09-14T16:59:36 | **2026-09-17T17:58:07** |
+| `panes/dispatch-pane-agent.test.sh` | 139 passed, 0 failed | `panes%2Fdispatch-pane-agent.sh` | 2026-09-14T16:59:34 | **2026-09-17T17:59:00** |
+
+The receipt the gate actually reads is written in both cases.
+
+⚠️ **This inverts a claim that had been repeated across rounds.** PR #104's body called these "the
+same wiring gap" as the hand-written `hooks/test-marker-guard.test.sh` receipt. They are not the
+same: that one genuinely writes no marker for its own subject; these two do. The wrong diagnosis was
+carried forward from an earlier round and restated without being checked — the check that settles it
+is two `stat` calls around a suite run, which nobody had made.
+
+### Why this matters more than one red line
+
+The assertion's docstring says a stale hardcoded list "can never satisfy this; adding a paired suite
+without wiring it turns this red". True. But the converse now also holds: **wiring a suite correctly
+through shared code also turns it red**, so the signal is not trustworthy in either direction
+without reading the suite. A standing red trains readers to skip it, which is the state it has been
+in.
+
+### Open, not decided here
+
+1. Follow the call through a sourced library, or assert on **behaviour** (run the suite, check a
+   marker appeared) instead of on text? Behaviour is the honest check and is far more expensive.
+2. Whichever is chosen, it must not become permissive enough to hide a genuinely unwired suite —
+   that is the whole point of the assertion, and is why this was not bundled into PR #104.
+3. The three named orphans elsewhere in this card are a **different** defect (naming mismatch, not
+   indirection) and are unaffected by this finding.
