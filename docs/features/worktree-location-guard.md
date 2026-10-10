@@ -4392,8 +4392,14 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
 
       **Nearly all of it is `hooks/git-guard.test.sh`.** That suite builds its per-case
       fixtures with the literal template `mktemp -d "$TMP/repo.XXXXXX"` (`git-guard.test.sh:91`)
-      — exactly the path shape the log records — and accounts for 941 lines: 435 under the
-      shared `repo` fixture, 506 under the variants, and 26 at a bare mktemp root. The
+      — exactly the path shape the log records — and accounts for 967 lines: 435 under the
+      shared `repo` fixture, 506 under the variants, and 26 at a bare mktemp root.
+      ⚠️ **This read 941 until 2026-10-10, and the sentence refuted itself**: 435+506+26 is
+      967, while 941 is 435+506 — the total of one fixture *shape* (`attribution-by-time.md`
+      calls it P1), reused here as the total for a whole *suite*, silently dropping the 26
+      bare-root lines. Caught by the observability judge at `87dd0f4`; re-derived from
+      `layer2-would-deny.tsv` itself rather than from the summary table, which was right. The
+      dependent figure `967 + 95 = 1062` holds; `941 + 95` would have been 1036. The
       remaining 95 are the `rebasing` and `detached` scenarios in
       `hooks/verify-hook-wiring.test.sh`, matching what the layer-2 review had already found.
       **Four lines, under directories named `full` and `shallow`, are still unattributed** and
@@ -4454,6 +4460,12 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       above predicted. **Merge this branch before starting the criterion-3 re-run**, or the
       re-run will measure contaminated data again and the window start will be wrong twice
       over.
+      ⚠️ **Correction, 2026-10-10 — this used `wc -l` as the leak signal, which is the wrong
+      population.** The direction holds (553 of the 560 new would-denies in that window were
+      fixture noise) but roughly half of the +983 was `ALLOW` lines that criterion 3 never
+      reads, and 13 other unisolated suites keep producing them after this fix. Measured
+      breakdown and the right signal (`WOULD-DENY` restricted to `var/folders`, never `wc -l`):
+      task 18.
 
       **What changed about the flip decision.** The 2026-09-04 note worried that arming would
       block ordinary work in repos that had no worktree yet. That specific worry has eased —
@@ -5758,9 +5770,10 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
       machine's git configuration. Because `core.hooksPath` is set in the **global** config
       only (measured 2026-09-16: `git config --global --get core.hooksPath` returns the store,
       `--system` returns nothing), every one of those fixtures reaches the live layer-2 hook.
-      They account for **1062 of the 1066** `var/folders` would-deny lines — 941 from
-      `git-guard.test.sh`, 95 from `verify-hook-wiring.test.sh` — leaving a machine-wide log
-      that is largely its own machinery talking to itself.
+      They account for **1062 of the 1066** `var/folders` would-deny lines — 967 from
+      `git-guard.test.sh` (corrected from 941 on 2026-10-10; see the correction at task 10),
+      95 from `verify-hook-wiring.test.sh` — leaving a machine-wide log that is largely its
+      own machinery talking to itself.
 
       **The fix is the line the two non-leaking suites already use**, at the top of each:
 
@@ -5772,7 +5785,12 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
 
       **Why this is believed safe for `git-guard.test.sh`, measured rather than assumed:** it
       never reads the global config. Every identity it needs is set per-repository with
-      `git -C "$dir" config user.email` / `user.name` (`:27-28`, `:93-94`, `:734-735`).
+      `git -C "$dir" config user.email` / `user.name` — at `:50-51`, `:116-117` and `:783-784`
+      as of 2026-10-10. ⚠️ Those three anchors have now been wrong twice. They read
+      `:27-28`, `:93-94`, `:734-735` (pre-fix positions) until the judge at `87dd0f4` flagged
+      them as `:46-47`, `:112-113`, `:779-780`; correcting the comment four lines above them
+      then shifted all three again, in the same edit that fixed them. **Re-derive rather than
+      trust them**: `grep -n 'config user\.email' hooks/git-guard.test.sh`.
       Confirm the same for `verify-hook-wiring.test.sh` before editing it — that has **not**
       been checked, and a suite whose whole purpose is verifying hook wiring is far more
       likely than `git-guard.test.sh` to depend on real configuration on purpose. **If it
@@ -5792,12 +5810,68 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
       4. Decide `verify-hook-wiring.test.sh` on its own evidence, per the caution above.
       5. Only then is a clean layer-2 window available.
 
-      ⚠️ **This removes evidence as well as noise.** Afterwards layer 2's log will be nearly
-      empty, and an empty log is not proof the guard works — it is the absence of
-      observations. Criterion 2 for `D-L2` is already satisfied from the existing window and
-      should be read as satisfied *there*, historically, rather than re-litigated against a
-      clean log that may hold nothing for weeks. Record that reading here when the fix lands,
-      or a later session will read the empty log as a regression.
+      ⚠️ **This removes evidence as well as noise.** An empty log is not proof the guard
+      works — it is the absence of observations. Criterion 2 for `D-L2` is already satisfied
+      from the existing window and should be read as satisfied *there*, historically, rather
+      than re-litigated against a clean log that may hold nothing for weeks. Record that
+      reading here when the fix lands, or a later session will read the empty log as a
+      regression.
+
+      ⚠️ **"Afterwards layer 2's log will be nearly empty" was wrong, and the whole-line
+      count is the wrong leak signal.** Flagged by the observability judge at `87dd0f4` and
+      then measured wider than it reported. Two separate errors:
+
+      *First, these are not the only two unisolated suites.* A static scan of all 25
+      fixture-building suites under `hooks/` finds **13 with no `GIT_CONFIG_GLOBAL` line at
+      all** — among them `test-marker-guard.test.sh`, `doc-guard.test.sh`,
+      `secret-command-guard.test.sh`, `merge-guard.test.sh`, `scan-secrets.test.sh` and the
+      five `hooks/handoff/` suites. The judge measured two of them directly: one run of
+      `test-marker-guard.test.sh` appends **93** lines and `doc-guard.test.sh` **1**. So the
+      log keeps growing after this fix, and a later session comparing total line counts will
+      read that growth as a regression — the exact misreading this task warned about, arriving
+      by a route the warning did not anticipate.
+
+      *Second, the line count conflates two populations that matter very differently.*
+      Measured on the live log at 9829 lines (2026-10-10):
+
+      | field-5 class | lines | share |
+      |---|---:|---:|
+      | `ALLOW git-init-own-repository` | 7920 | 80.6% |
+      | `WOULD-DENY primary-HEAD-lock-held` | 1797 | 18.3% |
+      | `ALLOW scope-not-primary` | 50 | 0.5% |
+      | `ALLOW no-primary-HEAD-lock` | 48 | 0.5% |
+      | `ALLOW bypass-worktree-exempt` | 14 | 0.1% |
+
+      **Criterion 3 reads only the `WOULD-DENY` subset**, so the four `ALLOW` classes — 81% of
+      the file, and all of what the other 13 suites contribute — are irrelevant to the review
+      and harmless. The leak signal is therefore `grep -c WOULD-DENY` restricted to
+      `var/folders` paths, never `wc -l`. Correcting the earlier assertion: the
+      8791 → 9774 growth recorded above was called "the leak continuing" without being traced.
+      Traced now, by timestamp bucket:
+
+      | window | ALLOW | WOULD-DENY | of which fixture | of which real repo |
+      |---|---:|---:|---:|---:|
+      | up to 2026-09-16 | 7367 | 1231 | 1071 | 160 |
+      | 2026-09-17 … 09-26 | 638 | 560 | 553 | 7 |
+      | 2026-09-27 … 10-09 | 27 | 6 | **0** | 6 |
+
+      So the direction of that claim was right — 553 of the 560 new would-denies in the
+      nine-day window were fixture noise — but roughly half the raw growth was `ALLOW` lines
+      that never mattered. And the fixture would-deny lines are driven by *running* those
+      suites, not by elapsed time: nothing ran them 09-27 onward, so that window holds zero,
+      which must **not** be read as the fix taking effect (it is still unmerged).
+
+      **The practical payoff for the layer-2 criterion-3 re-run.** Of the 173 `WOULD-DENY`
+      lines outside `var/folders`, across 63 distinct repository roots, only **four roots are
+      genuine repositories** — `Snatch-Bracket` (7), `mtg-wizard` (7), `vibe-scape` (6),
+      `.claude` (3) — totalling **21 lines**. The other 59 roots (152 lines) are agent scratch
+      clones under `/private/tmp/r10/`, `/private/tmp/obsjudge-r10/`, `/private/tmp/judge-*`
+      and pane `work/clone` directories. Split at the window cut: **19 lines before
+      `2026-09-14T20:41:44Z`** — exactly the population the 2026-09-08 layer-2 review read and
+      judged 19/19 CORRECT, which confirms that figure was right and correctly scoped — and
+      **2 lines after**, both `vibe-scape`, at `2026-10-04T04:44:29Z` and
+      `2026-10-05T20:45:46Z`. **The layer-2 re-run therefore has 2 new lines to read, not the
+      571 the raw delta suggests.**
 
       **Result, 2026-09-17.** Both suites severed. The falsifier is the log line count, not a
       green suite, and it was run as specified — measured on the **live**

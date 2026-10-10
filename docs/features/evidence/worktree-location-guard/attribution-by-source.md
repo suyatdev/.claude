@@ -27,8 +27,12 @@ $ grep -c 'var/folders' layer2-would-deny.tsv
 | `full/.git/`, `shallow/.git/` (2 roots, 2 lines each) | 4 | **none found** | UNATTRIBUTED |
 | **Total** | **1066** | | |
 
-935 of the 1066 lines (435+506+26 — everything but the two `verify-hook-wiring.test.sh`
+967 of the 1066 lines (435+506+26 — everything but the two `verify-hook-wiring.test.sh`
 groups and the 4 unattributed lines) trace to a single suite, `hooks/git-guard.test.sh`.
+⚠️ This read `935` until 2026-10-10 — a third value, matching neither the table above nor
+the `967` already stated at the "would stop being" paragraph below, and not the sum its own
+parenthesis gives. Corrected against a fresh re-derivation from `layer2-would-deny.tsv`:
+435 + 506 + 26 = 967, and 967 + 95 + 4 = 1066.
 That suite, plus `verify-hook-wiring.test.sh`, together account for **1062 of 1066 (99.6%)**
 STRONG-confidence lines. **4 lines (2 mktemp roots) remain unattributed.**
 
