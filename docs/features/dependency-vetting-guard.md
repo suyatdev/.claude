@@ -13,8 +13,10 @@ branch: none
 > `gate confirmed`. Round 1 of both judges ran 2026-10-12 (compliance: fail, 6 findings;
 > observability: risk medium) and fdfc5d8 answered them. Round 2 (compliance: fail, 2 findings;
 > observability: risk low) — `writing-specs/ambiguous-requirement` recurred, was escalated, and
-> Mark directed the fix (versionless Homebrew vetter line); Mark also decided D9. This revision
-> answers round 2; round 3 is next.
+> Mark directed the fix (versionless Homebrew vetter line); Mark also decided D9; 614b3fc answered
+> round 2. Round 3 (compliance: fail, 4 findings; observability: risk medium — D9 wrongly covered
+> `pnpx`, which always downloads) reached the 3-round cap; Mark chose "fix all, check once more".
+> This revision answers round 3; round 4 is next, and any finding in it goes straight to Mark.
 >
 > **Pending Mark's OK before the gate** (Claude proposed each; none was in the brainstorm): the
 > lockfile row (Manifest edits); the scanner names (below); D8, Homebrew skips the pin check;
@@ -113,7 +115,7 @@ Mark chose that over "ranges with a lockfile" on 2026-10-09.
 | D5 | Report lifetime | **7 days, any project**, keyed on ecosystem + name + exact version | fresh every time; forever |
 | D6 | What counts as pinned | **Exact version only**; a range is refused | ranges with a lockfile |
 | D7 | Hook's own failure | **Fall back to `ask`** with a "guard is broken" warning — never silent allow, never blanket deny | fail open; fail closed |
-| D9 (2026-10-12) | `npx tsc`-style runs of a tool the project already has | **Allow when already installed locally** — no download happens; otherwise the normal flow | ask every time; keep refusing |
+| D9 (2026-10-12) | `npx tsc`-style runs of a tool the project already has | **Allow when already installed locally** — no download happens; otherwise the normal flow. Applied to `npx` only, the one runner measured to use the local copy (Install forms, D9) | ask every time; keep refusing |
 
 ## Measured inputs the design relies on (2026-10-11)
 
@@ -126,6 +128,8 @@ Mark chose that over "ranges with a lockfile" on 2026-10-09.
 | osv-scanner exit codes at v2.6.0: `0` scanned, no findings; `1` scanned, findings; `1-126` "reserved for vulnerability result related errors" (the docs' own range, which overlaps `1`); `127` general error; `128` no packages found; `129–255` other errors | `docs/output.md` "Return Codes" at tag `v2.6.0` (read 2026-10-12; osv-scanner itself is not installed, so not run) |
 | osv-scanner v2.6.0 release ships `osv-scanner_darwin_arm64` and `osv-scanner_SHA256SUMS`; this machine is `arm64` | GitHub releases API for tag `v2.6.0`; `uname -m` (2026-10-12) |
 | `shell_segments.segments()` returns `[]` for a command it cannot lex — e.g. a heredoc whose body has an apostrophe, followed by `npm i zod@3.23.8`. An empty or blank command returns `[({}, [])]`, not `[]` (an earlier draft of this row said both returned `[]`; the round-2 judge measured otherwise and a re-probe agreed) | probe 2026-10-12; `hooks/lib/classify-git-command.py:505-512` uses `not segs and src.strip()` |
+| `npx <x>` (npm 12.0.1) runs a local `node_modules/.bin/<x>` without contacting the registry; `npx -p <x> <x>` contacts the registry even when the local file exists | `mktemp -d` project with a fake `.bin` script, `npm_config_registry=http://127.0.0.1:9/`: plain run printed the script's marker, rc 0; `-p` run failed with a registry connection error (2026-10-12) |
+| `pnpx` (pnpm 10.34.5) is `pnpm dlx` — it goes to the registry even with a local copy | measured by both round-3 judges, 2026-10-12 (not re-run by the author) |
 | npm downloads: a scoped name works one at a time (`/downloads/point/last-week/@types/node` → 463,947,968) but **not** in a bulk list (`{"error":"scoped packages are not currently supported in bulk lookups"}`) | 2026-10-12 |
 | Python `str.isprintable()` is false for tab, newline, U+007F, U+0085, U+2028 and U+2029; a string carrying U+0085 and U+2028 `splitlines()` into 3 parts raw and 1 after replacing non-printables | probe 2026-10-12 |
 | System `npm` 12.0.1, `brew` 6.0.14 — recorded, not pinned (system tools) | `npm --version`, `brew --version` (2026-10-12) |
@@ -165,7 +169,7 @@ sequenceDiagram
 
 | File | Purpose | Depends on |
 |---|---|---|
-| `hooks/lib/classify-install-command.py` | Pure function: command text → list of install intents | `hooks/lib/shell_segments.py` (`segments()`, `program()`) |
+| `hooks/lib/classify-install-command.py` | Pure function: command text → list of install intents (no filesystem access; D9's local check belongs to the hook) | `hooks/lib/shell_segments.py` (`segments()`, `program()`) |
 | `hooks/lib/classify-manifest-edit.py` | Pure function: tool payload for `Edit`/`Write` → list of added dependencies | stdlib `json`, `re`; TOML parsed by a minimal reader (3.9 has no `tomllib`) |
 | `hooks/lib/vetting_record.py` | Read/write/expiry of records; path validation | stdlib |
 | `hooks/dependency-guard.sh` | Hook wrapper for `Bash` and `Edit\|Write\|NotebookEdit` | the three libs above |
@@ -185,6 +189,8 @@ pinned: true              # false for null, a range (^ ~ > < * x || spaces), a d
 tool: npm                 # argv[0] after wrapper stripping
 form: add | run           # run = npx / pnpx / uvx / pipx run / bunx; the ask reason says "runs from registry" for run
 source: registry | other  # other = workspace:, file:, link:, a git/http(s)/tarball URL, a local path (./x, ../x, /x)
+local_candidate: false    # true only for a versionless npx run with no -p/--package (D9); the hook does the filesystem check
+cd_target: null           # the segment's preceding `cd` argument as written, or null
 ```
 
 Input validation — applied by the classifiers, `vetting_record.py` and `vet-dependency` alike
@@ -195,14 +201,16 @@ a URL segment or file content:
 |---|---|---|
 | `ecosystem` | one of the six literals above | hook: treated as a guard failure (`ask`, "broken"); vetter: exit 2, usage message |
 | `name` | `^[A-Za-z0-9._@/-]{1,214}$`; not `.`/`..`; no `..` substring; no leading or trailing `/`, no `//`. Slash count by ecosystem: `npm` ≤ 1 and only as `@scope/name`; `go` any (module paths, e.g. `golang.org/x/text`); `homebrew` ≤ 2 (`user/tap/formula`); `pypi`, `crates.io`, `rubygems` 0 | hook: `ask` naming the raw value (sanitised, below); vetter: exit 2 |
-| `version` | `^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$`, no `..` substring, no `/`. Required, except for `homebrew`, where it must be absent on the vetter's command line (D8) | same as `name` |
-
-Before validation the classifier normalises two spellings: a pip extra is dropped from the name
-(`requests[security]==2.32.3` → `requests` at `2.32.3`), and an npm alias is resolved to the real
-package (`foo@npm:bar@1.0.0` → `bar` at `1.0.0`).
-
-Directories under `hooks/state/vetting/` are created mode `0700` and files `0600`.
+| `version` | `^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$`, no `..` substring, no `/`. **In the hook it applies only to an intent that passed step 1 as pinned** — an absent version or a range never reaches it, so step 1's `MSG_UNPINNED` deny always wins for those. In the vetter it is required, except for `homebrew`, where it must be absent (D8) | hook: `ask` naming the raw value (sanitised); vetter: exit 2 |
 | record path | after joining, `os.path.realpath` must start with the realpath of `hooks/state/vetting/` + `/` | treated as no record (hook); exit 2 (vetter) |
+
+Before validation the classifiers normalise two spellings, on the command line and in a
+`package.json` value alike: a pip extra is dropped from the name (`requests[security]==2.32.3` →
+`requests` at `2.32.3`), and an npm alias is resolved to the real package (`foo@npm:bar@1.0.0`,
+or `"foo": "npm:bar@1.0.0"` in `package.json` → `bar` at `1.0.0`).
+
+Directories under `hooks/state/vetting/` are created mode `0700` and its files `0600`;
+`hooks/state/dependency-guard.log` is created `0600`.
 
 OSV ecosystem names come from a fixed map in `vetting_record.py`: `npm`→`npm`, `pypi`→`PyPI`,
 `crates.io`→`crates.io`, `go`→`Go`, `rubygems`→`RubyGems`; `homebrew` has none (D8).
@@ -214,7 +222,7 @@ classifier stripping `env`, `sudo`, `timeout <n>`, `nice`):
 |---|---|---|
 | npm | `install`/`i`/`add` with ≥1 package arg; `exec`/`x` | `name@1.2.3` |
 | pnpm, yarn, bun | `add`; `pnpm`/`yarn`/`bun` `install` with package args; `pnpx`, `bunx`, `yarn dlx`, `pnpm dlx` | `name@1.2.3` |
-| npx | any registry package as first non-flag arg | `name@1.2.3` |
+| npx | any registry package as first non-flag arg; every `-p <pkg>`/`--package <pkg>`/`--package=<pkg>` value is also an intent | `name@1.2.3` |
 | pip, pip3, `python -m pip`, `uv pip` | `install` with package args; `-r <file>`/`--requirement <file>` → **ask** with a general "installs everything listed in `<file>`, not parsed by the guard" warning (v1 does not read the file) | `name==1.2.3` |
 | uv, poetry | `add` | `name==1.2.3` / `name@1.2.3` (poetry) |
 | uvx, `pipx run`, `pipx install` | package arg | `name==1.2.3` |
@@ -228,12 +236,26 @@ with no package args; `pip install -e .`; `pip install .`; `cargo build`; `go bu
 download`; any `--help`/`-h`/`--version` invocation. These reinstall what a lockfile or manifest
 already holds — the manifest edit that put it there is what the guard sees.
 
-**Running a tool the project already has (D9):** `npx`, `pnpx` or `bunx` with a package argument
-that carries **no** version, where `<cwd>/node_modules/.bin/<arg>` exists (`cwd` from the hook
-payload, or the segment's preceding `cd` target when the classifier saw one), is not an install
-→ allow, no output. Those runners use the local copy first, so nothing is downloaded. With a
-version (`npx tsc@5.6.3`), or with no local copy, the normal flow applies. `pnpm dlx` and
-`yarn dlx` always download, so they get no such exception.
+**Running a tool the project already has (D9):** applies to **`npx` only** — `npx <arg>` where
+`<arg>` carries **no** version and the segment has no `-p`/`--package` option, and
+`node_modules/.bin/<arg>` exists in the working directory (below) → not an install, allow, no
+output. Measured (npm 12.0.1, registry pointed at an unreachable address): with a local
+`node_modules/.bin/<x>`, `npx <x>` ran the local file; `npx -p <x> <x>` went to the registry
+instead. With a version (`npx tsc@5.6.3`), with `-p`/`--package` (each `-p` value is its own
+install intent), or with no local copy, the normal flow applies.
+`pnpx`, `bunx`, `pnpm dlx` and `yarn dlx` get **no** such exception: `pnpx` is `pnpm dlx` and
+always downloads (both round-3 judges measured it on pnpm 10.34.5; an earlier draft of this
+paragraph wrongly listed it), and `bunx` is unmeasured (bun is not installed). D9's reason, "no
+download happens", holds only where it was measured.
+
+Who decides: `classify-install-command.py` stays a pure function of the command text. For an
+`npx` intent that qualifies by text, it sets `local_candidate: true` and reports the segment's
+preceding `cd` target, if any, as `cd_target`. `dependency-guard.sh` (the Python it runs) does the
+filesystem check: working directory = `cd_target` when it is an absolute path; the payload's
+`cwd` joined with `cd_target` when it is relative and contains no `~`, `$` or backtick; the
+payload's `cwd` when there is no `cd_target`. Any other `cd_target` (`~`, a variable, a
+substitution) → no exception, normal flow. The check passes when `os.access(<dir>/node_modules/
+.bin/<arg>, os.X_OK)` is true.
 
 **Not from a registry (`source: other`):** a package argument or manifest value that is
 `workspace:…`, `file:…`, `link:…`, a `git+…`/`github:…`/`http(s)://…` URL, a tarball path, or a
@@ -299,11 +321,15 @@ exit `0` → `ok`; exit `1` → parse the JSON, `stop` with every advisory liste
 (`SUBPROCESS_TIMEOUT_SECONDS`, 120) → `not_run` with the exit code or "timeout" in
 `incomplete_reasons`. A failing `npm install --package-lock-only` (non-zero or timeout) → `not_run`
 with its exit code. An OSV `/v1/query` answer counts as clean (`direct_vulns` `ok`) **only** when
-the HTTP status is 200 and the body parses as a JSON object whose keys are a subset of
-`{vulns, next_page_token}` with no `vulns` key; a non-empty `vulns` → `stop` (a
-`next_page_token` adds "more advisories exist" to the report; it cannot change `stop`). A 200
-whose body is not JSON, is not an object, or carries any other key (e.g. an error's `code` /
-`message`) is an OSV failure — Failure handling's OSV row, no record.
+the HTTP status is 200 and the body is exactly the empty object `{}`. A JSON object with a
+non-empty `vulns` list and no keys other than `vulns`/`next_page_token` → `stop` (a
+`next_page_token` adds "more advisories may exist" to the report; it cannot change `stop`).
+Anything else on a 200 is an OSV failure — Failure handling's OSV row, no record. That includes a
+body that is not JSON or not an object; one carrying any other key (e.g. an error's `code` /
+`message`); and a `next_page_token` with no `vulns`, which OSV uses when a query ran out of time
+before finishing, so it cannot be read as clean. OSV's `POST /v1/query` docs (read 2026-10-12):
+pagination happens past 1,000 vulnerabilities "or when the query has exceeded 20 seconds", and
+"in rare cases, the response might contain only the next_page_token".
 
 The report also prints the versions of `npm`, `osv-scanner` and `brew` it used (`--version`), so
 drift in these unpinned system tools is visible per report.
@@ -365,8 +391,9 @@ one line per denied package; an ask's reason has one clause per package, joined 
 
 A command with no install intent and a non-manifest edit → allow, no output.
 
-**A command the lexer cannot read.** `segments()` returns `[]` for both an empty command and one
-it cannot lex (Measured inputs). When it returns `[]` for non-blank text, and the raw text
+**A command the lexer cannot read.** `segments()` returns `[]` for a command it cannot lex (an
+empty or blank one returns `[({}, [])]` instead — Measured inputs). When it returns `[]` for
+non-blank text, and the raw text
 contains a recognised tool name as a whole word, → **ask** with "dependency-guard cannot read
 this command; it may install a package — check it before approving". The word list is one
 constant, `INSTALL_TOOL_WORDS`, shared with the classifier so the two cannot drift: every program
@@ -436,6 +463,7 @@ of "not vetted", and step 2's deny stands until the package is vetted or `VET_EX
 | `npm install --package-lock-only` fails or times out; osv-scanner exits other than 0/1, emits bad JSON, or times out | `transitive_vulns` `not_run` with the reason (Checks, result mapping); `complete: false` |
 | Vetter cannot write the report or the record (disk, permissions) | report is written first, the record last, via a temp file + `os.replace`; any write failure → exit non-zero, the temp file and any partial report removed, **no record** — the install stays denied |
 | Vetter given an argument that fails Input validation | exit 2 with a usage line; nothing written |
+| Homebrew: `brew` not on `PATH`, `brew info --json=v2 <name>` exits non-zero (e.g. unknown formula) or times out (`SUBPROCESS_TIMEOUT_SECONDS`), its output is not JSON, or it has no non-empty `stable` version | `vet-dependency` exits non-zero with the reason, **writes no record** — that call is the only source of the version a Homebrew record is keyed on, so the install stays denied |
 | Record file unreadable / bad JSON / wrong schema / path outside the store | treated as no record (step 2) |
 | Log write fails (hook) | decision unchanged; ` (log write failed)` appended to the message (Hook decisions, Log) |
 
@@ -641,6 +669,35 @@ Scenario: OSV 200 with an error body is not clean
   Given OSV answers 200 with {"code":3,"message":"invalid"}
   When the vetter runs for npm zod 3.23.8
   Then it exits non-zero and no record file exists afterwards
+
+Scenario: OSV answer carrying only a page token is not clean
+  Given OSV answers 200 with {"next_page_token":"abc"}
+  When the vetter runs for npm zod 3.23.8
+  Then it exits non-zero and no record file exists afterwards
+
+Scenario: pnpx gets no local-copy exception
+  Given node_modules/.bin/tsc exists under the session cwd
+  When Claude runs "pnpx tsc"
+  Then the hook exits 2 with MSG_UNPINNED
+
+Scenario: npx -p is an install even with a local copy
+  Given node_modules/.bin/cowsay exists under the session cwd
+  When Claude runs "npx -p cowsay cowsay hi"
+  Then the hook exits 2 with MSG_UNPINNED naming cowsay
+
+Scenario: npx after a cd to an unresolvable target gets no exception
+  Given node_modules/.bin/tsc exists under the session cwd
+  When Claude runs "cd $APP && npx tsc"
+  Then the hook exits 2 with MSG_UNPINNED
+
+Scenario: a pinned version that fails validation asks instead of building a path
+  When Claude runs "pip install 'requests==2.32.3/../x'"
+  Then stdout is the ask object naming the raw value, and no record path is built
+
+Scenario: vetter cannot learn a Homebrew version
+  Given brew info exits non-zero for zz-no-such-formula
+  When Claude runs "vet-dependency homebrew zz-no-such-formula"
+  Then it exits non-zero and no record file exists afterwards
 ```
 
 ## Known gaps — disclosed, not fixed in v1
@@ -649,6 +706,9 @@ Scenario: OSV 200 with an error body is not clean
 - `bash -c "…"`, `sh -c`, `eval "…"` (quoted), backticks — the lexer keeps the body as one token
   (`hooks/lib/shell_segments.py:63-69`).
 - Variable indirection (`P=zod; npm i $P@1`).
+- A pip extra's own additional dependencies (`requests[security]` pulls in more packages than
+  `requests`) are not vetted: the extra is dropped from the name before vetting, and PyPI
+  `transitive_vulns` is `not_run` in v1 anyway.
 - Package managers not in the install-forms table pass with no warning — e.g. `conda`, `mamba`,
   `pipenv`, `pdm`, `hatch`, `composer`, `dotnet add package`, `apt`, `port` (round-2 judge
   confirmed `conda install numpy` and `pipenv install requests` parse and match no row).
@@ -703,14 +763,18 @@ Scenario: OSV 200 with an error body is not clean
       ecosystem map). Test first, red, then implement.
 - [ ] 3. `classify-install-command.py` + `.test.py` covering every row of the install-forms table,
       every "not an install" form, wrappers, chaining, each unpinned spelling, multi-package
-      commands (every package returned), `source: other` values, `pip -r`, and the cannot-read
-      case (`[]` for non-blank text, with and without a tool word). Falsify the suite against an
+      commands (every package returned), `source: other` values, `pip -r`, the cannot-read
+      case (`[]` for non-blank text, with and without a tool word), and D9's text half
+      (`local_candidate` true only for a versionless `npx` with no `-p`/`--package`; `pnpx` and
+      `bunx` never; `cd_target` reported as written). Falsify the suite against an
       always-allow and an always-deny stub before implementing.
 - [ ] 4. `classify-manifest-edit.py` + `.test.py` (JSON add/change/remove, Edit with
       `replace_all`, requirements specifiers, the pyproject reader, unparseable input).
 - [ ] 5. `dependency-guard.sh` + `dependency-guard.test.sh`: every Scenario above that concerns
       the hook, using real `PreToolUse` payloads with `hook_event_name`, and the broken-guard
-      paths (python3 off `PATH`, a lib missing).
+      paths (python3 off `PATH`, a lib missing), and D9's filesystem half in a `mktemp -d`
+      project (absolute, relative and `~`/`$VAR` `cd_target`; a `.bin` entry present but not
+      executable).
 - [ ] 6. `bin/vet-dependency` + tests driven by recorded HTTP fixtures (no network in the suite),
       including the OSV-unreachable and typosquat scenarios; one opt-in live smoke test.
 - [ ] 7. `skills/vetting-dependencies/SKILL.md` per `skills/_standards/authoring-skills-and-agents.md`:
