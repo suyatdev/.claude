@@ -29,6 +29,55 @@ dependency, it must be vetted and scanned. Today nothing enforces that. Measured
 and is therefore forgeable from inside the session. The load-bearing control is Mark's approval
 at the permission prompt, which the hook makes unavoidable for every install it can see.
 
+## Mark's request (verbatim, 2026-10-09)
+
+Kept whole because this card implements pillar 1 and the scanner-list half of pillar 4, and the
+D3 follow-up implements the rest from this same text. Summaries of it have already dropped items
+once (task 7's (a)–(c) were missing from the first commit of this card).
+
+> I want to add a rule an an enforcement, to make sure that before any packages, modules,
+> libraries, or any dependency are installed or used as a dependency, that it is vetted, scanned.
+>
+> Role & Core Objective: You are a Senior Security Engineer and Secure Code Architect. Your
+> highest priority is code legitimacy, supply chain integrity, and software safety. You must
+> ensure that all recommended dependencies, libraries, and generated code are secure, safe, and
+> free from malicious logic, malware, or vulnerabilities.
+>
+> Adhere strictly to these four security pillars:
+>
+> 1. DEPENDENCY VETTING & SUPPLY CHAIN SAFETY
+> - Validated Packages Only: Only recommend or use highly trusted, actively maintained, and
+>   official libraries. Never suggest obscure, deprecated, or unverified packages.
+> - Typosquatting Prevention: Double-check the exact spelling of every library, package manager
+>   command (npm, pip, cargo, etc.), and import statement to prevent typosquatting malware.
+> - Version Pinning: Always specify secure, stable, and specific versions (or version ranges) for
+>   dependencies rather than letting them default to the latest unvetted version.
+>
+> 2. MALICIOUS CODE & INJECTION PREVENTION
+> - Zero Malicious Logic: Do not generate backdoors, hidden telemetries, unauthorized data
+>   exfiltration routines, or logic that could mimic malware.
+> - Anti-Injection Architecture: Write code that inherently prevents code injections, SQL
+>   injections, Cross-Site Scripting (XSS), Command Injections, and Remote Code Execution (RCE).
+> - Parameterization & Sanitization: Always use parameterized queries, strongly-typed inputs, and
+>   strict input sanitization/escaping mechanisms.
+>
+> 3. ROBUSNESS, ERROR HANDLING & SECURE DEFAULTS
+> - Fail-Safe Design: Implement robust error handling that fails securely. Never expose sensitive
+>   system environments, stack traces, or debug data in error messages.
+> - Principle of Least Privilege: Ensure the generated code requires the minimum necessary system
+>   permissions to execute.
+>
+> 4. MANDATORY SECURITY REVIEW & WARNINGS
+> - Automated Scanning Recommendations: Whenever providing a list of dependencies (e.g.,
+>   package.json, requirements.txt), explicitly list the specific automated scanning tools (like
+>   npm audit, Snyk, pip-audit, or SonarQube) the user should run to verify them.
+> - Risk Disclosure: If a requested implementation or library carries inherent security risks,
+>   you must pause, warn the user, explain the risk, and offer a secure alternative before writing
+>   the code.
+
+Note on pillar 1's "(or version ranges)": D6 deliberately narrows this to exact versions only —
+Mark chose that over "ranges with a lockfile" on 2026-10-09.
+
 ## Decisions (Mark, 2026-10-09 → 2026-10-11)
 
 | # | Question | Chosen | Rejected |
@@ -387,8 +436,19 @@ Scenario: typosquat is flagged
       including the OSV-unreachable and typosquat scenarios; one opt-in live smoke test.
 - [ ] 7. `skills/vetting-dependencies/SKILL.md` per `skills/_standards/authoring-skills-and-agents.md`:
       running the vetter, the report layout relayed to Mark, the ✅ / ⚠️ / ⛔ recommendation with
-      a reason and a safer alternative when ⛔, and the import-time checklist. Gate stub in
-      `rules/gates.md`.
+      a reason and a safer alternative when ⛔, and the judgment checks no hook can see, each from
+      Mark's request (verbatim in `## Mark's request` below):
+      (a) **spelling** — re-check the exact spelling of every package name, package-manager
+      command and `import` statement against the registry before proposing it (typosquatting);
+      (b) **provenance** — prefer official, actively maintained packages; never propose obscure,
+      deprecated or unverified ones; when the vetter returns ⛔ or several ⚠️, name an established
+      alternative;
+      (c) **scanner list** — whenever Claude presents a list of dependencies (a `package.json`,
+      `requirements.txt`, a proposed stack), name the scanners to run on it: `osv-scanner` for
+      every ecosystem, plus `npm audit` (npm) and `pip-audit` (PyPI);
+      (d) **imports** — an `import` of a package not yet installed goes through the vetter before
+      the install is proposed.
+      Gate stub in `rules/gates.md`.
 - [ ] 8. Vet osv-scanner 2.6.0 with the new flow; show Mark the report; install only on approval.
 - [ ] 9. Register in `settings.json` (`PreToolUse` `Bash` group after `secret-command-guard`, and the
       `Edit|Write|NotebookEdit` group) and `hooks/README.md`. `hooks/verify-hook-wiring.sh` keeps
