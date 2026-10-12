@@ -8,7 +8,9 @@ branch: none
 
 > **Phase: planning.** Spec written 2026-10-11 from a brainstorm in which Mark approved the
 > design in three parts (components + flow; checks; failure handling + testing). No code exists.
-> Next: compliance judge → Mark reviews this file → `gate confirmed`.
+> That approval licensed *writing* this spec; it is not approval *of* the spec, and not the gate.
+> Next: compliance judge + the observability judge's architecting read → Mark reviews this file →
+> `gate confirmed`.
 
 ## Why
 
@@ -74,6 +76,17 @@ once (task 7's (a)–(c) were missing from the first commit of this card).
 > - Risk Disclosure: If a requested implementation or library carries inherent security risks,
 >   you must pause, warn the user, explain the risk, and offer a secure alternative before writing
 >   the code.
+
+**Which pillar goes where:** this card = pillar 1 (all three bullets) + pillar 4's "Automated
+Scanning Recommendations". D3 = pillar 2's "Zero Malicious Logic" (and naming RCE alongside the
+injection rules already in `writing-secure-code`), all of pillar 3, and pillar 4's "Risk
+Disclosure". Pillar 2's injection and parameterization bullets are already covered by
+`skills/writing-secure-code/SKILL.md:8-30` and need no change.
+
+**Pending Mark's OK — scanner names:** pillar 4 names "npm audit, Snyk, pip-audit, or SonarQube";
+task 7c names `osv-scanner`, `npm audit`, `pip-audit`. Snyk is a hosted service needing an account,
+and SonarQube is a code (SAST) scanner rather than a dependency scanner, so neither is in 7c — a
+narrowing Claude proposed while writing, not one Mark chose.
 
 Note on pillar 1's "(or version ranges)": D6 deliberately narrows this to exact versions only —
 Mark chose that over "ranges with a lockfile" on 2026-10-09.
@@ -236,6 +249,13 @@ For each install intent in the command, in order; the first non-allow decision w
 2. No record, or record older than 7 days → **deny** `MSG_VET_FIRST`, printing the exact
    `vet-dependency <ecosystem> <name> <version>` line to run — unless the segment carries
    `VET_EXEMPT=<reason>`, which skips to step 3 and logs.
+
+   Message text (stderr, one line each, `<…>` filled from the intent):
+   - `MSG_UNPINNED`: `dependency-guard: <ecosystem> <name> has no exact version — pin it, e.g.
+     <exact-spelling-for-tool>, then retry.`
+   - `MSG_VET_FIRST`: `dependency-guard: <ecosystem> <name>@<version> has no vetting report from
+     the last 7 days — run: vet-dependency <ecosystem> <name> <version>  — then show Mark the
+     report and your recommendation before retrying.`
 3. Otherwise → **ask**, reason = `dependency-guard: <ecosystem> <name>@<version> — vetted <age>
    ago, <n> stop / <m> caution[, INCOMPLETE: <reasons>][, VET_EXEMPT: <reason>]`.
 
@@ -261,11 +281,20 @@ On `Edit`/`Write`/`NotebookEdit` whose `file_path` basename is a manifest:
   read by a minimal line-oriented reader; anything it cannot read → ask with a general warning.
 - `Cargo.toml`, `go.mod`, `Gemfile`, `Gemfile.lock`, any `*lock*` file → **ask** with a general
   "dependency file edit" warning; no parsing in v1.
+  "Any `*lock*` file" means exactly these basenames, never a substring match (a substring would
+  catch `clock.js`): `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock`, `pnpm-lock.yaml`,
+  `bun.lockb`, `bun.lock`, `poetry.lock`, `uv.lock`, `Pipfile.lock`, `Cargo.lock`, `go.sum`,
+  `Gemfile.lock`. **Pending Mark's OK** — this lockfile row was added while writing the spec and
+  was not shown in the brainstorm.
 
 Intents from a manifest go through decision steps 1–3 exactly as a command's do. Unparseable JSON
 in a `package.json` → ask with a general warning (the edit may be mid-way).
 
 ### Failure handling (D7)
+
+D7's "never a blanket deny" governs the **hook's own** failure (rows 1–3 below). A vetter that
+cannot reach OSV, or a record that cannot be read, is not a guard failure — it is a vetting result
+of "not vetted", and step 2's deny stands until the package is vetted or `VET_EXEMPT` is used.
 
 | Situation | Outcome |
 |---|---|
@@ -419,7 +448,10 @@ Scenario: typosquat is flagged
 ## Tasks
 
 - [ ] 0. Model-switch + worktree: on `gate confirmed`, flip `phase: implementation`, create
-      `feat/dependency-vetting-guard` from `origin/main`, record it under `branch:`.
+      `feat/dependency-vetting-guard`, record it under `branch:`.
+      Clarified 2026-10-12: create it **in this same worktree** (`~/.worktrees/.claude/dependency-vetting-guard`)
+      from the planning branch's head, not from `origin/main` — `origin/main` does not carry this
+      card until the planning branch merges, and a branch without the card has no phase to read.
 - [ ] 1. Resolve Q1/Q2 by measurement in a `mktemp -d`; record the commands and outputs under this
       task. A negative result keeps `not_run`; it does not grow scope.
 - [ ] 2. `vetting_record.py` + `vetting_record.test.py` (path validation, expiry boundary at
@@ -437,7 +469,7 @@ Scenario: typosquat is flagged
 - [ ] 7. `skills/vetting-dependencies/SKILL.md` per `skills/_standards/authoring-skills-and-agents.md`:
       running the vetter, the report layout relayed to Mark, the ✅ / ⚠️ / ⛔ recommendation with
       a reason and a safer alternative when ⛔, and the judgment checks no hook can see, each from
-      Mark's request (verbatim in `## Mark's request` below):
+      Mark's request (verbatim in `## Mark's request` above):
       (a) **spelling** — re-check the exact spelling of every package name, package-manager
       command and `import` statement against the registry before proposing it (typosquatting);
       (b) **provenance** — prefer official, actively maintained packages; never propose obscure,
@@ -457,6 +489,9 @@ Scenario: typosquat is flagged
 - [ ] 10. Observability judge on the implementation; PR.
 - [ ] 11. After merge: compare primary blobs to the merge commit; one live install attempt
       end-to-end; record under `## Verification`.
+      Before the primary pulls the merge, run `git status` there: on 2026-10-09 it held an
+      uncommitted `settings.json` (and `rules/core-conduct.md`) of unknown owner. Ask Mark how to
+      reconcile it; never stash, overwrite or commit it on his behalf.
 
 ## Verification
 
