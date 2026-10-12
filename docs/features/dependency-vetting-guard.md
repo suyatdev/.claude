@@ -11,7 +11,10 @@ branch: none
 > That approval licensed *writing* this spec; it is not approval *of* the spec, and not the gate.
 > Next: compliance judge + the observability judge's architecting read → Mark reviews this file →
 > `gate confirmed`. Round 1 of both judges ran 2026-10-12 (compliance: fail, 6 findings;
-> observability: risk medium) and this revision answers them; round 2 is next.
+> observability: risk medium) and fdfc5d8 answered them. Round 2 (compliance: fail, 2 findings;
+> observability: risk low) — `writing-specs/ambiguous-requirement` recurred, was escalated, and
+> Mark directed the fix (versionless Homebrew vetter line); Mark also decided D9. This revision
+> answers round 2; round 3 is next.
 >
 > **Pending Mark's OK before the gate** (Claude proposed each; none was in the brainstorm): the
 > lockfile row (Manifest edits); the scanner names (below); D8, Homebrew skips the pin check;
@@ -110,6 +113,7 @@ Mark chose that over "ranges with a lockfile" on 2026-10-09.
 | D5 | Report lifetime | **7 days, any project**, keyed on ecosystem + name + exact version | fresh every time; forever |
 | D6 | What counts as pinned | **Exact version only**; a range is refused | ranges with a lockfile |
 | D7 | Hook's own failure | **Fall back to `ask`** with a "guard is broken" warning — never silent allow, never blanket deny | fail open; fail closed |
+| D9 (2026-10-12) | `npx tsc`-style runs of a tool the project already has | **Allow when already installed locally** — no download happens; otherwise the normal flow | ask every time; keep refusing |
 
 ## Measured inputs the design relies on (2026-10-11)
 
@@ -119,9 +123,11 @@ Mark chose that over "ranges with a lockfile" on 2026-10-09.
 | A version with **no** advisories returns `{}` — the `vulns` key is absent, not an empty list; absent means clean | `zod 3.23.8` → `{}` (2026-10-12) |
 | OSV ecosystem names: `npm`, `PyPI`, `crates.io`, `Go`, `RubyGems`; Go accepts the version with or without the leading `v` | `golang.org/x/text` `v0.3.0` and `0.3.0` → 8 vulns each; `rack 2.0.0` (RubyGems) → 36 (2026-10-12) |
 | npm registry returns **404** for an unknown package and for an unknown version of a known one | `registry.npmjs.org/zod-does-not-exist-xq9` and `/zod/99.99.99` → 404 (2026-10-12) |
-| osv-scanner exit codes at v2.6.0: `0` scanned, no findings; `1` scanned, findings; `2–126` reserved for result errors; `127` general error; `128` no packages found; `129–255` other errors | `docs/output.md` "Return Codes" at tag `v2.6.0` (read 2026-10-12; osv-scanner itself is not installed, so not run) |
+| osv-scanner exit codes at v2.6.0: `0` scanned, no findings; `1` scanned, findings; `1-126` "reserved for vulnerability result related errors" (the docs' own range, which overlaps `1`); `127` general error; `128` no packages found; `129–255` other errors | `docs/output.md` "Return Codes" at tag `v2.6.0` (read 2026-10-12; osv-scanner itself is not installed, so not run) |
 | osv-scanner v2.6.0 release ships `osv-scanner_darwin_arm64` and `osv-scanner_SHA256SUMS`; this machine is `arm64` | GitHub releases API for tag `v2.6.0`; `uname -m` (2026-10-12) |
-| `shell_segments.segments()` returns `[]` for a command it cannot lex, the same as for an empty one — e.g. a heredoc whose body has an apostrophe, followed by `npm i zod@3.23.8` | probe 2026-10-12 → `[]`; `hooks/lib/classify-git-command.py:505-512` already tells the two apart with `not segs and src.strip()` |
+| `shell_segments.segments()` returns `[]` for a command it cannot lex — e.g. a heredoc whose body has an apostrophe, followed by `npm i zod@3.23.8`. An empty or blank command returns `[({}, [])]`, not `[]` (an earlier draft of this row said both returned `[]`; the round-2 judge measured otherwise and a re-probe agreed) | probe 2026-10-12; `hooks/lib/classify-git-command.py:505-512` uses `not segs and src.strip()` |
+| npm downloads: a scoped name works one at a time (`/downloads/point/last-week/@types/node` → 463,947,968) but **not** in a bulk list (`{"error":"scoped packages are not currently supported in bulk lookups"}`) | 2026-10-12 |
+| Python `str.isprintable()` is false for tab, newline, U+007F, U+0085, U+2028 and U+2029; a string carrying U+0085 and U+2028 `splitlines()` into 3 parts raw and 1 after replacing non-printables | probe 2026-10-12 |
 | System `npm` 12.0.1, `brew` 6.0.14 — recorded, not pinned (system tools) | `npm --version`, `brew --version` (2026-10-12) |
 | OSV `/v1/querybatch` answers | HTTP 200 for one zod query |
 | npm packument `https://registry.npmjs.org/<name>` carries `time`, `maintainers`, `repository`, `dist-tags`; a version object carries `deprecated` when deprecated and `scripts` | read for `zod`; `time["3.23.8"]` = `2024-05-08T19:13:04.545Z` |
@@ -188,8 +194,14 @@ a URL segment or file content:
 | Field | Rule | On failure |
 |---|---|---|
 | `ecosystem` | one of the six literals above | hook: treated as a guard failure (`ask`, "broken"); vetter: exit 2, usage message |
-| `name` | `^[A-Za-z0-9._@/-]{1,214}$`, at most one `/` (npm scope only), not `.`/`..`, no `..` substring | hook: `ask` naming the raw value (sanitised, below); vetter: exit 2 |
-| `version` | `^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$`, no `..` substring, no `/` | same as `name` |
+| `name` | `^[A-Za-z0-9._@/-]{1,214}$`; not `.`/`..`; no `..` substring; no leading or trailing `/`, no `//`. Slash count by ecosystem: `npm` ≤ 1 and only as `@scope/name`; `go` any (module paths, e.g. `golang.org/x/text`); `homebrew` ≤ 2 (`user/tap/formula`); `pypi`, `crates.io`, `rubygems` 0 | hook: `ask` naming the raw value (sanitised, below); vetter: exit 2 |
+| `version` | `^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$`, no `..` substring, no `/`. Required, except for `homebrew`, where it must be absent on the vetter's command line (D8) | same as `name` |
+
+Before validation the classifier normalises two spellings: a pip extra is dropped from the name
+(`requests[security]==2.32.3` → `requests` at `2.32.3`), and an npm alias is resolved to the real
+package (`foo@npm:bar@1.0.0` → `bar` at `1.0.0`).
+
+Directories under `hooks/state/vetting/` are created mode `0700` and files `0600`.
 | record path | after joining, `os.path.realpath` must start with the realpath of `hooks/state/vetting/` + `/` | treated as no record (hook); exit 2 (vetter) |
 
 OSV ecosystem names come from a fixed map in `vetting_record.py`: `npm`→`npm`, `pypi`→`PyPI`,
@@ -215,6 +227,13 @@ classifier stripping `env`, `sudo`, `timeout <n>`, `nice`):
 with no package args; `pip install -e .`; `pip install .`; `cargo build`; `go build`; `go mod
 download`; any `--help`/`-h`/`--version` invocation. These reinstall what a lockfile or manifest
 already holds — the manifest edit that put it there is what the guard sees.
+
+**Running a tool the project already has (D9):** `npx`, `pnpx` or `bunx` with a package argument
+that carries **no** version, where `<cwd>/node_modules/.bin/<arg>` exists (`cwd` from the hook
+payload, or the segment's preceding `cd` target when the classifier saw one), is not an install
+→ allow, no output. Those runners use the local copy first, so nothing is downloaded. With a
+version (`npx tsc@5.6.3`), or with no local copy, the normal flow applies. `pnpm dlx` and
+`yarn dlx` always download, so they get no such exception.
 
 **Not from a registry (`source: other`):** a package argument or manifest value that is
 `workspace:…`, `file:…`, `link:…`, a `git+…`/`github:…`/`http(s)://…` URL, a tarball path, or a
@@ -255,7 +274,7 @@ Thresholds are named constants at the top of `vet-dependency`.
 | `direct_vulns` | OSV `/v1/query` for the exact version | any advisory | — |
 | `transitive_vulns` | npm: `npm install --package-lock-only --ignore-scripts` in a `mktemp -d` holding a one-dependency `package.json`, then `osv-scanner scan -L <lock> --format json` | any advisory | — |
 | `deprecated` | npm version `deprecated`; PyPI `info.yanked`; crates.io `yanked` | set | — |
-| `typosquat` | Variants of the name (single deletion, adjacent transposition, doubled-letter collapse, `-`↔`_`↔`.`, scope dropped); npm: bulk downloads for every variant that exists | a variant with ≥ `TYPOSQUAT_RATIO` (100)× the requested name's weekly downloads | PyPI/crates: a variant exists (no popularity source) |
+| `typosquat` | Variants of the name (single deletion, adjacent transposition, doubled-letter collapse, `-`↔`_`↔`.`, scope dropped); npm: bulk downloads for every unscoped variant that exists, one request per scoped name (the bulk endpoint refuses scoped names — Measured inputs) | a variant with ≥ `TYPOSQUAT_RATIO` (100)× the requested name's weekly downloads | PyPI/crates: a variant exists (no popularity source) |
 | `release_age` | npm `time[version]`; PyPI `upload_time_iso_8601`; crates `created_at` | — | < `MIN_RELEASE_AGE_DAYS` (7) |
 | `popularity` | npm weekly downloads | — | < `MIN_WEEKLY_DOWNLOADS` (1000) |
 | `install_scripts` | npm version `scripts.preinstall`/`install`/`postinstall` | — | present |
@@ -279,7 +298,12 @@ exit `0` → `ok`; exit `1` → parse the JSON, `stop` with every advisory liste
 `not_run` ("no packages found"); any other exit, JSON that does not parse, or a timeout
 (`SUBPROCESS_TIMEOUT_SECONDS`, 120) → `not_run` with the exit code or "timeout" in
 `incomplete_reasons`. A failing `npm install --package-lock-only` (non-zero or timeout) → `not_run`
-with its exit code. An OSV response with no `vulns` key → `direct_vulns` `ok`.
+with its exit code. An OSV `/v1/query` answer counts as clean (`direct_vulns` `ok`) **only** when
+the HTTP status is 200 and the body parses as a JSON object whose keys are a subset of
+`{vulns, next_page_token}` with no `vulns` key; a non-empty `vulns` → `stop` (a
+`next_page_token` adds "more advisories exist" to the report; it cannot change `stop`). A 200
+whose body is not JSON, is not an object, or carries any other key (e.g. an error's `code` /
+`message`) is an OSV failure — Failure handling's OSV row, no record.
 
 The report also prints the versions of `npm`, `osv-scanner` and `brew` it used (`--version`), so
 drift in these unpinned system tools is visible per report.
@@ -288,7 +312,9 @@ drift in these unpinned system tools is visible per report.
 
 **Pending Mark's OK** — Claude proposed this while writing; it relaxes Mark's D6 ("exact version
 only") for one ecosystem and is not in the Decisions table. The alternative is to deny every
-`brew install` (D6 applied as written), leaving `VET_EXEMPT` as the only way through.
+`brew install` (D6 applied as written), which would leave **no** way through: step 1's unpinned
+deny is not bypassable, `VET_EXEMPT` included. (An earlier draft said `VET_EXEMPT` would be the
+way through; that contradicted step 1.)
 
 `brew install` cannot generally select an old formula version. For `ecosystem: homebrew` the pin
 check is skipped and the vetter keys the record on the version `brew info --json=v2 <name>`
@@ -328,6 +354,11 @@ one line per denied package; an ask's reason has one clause per package, joined 
      report and your recommendation before retrying.` `<vetter-path>` is the absolute path of
      `bin/vet-dependency` beside the running hook script (`$(dirname "$0")/bin/vet-dependency`,
      resolved), so it works without `hooks/bin/` on `PATH`.
+   - `MSG_VET_FIRST` for `homebrew` (no version on the command): `dependency-guard: homebrew
+     <name> has no vetting report from the last 7 days — run: <vetter-path> homebrew <name>  —
+     then show Mark the report and your recommendation before retrying.` The vetter, given
+     `homebrew <name>` with no version, reads `stable` from `brew info --json=v2 <name>` and keys
+     the record on it (D8); given a version for `homebrew`, it exits 2.
 3. Otherwise → **ask**, reason = `dependency-guard: <ecosystem> <name>@<version> — vetted <age>
    ago, <n> stop (<check>, …) / <m> caution (<check>, …)[, INCOMPLETE: <reasons>][, runs from
    registry][, VET_EXEMPT: <reason>]` — the check names, not just the counts.
@@ -336,9 +367,14 @@ A command with no install intent and a non-manifest edit → allow, no output.
 
 **A command the lexer cannot read.** `segments()` returns `[]` for both an empty command and one
 it cannot lex (Measured inputs). When it returns `[]` for non-blank text, and the raw text
-contains a recognised tool name as a whole word (the `Tool` column of the install-forms table,
-plus `python`), → **ask** with "dependency-guard cannot read this command; it may install a
-package — check it before approving". Without such a word → allow, no output: a prose heredoc
+contains a recognised tool name as a whole word, → **ask** with "dependency-guard cannot read
+this command; it may install a package — check it before approving". The word list is one
+constant, `INSTALL_TOOL_WORDS`, shared with the classifier so the two cannot drift: every program
+name anywhere in the install-forms table — `npm npx pnpm pnpx yarn bun bunx pip pip3 python
+python3 uv uvx poetry pipx cargo go gem brew`. "Whole word" = the regex
+`(?<![A-Za-z0-9_.-])(?:<word>)(?![A-Za-z0-9_.-])`, case-sensitive. A unit test asserts every
+program named in the install-forms table is in the constant. Without such a word → allow, no
+output, **and one log line** (`allow-unreadable`, so a later miss is findable): a prose heredoc
 that happens not to lex (e.g. a commit message with an apostrophe) is not an install, and asking
 on every one would bury the real prompts. This mirrors `classify-git-command.py:505-512`, which
 refuses instead; ask is used here to match D7. **Pending Mark's OK** — added after the round-1
@@ -347,9 +383,11 @@ judges found the gap; not in the brainstorm.
 **Log.** Every non-allow decision — deny, ask, broken, cannot-read — appends one line per intent
 (one line for broken / cannot-read) to `hooks/state/dependency-guard.log`:
 `ts  session  decision  ecosystem  name  version  reason`, tab-separated. Each field is sanitised
-before writing: every character below U+0020 and U+007F becomes `?`, and the field is cut to 200
-characters, so a crafted name cannot forge a line. Allows are not logged (nearly every Bash call
-is one). A failed log write does not change the decision; the deny's stderr or the ask's reason
+before writing: every character for which Python `str.isprintable()` is false becomes `?` (this
+covers tab, newline, U+007F, U+0085, U+2028 and U+2029 — Measured inputs), and the field is cut
+to 200 characters, so a crafted name cannot forge a line. Allows are not logged (nearly every
+Bash call is one), except `allow-unreadable` above. When `python3` is missing, the Bash wrapper
+appends one fixed-text line itself (`printf`, decision `broken`, reason `python3 not found`). A failed log write does not change the decision; the deny's stderr or the ask's reason
 gains ` (log write failed)`.
 
 `VET_EXEMPT` follows `classify-pr-command.py`: read only from the owning segment's own
@@ -567,6 +605,42 @@ Scenario: Homebrew install finds the newest fresh record
   Given a fresh record for homebrew jq 1.7.1
   When Claude runs "brew install jq"
   Then the ask reason names "jq" and "1.7.1"
+
+Scenario: unvetted Homebrew install prints the versionless vetter line
+  Given no record for homebrew jq
+  When Claude runs "brew install jq"
+  Then the hook exits 2 with the homebrew form of MSG_VET_FIRST, whose vetter line is "<vetter-path> homebrew jq" with no version
+
+Scenario: vetter refuses a version for Homebrew
+  When Claude runs "vet-dependency homebrew jq 1.7.1"
+  Then it exits 2 and no file is written
+
+Scenario: Go module path with several slashes is accepted
+  When Claude runs "go get golang.org/x/text@v0.3.8" with no record
+  Then the hook exits 2 with MSG_VET_FIRST naming go golang.org/x/text
+
+Scenario: npx runs a tool the project already has
+  Given node_modules/.bin/tsc exists under the session cwd
+  When Claude runs "npx tsc --noEmit"
+  Then the hook exits 0 with no output
+
+Scenario: npx with no local copy and no version is refused
+  Given node_modules/.bin/cowsay does not exist under the session cwd
+  When Claude runs "npx cowsay hi"
+  Then the hook exits 2 with MSG_UNPINNED
+
+Scenario: an unreadable command naming bunx asks
+  When Claude runs a heredoc whose body contains an apostrophe, followed by "bunx cowsay@1.6.0"
+  Then stdout is the ask object containing "cannot read this command"
+
+Scenario: an unreadable command with no tool word is logged
+  When Claude runs a heredoc whose body contains an apostrophe and no tool name
+  Then one allow-unreadable line is appended to the log
+
+Scenario: OSV 200 with an error body is not clean
+  Given OSV answers 200 with {"code":3,"message":"invalid"}
+  When the vetter runs for npm zod 3.23.8
+  Then it exits non-zero and no record file exists afterwards
 ```
 
 ## Known gaps — disclosed, not fixed in v1
@@ -575,6 +649,9 @@ Scenario: Homebrew install finds the newest fresh record
 - `bash -c "…"`, `sh -c`, `eval "…"` (quoted), backticks — the lexer keeps the body as one token
   (`hooks/lib/shell_segments.py:63-69`).
 - Variable indirection (`P=zod; npm i $P@1`).
+- Package managers not in the install-forms table pass with no warning — e.g. `conda`, `mamba`,
+  `pipenv`, `pdm`, `hatch`, `composer`, `dotnet add package`, `apt`, `port` (round-2 judge
+  confirmed `conda install numpy` and `pipenv install requests` parse and match no row).
 - A manifest edited through Bash (`sed -i`, heredoc, `jq … > package.json`).
 - A bare `npm install` after `package.json` changed outside the guard (by Mark, another tool, or
   a `git pull`).
