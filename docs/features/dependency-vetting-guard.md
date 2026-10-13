@@ -36,13 +36,18 @@ branch: none
 > measurement sentence) went to Mark, who chose "fix, final round, then cutoff": after round 9,
 > a finding that is only another rare route around the speed bump goes into Known gaps instead
 > of another round; a contradiction or error in the plan is still fixed. This revision answers
-> round 8; round 9 is next.
+> round 8 (8bcf6da). Round 9 (compliance: fail, 4 plan defects + 1 route-around; observability:
+> risk medium, no failing dimension — four disagreeing "runner" lists, two stale sentences, an
+> unfillable message example, corepack's `@version` form) — under the cutoff, this revision fixes
+> the plan defects (one `RUNNERS` set) and files the route-arounds under Known gaps.
 >
 > **Pending Mark's OK before the gate** (Claude proposed each; none was in the brainstorm): the
 > lockfile row (Manifest edits); the scanner names (below); D8, Homebrew skips the pin check;
 > the cannot-read rule (Hook decisions); osv-scanner from the GitHub release instead of Homebrew
 > (Toolchain); `MSG_RUNNER_INSTALLER`, refusing a runner that names a package manager (Install
-> forms).
+> forms); the "run node_modules/.bin/<name> directly" advice in `MSG_UNPINNED` (Hook decisions —
+> taken from the "drop the shortcut" option Mark was shown, but its exact wording and conditions
+> are Claude's).
 
 ## Why
 
@@ -209,7 +214,7 @@ name: zod                 # as the registry spells it; npm scope kept (@scope/na
 version: "3.23.8"         # null when not given
 pinned: true              # is_exact_version(ecosystem, version) — the one definition, below; false for null
 tool: npm                 # argv[0] after wrapper stripping
-form: add | run           # run = npx / pnpx / uvx / pipx run / bunx; the ask reason says "runs from registry" for run
+form: add | run           # run = the command form is in RUNNERS (below) — exactly that set; the ask reason says "runs from registry" for run
 source: registry | other  # other = workspace:, file:, link:, a git/http(s)/tarball URL, a local path (./x, ../x, /x)
 ```
 
@@ -268,13 +273,21 @@ classifier stripping `env`, `sudo`, `timeout <n>`, `nice`):
 
 | Tool | Install forms | Exact-version spelling |
 |---|---|---|
-| npm | `install`/`i`/`add` with ≥1 package arg; `exec`/`x` | `name@1.2.3` |
+| npm | `install` and every alias npm 12.0.1 lists for it (`add`, `i`, `in`, `ins`, `inst`, `insta`, `instal`, `isnt`, `isnta`, `isntal`, `isntall`), and `install-test`/`it`, each with ≥1 package arg; `exec`/`x` | `name@1.2.3` |
 | pnpm, yarn, bun — and their other command names `pn` (= pnpm), `pnx` (= `pnpm dlx`), `yarnpkg` (= yarn) | `add`; `pnpm`/`pn`/`yarn`/`yarnpkg`/`bun` `install` with package args; `pnpx`, `pnx`, `bunx`, `yarn dlx`, `pnpm dlx` | `name@1.2.3` |
-| corepack | `corepack <manager> <args>` is read as `<manager> <args>` (corepack is a wrapper that runs that manager) | as for the manager |
+| corepack | `corepack <manager>[@<version>] <args>` is read as `<manager> <args>`, the `@<version>` stripped (corepack is a wrapper that runs that manager; syntax from corepack 0.36.0's README, `corepack <binary name>[@<version>] [... args]`) | as for the manager |
 | npx | any registry package as first non-flag arg; every `-p <pkg>`/`--package <pkg>`/`--package=<pkg>` value is also an intent | `name@1.2.3` |
 | pip, pip3, `python -m pip`, `uv pip` | `install` with package args; `-r <file>`/`--requirement <file>` → **ask** with a general "installs everything listed in `<file>`, not parsed by the guard" warning (v1 does not read the file) | `name==1.2.3` |
 | uv, poetry | `add` | `name==1.2.3` / `name@1.2.3` (poetry) |
-| uvx, `pipx run`, `pipx install` | package arg | `name==1.2.3` |
+| uvx, `uv tool run`, `uv tool install`, `pipx run`, `pipx install` | package arg | `name==1.2.3` |
+
+**`RUNNERS` — the one list of commands that fetch a package and run it.** Every rule that says
+"runner" means exactly this set, a constant in `classify-install-command.py`: `npx`, `pnpx`,
+`pnx`, `bunx`, `bun x`, `npm exec`, `npm x`, `pnpm dlx`, `pn dlx`, `yarn dlx`, `yarnpkg dlx`,
+`uvx`, `uv tool run`, `pipx run`. An intent from one of them has `form: run`; no other intent
+does. A unit test asserts every runner form in the install-forms table is in `RUNNERS` and every
+member of `RUNNERS` appears in the table. (`bun x` is listed from bun's documentation; bun is not
+installed here, so it was not run.)
 | cargo | `add`, `install` | The classifier records the version **as Cargo reads it**, then `is_exact_version` decides: `cargo add name@=1.2.3` → `1.2.3` (pinned); `cargo add name@1.2.3` → `^1.2.3` (unpinned); `cargo install name@1.2.3`, `name@=1.2.3`, `--version 1.2.3` or `--version =1.2.3` → `1.2.3` (pinned); any other operator is kept and so is unpinned. Hence `cargo add name@=1.2.3` — a bare `name@1.2.3` is unpinned there, because Cargo reads it as a default (caret) requirement, `>=1.2.3, <2.0.0`; `cargo install name@1.2.3` or `--version 1.2.3`, which install exactly that version. Cargo docs read 2026-10-13: "Specifying Dependencies → Default requirements"; `cargo add` "crate@version: … a version constraint"; `cargo install --version`: without an operator "will install exactly that version; it is not treated as a caret requirement". `cargo install name@1.2.3` is taken to follow `--version` from the synopsis (`crate[@version]`); cargo is not installed here, so neither form was run |
 | go | `get`, `install` with `module@version` | `@v1.2.3` (not `@latest`) |
 | gem | `install` | `-v 1.2.3` / `--version 1.2.3` |
@@ -292,11 +305,11 @@ applies to a flag that follows a package named to a runner (`npx`, `pnpx`, `bunx
 reaches it, so `npx pip --version` downloads the npm package `pip` (round-7 observability judge,
 measured).
 
-**D9 — dropped after round 7 (Mark's stop rule, 2026-10-13).** A versionless `npx`, `pnpx`,
-`bunx`, `npm exec`/`npm x`, `pnpm dlx`, `yarn dlx`, `uvx` or `pipx run` is always an install
-intent for the package it names, with no exception for a local copy, and with no reading of the
-words after it as some other command: `npx npm install left-pad` is an unpinned npx of the `npm`
-package and is denied at step 1; so is `npx pip --version`. The full D9 design and the reasons it
+**D9 — dropped after round 7 (Mark's stop rule, 2026-10-13).** Every member of `RUNNERS` is
+always an install intent for the package it names, with no exception for a local copy, and with
+no reading of the words after it as some other command: a versionless `npx tsc` is denied at
+step 1 (unpinned), and `npx npm install left-pad` and `npx pip --version` are denied at step 0
+with `MSG_RUNNER_INSTALLER`, because `npm` and `pip` are package managers. The full D9 design and the reasons it
 failed are in this card's history at commit `29346fd` ("Running a tool the project already has").
 In the five review rounds it existed for (3–7), each version of the shortcut was defeated by a
 shape it did not list: `pnpx` (which is `pnpm dlx`), `npx -p`, `npx --prefix`, grouped or
@@ -437,15 +450,17 @@ one line per denied package; an ask's reason has one clause per package, joined 
    Message text (stderr, one line each, `<…>` filled from the intent):
    - `MSG_UNPINNED`: `dependency-guard: <ecosystem> <name> has no exact version — pin it, e.g.
      <exact-spelling-for-tool>, then retry.` One more sentence is added only when **all** hold:
-     the runner is `npx`, `pnpx`, `pnx`, `bunx`, `npm exec`/`npm x`, `pnpm dlx` or `yarn dlx`;
+     the runner is one of the npm-registry members of `RUNNERS` (all except `uvx`, `uv tool
+     run` and `pipx run`, which fetch from PyPI);
      the package came from the first non-option argument, not from `-p`/`--package` (whose
      package name need not match the command it provides); the name has no `@scope/`; and the
      name is not a package manager (those get `MSG_RUNNER_INSTALLER` instead). The sentence:
      `If <name> is already installed in this project, run it directly instead:
      node_modules/.bin/<name>` — the route that replaced D9. Otherwise no advice is given.
    - `MSG_RUNNER_INSTALLER`: `dependency-guard: <runner> would fetch the package manager <name>
-     — run <name> directly (e.g. <name> install <package>@<exact-version>) so the guard can
-     check what it installs.`
+     — run <name> directly so the guard can check what it installs.` (No example command: the
+     guard never reads what the package manager was asked to install, and the spelling differs
+     per manager.)
    - `MSG_VET_FIRST`: `dependency-guard: <ecosystem> <name>@<version> has no vetting report from
      the last 7 days — run: <vetter-path> <ecosystem> <name> <version>  — then show Mark the
      report and your recommendation before retrying.` `<vetter-path>` is the absolute path of
@@ -751,9 +766,28 @@ Scenario: yarn's other name, called directly, is still a yarn install
   When Claude runs "node_modules/.bin/yarnpkg add left-pad@1.3.0"
   Then the hook exits 2 with MSG_VET_FIRST naming npm left-pad 1.3.0
 
-Scenario: corepack is read as the manager it runs
+Scenario Outline: corepack is read as the manager it runs, with or without a version
   Given no record for npm left-pad 1.3.0
-  When Claude runs "corepack pnpm add left-pad@1.3.0"
+  When Claude runs "<command>"
+  Then the hook exits 2 with MSG_VET_FIRST naming npm left-pad 1.3.0
+  Examples:
+    | command                                 |
+    | corepack pnpm add left-pad@1.3.0        |
+    | corepack pnpm@9.0.0 add left-pad@1.3.0  |
+
+Scenario Outline: every runner naming a package manager is refused
+  When Claude runs "<command>"
+  Then the hook exits 2 with MSG_RUNNER_INSTALLER
+  Examples:
+    | command                                   |
+    | npm exec npm@12.0.1 install left-pad      |
+    | pnx npm@12.0.1 install left-pad           |
+    | pnpm dlx yarn@1.22.22 add left-pad        |
+    | uvx pip==24.2 install requests            |
+
+Scenario: an npm install alias is an install
+  Given no record for npm left-pad 1.3.0
+  When Claude runs "npm isntall left-pad@1.3.0"
   Then the hook exits 2 with MSG_VET_FIRST naming npm left-pad 1.3.0
 
 Scenario: --version inside an install is the version, not a help call
@@ -842,9 +876,17 @@ Scenario: vetter cannot learn a Homebrew version
   `npx cowsay@1.6.0` request `left-pad` instead of `cowsay` (round-8 observability judge,
   measured on npm 12.0.1), so Mark could approve a vetted `cowsay` while something else is
   fetched. The guard reads only the command text.
-- `corepack` itself may download the package-manager version a project's `packageManager` field
-  names before running it; that download is not vetted (inferred from corepack's purpose; not
-  measured).
+- `corepack` downloads package managers itself — `corepack install -g`, `corepack use` and
+  `corepack pack` are documented to fetch them, and `corepack <manager>` may fetch the version a
+  project's `packageManager` field names before running it. Those downloads are not vetted
+  (corepack 0.36.0 README; not run).
+- A package manager the guard does not know, fetched through a runner, is vetted as a package
+  while what it installs is not: `npx cnpm@9.4.0 install left-pad`, or `npx -p @pnpm/exe@12.11.2
+  pnpm add left-pad` (`@pnpm/exe` ships `pnpm`, `pn`, `pnx`, `pnpx` under a different package
+  name). `MSG_RUNNER_INSTALLER` checks only the package's name (round-9 judges, from `npm view`;
+  not run).
+- `npx -c '<command string>'` runs a shell string and names no package, so `npx -c 'npm i x'` is
+  invisible (round-9 observability judge, measured on npm 12.0.1).
 - A pip extra's own additional dependencies (`requests[security]` pulls in more packages than
   `requests`) are not vetted: the extra is dropped from the name before vetting, and PyPI
   `transitive_vulns` is `not_run` in v1 anyway.
@@ -904,8 +946,10 @@ Scenario: vetter cannot learn a Homebrew version
       every "not an install" form, wrappers, chaining, each unpinned spelling, multi-package
       commands (every package returned), `source: other` values, `pip -r`, the cannot-read
       case (`[]` for non-blank text, with and without a tool word, in upper and lower case), and
-      every runner form with no version — including every row of both npx Scenario Outlines and
-      `npx pip --version` — returning an unpinned intent for the package the runner names. Every
+      every runner form — each member of `RUNNERS` — returning an intent for the package it
+      names with `form: run` and `pinned` set by `is_exact_version` (so `npx npm@12.0.1` is a
+      pinned intent for `npm`, which step 0 then refuses), plus the `RUNNERS`↔table sync test.
+      Every
       pattern in the `is_exact_version` table gets every accepted example and every refused value
       listed under it. Falsify the suite against an always-allow and an always-deny stub before
       implementing.
