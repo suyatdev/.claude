@@ -39,7 +39,11 @@ branch: none
 > round 8 (8bcf6da). Round 9 (compliance: fail, 4 plan defects + 1 route-around; observability:
 > risk medium, no failing dimension — four disagreeing "runner" lists, two stale sentences, an
 > unfillable message example, corepack's `@version` form) — under the cutoff, this revision fixes
-> the plan defects (one `RUNNERS` set) and files the route-arounds under Known gaps.
+> the plan defects (one `RUNNERS` set) and files the route-arounds under Known gaps (ce5d315).
+> Round 10, a confirmation pass Mark chose (compliance: fail, 3 text defects; observability: risk
+> low, no failing dimension): the `RUNNERS` paragraph had split the install-forms table, `bun x`
+> was missing from the table, one hand-written runner list remained, and manifest intents
+> skipped step 0a. This revision fixes those four.
 >
 > **Pending Mark's OK before the gate** (Claude proposed each; none was in the brainstorm): the
 > lockfile row (Manifest edits); the scanner names (below); D8, Homebrew skips the pin check;
@@ -214,6 +218,7 @@ name: zod                 # as the registry spells it; npm scope kept (@scope/na
 version: "3.23.8"         # null when not given
 pinned: true              # is_exact_version(ecosystem, version) — the one definition, below; false for null
 tool: npm                 # argv[0] after wrapper stripping
+runner: null              # the RUNNERS member that matched, as written (e.g. "pnpm dlx"), or null; fills <runner> in MSG_RUNNER_INSTALLER
 form: add | run           # run = the command form is in RUNNERS (below) — exactly that set; the ask reason says "runs from registry" for run
 source: registry | other  # other = workspace:, file:, link:, a git/http(s)/tarball URL, a local path (./x, ../x, /x)
 ```
@@ -274,24 +279,26 @@ classifier stripping `env`, `sudo`, `timeout <n>`, `nice`):
 | Tool | Install forms | Exact-version spelling |
 |---|---|---|
 | npm | `install` and every alias npm 12.0.1 lists for it (`add`, `i`, `in`, `ins`, `inst`, `insta`, `instal`, `isnt`, `isnta`, `isntal`, `isntall`), and `install-test`/`it`, each with ≥1 package arg; `exec`/`x` | `name@1.2.3` |
-| pnpm, yarn, bun — and their other command names `pn` (= pnpm), `pnx` (= `pnpm dlx`), `yarnpkg` (= yarn) | `add`; `pnpm`/`pn`/`yarn`/`yarnpkg`/`bun` `install` with package args; `pnpx`, `pnx`, `bunx`, `yarn dlx`, `pnpm dlx` | `name@1.2.3` |
+| pnpm, yarn, bun — and their other command names `pn` (= pnpm), `pnx` (= `pnpm dlx`), `yarnpkg` (= yarn) | `add`; `pnpm`/`pn`/`yarn`/`yarnpkg`/`bun` `install` with package args; runners `pnpx`, `pnx`, `bunx`, `bun x`, `pnpm dlx`, `pn dlx`, `yarn dlx`, `yarnpkg dlx` | `name@1.2.3` |
 | corepack | `corepack <manager>[@<version>] <args>` is read as `<manager> <args>`, the `@<version>` stripped (corepack is a wrapper that runs that manager; syntax from corepack 0.36.0's README, `corepack <binary name>[@<version>] [... args]`) | as for the manager |
 | npx | any registry package as first non-flag arg; every `-p <pkg>`/`--package <pkg>`/`--package=<pkg>` value is also an intent | `name@1.2.3` |
 | pip, pip3, `python -m pip`, `uv pip` | `install` with package args; `-r <file>`/`--requirement <file>` → **ask** with a general "installs everything listed in `<file>`, not parsed by the guard" warning (v1 does not read the file) | `name==1.2.3` |
 | uv, poetry | `add` | `name==1.2.3` / `name@1.2.3` (poetry) |
 | uvx, `uv tool run`, `uv tool install`, `pipx run`, `pipx install` | package arg | `name==1.2.3` |
+| cargo | `add`, `install` | The classifier records the version **as Cargo reads it**, then `is_exact_version` decides: `cargo add name@=1.2.3` → `1.2.3` (pinned); `cargo add name@1.2.3` → `^1.2.3` (unpinned); `cargo install name@1.2.3`, `name@=1.2.3`, `--version 1.2.3` or `--version =1.2.3` → `1.2.3` (pinned); any other operator is kept and so is unpinned. Hence `cargo add name@=1.2.3` — a bare `name@1.2.3` is unpinned there, because Cargo reads it as a default (caret) requirement, `>=1.2.3, <2.0.0`; `cargo install name@1.2.3` or `--version 1.2.3`, which install exactly that version. Cargo docs read 2026-10-13: "Specifying Dependencies → Default requirements"; `cargo add` "crate@version: … a version constraint"; `cargo install --version`: without an operator "will install exactly that version; it is not treated as a caret requirement". `cargo install name@1.2.3` is taken to follow `--version` from the synopsis (`crate[@version]`); cargo is not installed here, so neither form was run |
+| go | `get`, `install` with `module@version` | `@v1.2.3` (not `@latest`) |
+| gem | `install` | `-v 1.2.3` / `--version 1.2.3` |
+| brew | `install`, `reinstall` | none — pin check skipped (D8 below) |
 
 **`RUNNERS` — the one list of commands that fetch a package and run it.** Every rule that says
 "runner" means exactly this set, a constant in `classify-install-command.py`: `npx`, `pnpx`,
 `pnx`, `bunx`, `bun x`, `npm exec`, `npm x`, `pnpm dlx`, `pn dlx`, `yarn dlx`, `yarnpkg dlx`,
 `uvx`, `uv tool run`, `pipx run`. An intent from one of them has `form: run`; no other intent
-does. A unit test asserts every runner form in the install-forms table is in `RUNNERS` and every
-member of `RUNNERS` appears in the table. (`bun x` is listed from bun's documentation; bun is not
+does. The table's runner forms are: npm `exec`/`x`; the whole npx row; the "runners" list in the
+pnpm/yarn/bun row; and `uvx`, `uv tool run`, `pipx run` in the uvx row (whose `uv tool install`
+and `pipx install` are plain installs). A unit test asserts that set equals `RUNNERS`, in both
+directions. (`bun x` is listed from bun's documentation; bun is not
 installed here, so it was not run.)
-| cargo | `add`, `install` | The classifier records the version **as Cargo reads it**, then `is_exact_version` decides: `cargo add name@=1.2.3` → `1.2.3` (pinned); `cargo add name@1.2.3` → `^1.2.3` (unpinned); `cargo install name@1.2.3`, `name@=1.2.3`, `--version 1.2.3` or `--version =1.2.3` → `1.2.3` (pinned); any other operator is kept and so is unpinned. Hence `cargo add name@=1.2.3` — a bare `name@1.2.3` is unpinned there, because Cargo reads it as a default (caret) requirement, `>=1.2.3, <2.0.0`; `cargo install name@1.2.3` or `--version 1.2.3`, which install exactly that version. Cargo docs read 2026-10-13: "Specifying Dependencies → Default requirements"; `cargo add` "crate@version: … a version constraint"; `cargo install --version`: without an operator "will install exactly that version; it is not treated as a caret requirement". `cargo install name@1.2.3` is taken to follow `--version` from the synopsis (`crate[@version]`); cargo is not installed here, so neither form was run |
-| go | `get`, `install` with `module@version` | `@v1.2.3` (not `@latest`) |
-| gem | `install` | `-v 1.2.3` / `--version 1.2.3` |
-| brew | `install`, `reinstall` | none — pin check skipped (D8 below) |
 
 **Not installs, always allowed:** `npm ci`; `npm install`/`pnpm install`/`yarn`/`bun install`
 with no package args; `pip install -e .`; `pip install .`; `cargo build`; `go build`; `go mod
@@ -300,8 +307,8 @@ download`; an invocation whose **only** argument after the tool name is `--help`
 `gem install rails --version 7.1.3`, is that install's version spelling and is decided by its
 row. These reinstall what a lockfile or manifest already holds — the
 manifest edit that put it there is what the guard sees. The `--help`/`--version` exemption never
-applies to a flag that follows a package named to a runner (`npx`, `pnpx`, `bunx`, `npm exec`/`x`,
-`pnpm dlx`, `yarn dlx`, `uvx`, `pipx run`): the runner fetches the package before the flag
+applies to a flag that follows a package named to a member of `RUNNERS` (above): the runner
+fetches the package before the flag
 reaches it, so `npx pip --version` downloads the npm package `pip` (round-7 observability judge,
 measured).
 
@@ -529,7 +536,9 @@ On `Edit`/`Write`/`NotebookEdit` whose `file_path` basename is a manifest:
   `Gemfile.lock`. **Pending Mark's OK** — this lockfile row was added while writing the spec and
   was not shown in the brainstorm.
 
-Intents from a manifest go through decision steps 1–3 exactly as a command's do. Unparseable JSON
+Intents from a manifest go through decision steps 0a–3 exactly as a command's do (step 0 cannot
+apply: a manifest names no runner), so a `file:`, `workspace:`, `link:`, URL or path value is
+asked about at step 0a, never refused as unpinned. Unparseable JSON
 in a `package.json` → ask with a general warning (the edit may be mid-way).
 
 ### Failure handling (D7)
@@ -785,6 +794,11 @@ Scenario Outline: every runner naming a package manager is refused
     | pnpm dlx yarn@1.22.22 add left-pad        |
     | uvx pip==24.2 install requests            |
 
+Scenario: a manifest file: dependency is asked about, not refused
+  Given package.json on disk has no "foo" key
+  When Claude Edits it to add "foo": "file:../foo"
+  Then stdout is the ask object with the not-a-registry-package warning
+
 Scenario: an npm install alias is an install
   Given no record for npm left-pad 1.3.0
   When Claude runs "npm isntall left-pad@1.3.0"
@@ -885,6 +899,9 @@ Scenario: vetter cannot learn a Homebrew version
   pnpm add left-pad` (`@pnpm/exe` ships `pnpm`, `pn`, `pnx`, `pnpx` under a different package
   name). `MSG_RUNNER_INSTALLER` checks only the package's name (round-9 judges, from `npm view`;
   not run).
+- `uvx --from <pkg>==1.0 <cmd>` and `pipx run --spec <pkg> <cmd>` name the downloaded package in
+  a flag, so the guard vets `<cmd>` instead (round-10 observability judge, from their docs; not
+  run) — the uv/pipx counterpart of `npx -p`, which the npx row does handle.
 - `npx -c '<command string>'` runs a shell string and names no package, so `npx -c 'npm i x'` is
   invisible (round-9 observability judge, measured on npm 12.0.1).
 - A pip extra's own additional dependencies (`requests[security]` pulls in more packages than
