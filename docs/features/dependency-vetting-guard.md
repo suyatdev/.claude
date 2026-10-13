@@ -30,12 +30,19 @@ branch: none
 > was unstated) went to Mark, who chose "fix, last chance" with a stop rule (D9 row); 29346fd
 > applied it. Round 7 (compliance: fail, 3; observability: risk high) found new D9 holes, so the
 > stop rule fired: this revision drops D9 and the `npx <installer>` reclassification that came
-> with it. Round 8 is next.
+> with it (eba1d9d). Round 8 (compliance: fail, 2; observability: risk medium — the new
+> "run node_modules/.bin" advice led to `yarnpkg`, which the guard did not know; a pinned
+> `npx npm@… install x` vetted npm but not x; a `.npmrc` `package=` swap; an overclaimed
+> measurement sentence) went to Mark, who chose "fix, final round, then cutoff": after round 9,
+> a finding that is only another rare route around the speed bump goes into Known gaps instead
+> of another round; a contradiction or error in the plan is still fixed. This revision answers
+> round 8; round 9 is next.
 >
 > **Pending Mark's OK before the gate** (Claude proposed each; none was in the brainstorm): the
 > lockfile row (Manifest edits); the scanner names (below); D8, Homebrew skips the pin check;
 > the cannot-read rule (Hook decisions); osv-scanner from the GitHub release instead of Homebrew
-> (Toolchain).
+> (Toolchain); `MSG_RUNNER_INSTALLER`, refusing a runner that names a package manager (Install
+> forms).
 
 ## Why
 
@@ -129,7 +136,7 @@ Mark chose that over "ranges with a lockfile" on 2026-10-09.
 | D5 | Report lifetime | **7 days, any project**, keyed on ecosystem + name + exact version | fresh every time; forever |
 | D6 | What counts as pinned | **Exact version only**; a range is refused | ranges with a lockfile |
 | D7 | Hook's own failure | **Fall back to `ask`** with a "guard is broken" warning — never silent allow, never blanket deny | fail open; fail closed |
-| D9 (2026-10-12) | `npx tsc`-style runs of a tool the project already has | **Allow when already installed locally** — no download happens; otherwise the normal flow. Applied to `npx` only, the one runner measured to use the local copy, and (Mark, after round 4) only to the plainest shape — a bare `npx <tool> …` as the whole command (Install forms, D9). After round 6 (Mark, 2026-10-13): installers reached through npx get the normal check, the local entry must be a real file, and D9 ships switched off until Q3 is measured. **Stop rule:** if round 7 finds another D9 hole, D9 is dropped without asking again — a versionless `npx` is then simply refused. **Outcome: DROPPED after round 7** (both judges found holes: `npx NPM`, installer aliases, a local `node`, a `.npmrc`). A versionless runner is refused; its message points at `node_modules/.bin/<tool>` (Install forms, "D9 — dropped") | ask every time; keep refusing |
+| D9 (2026-10-12) | `npx tsc`-style runs of a tool the project already has | **Allow when already installed locally** — no download happens; otherwise the normal flow. Applied to `npx` only, the one runner measured to use the local copy, and (Mark, after round 4) only to the plainest shape — a bare `npx <tool> …` as the whole command (Install forms, D9). After round 6 (Mark, 2026-10-13): installers reached through npx get the normal check, the local entry must be a real file, and D9 ships switched off until a working-directory question (then "Q3", since removed) is measured. **Stop rule:** if round 7 finds another D9 hole, D9 is dropped without asking again — a versionless `npx` is then simply refused. **Outcome: DROPPED after round 7** (both judges found holes: `npx NPM`, installer aliases, a local `node`, a `.npmrc`). A versionless runner is refused; its message points at `node_modules/.bin/<tool>` (Install forms, "D9 — dropped") | ask every time; keep refusing |
 
 ## Measured inputs the design relies on (2026-10-11)
 
@@ -144,6 +151,7 @@ Mark chose that over "ranges with a lockfile" on 2026-10-09.
 | `shell_segments.segments()` returns `[]` for a command it cannot lex — e.g. a heredoc whose body has an apostrophe, followed by `npm i zod@3.23.8`. An empty or blank command returns `[({}, [])]`, not `[]` (an earlier draft of this row said both returned `[]`; the round-2 judge measured otherwise and a re-probe agreed) | probe 2026-10-12; `hooks/lib/classify-git-command.py:505-512` uses `not segs and src.strip()` |
 | `npx <x>` (npm 12.0.1) runs a local `node_modules/.bin/<x>` without contacting the registry; `npx -p <x> <x>` contacts the registry even when the local file exists | `mktemp -d` project with a fake `.bin` script, `npm_config_registry=http://127.0.0.1:9/`: plain run printed the script's marker, rc 0; `-p` run failed with a registry connection error (2026-10-12) |
 | `pnpx` (pnpm 10.34.5) is `pnpm dlx` — it goes to the registry even with a local copy | measured by both round-3 judges, 2026-10-12 (not re-run by the author) |
+| Other command names the package managers ship: pnpm 12.11.2 → `pn`, `pnx`, `pnpm`, `pnpx`; yarn 1.22.22 → `yarn`, `yarnpkg`; corepack 0.36.0 → `pnpm`, `pnpx`, `yarn`, `yarnpkg`, `corepack` | `npm view <pkg> bin` (2026-10-13); the round-8 observability judge ran `node_modules/.bin/yarnpkg add left-pad@1.3.0` with yarn 1.22.22 and it requested `/left-pad` |
 | npm downloads: a scoped name works one at a time (`/downloads/point/last-week/@types/node` → 463,947,968) but **not** in a bulk list (`{"error":"scoped packages are not currently supported in bulk lookups"}`) | 2026-10-12 |
 | Python `str.isprintable()` is false for tab, newline, U+007F, U+0085, U+2028 and U+2029; a string carrying U+0085 and U+2028 `splitlines()` into 3 parts raw and 1 after replacing non-printables | probe 2026-10-12 |
 | System `npm` 12.0.1, `brew` 6.0.14 — recorded, not pinned (system tools) | `npm --version`, `brew --version` (2026-10-12) |
@@ -261,7 +269,8 @@ classifier stripping `env`, `sudo`, `timeout <n>`, `nice`):
 | Tool | Install forms | Exact-version spelling |
 |---|---|---|
 | npm | `install`/`i`/`add` with ≥1 package arg; `exec`/`x` | `name@1.2.3` |
-| pnpm, yarn, bun | `add`; `pnpm`/`yarn`/`bun` `install` with package args; `pnpx`, `bunx`, `yarn dlx`, `pnpm dlx` | `name@1.2.3` |
+| pnpm, yarn, bun — and their other command names `pn` (= pnpm), `pnx` (= `pnpm dlx`), `yarnpkg` (= yarn) | `add`; `pnpm`/`pn`/`yarn`/`yarnpkg`/`bun` `install` with package args; `pnpx`, `pnx`, `bunx`, `yarn dlx`, `pnpm dlx` | `name@1.2.3` |
+| corepack | `corepack <manager> <args>` is read as `<manager> <args>` (corepack is a wrapper that runs that manager) | as for the manager |
 | npx | any registry package as first non-flag arg; every `-p <pkg>`/`--package <pkg>`/`--package=<pkg>` value is also an intent | `name@1.2.3` |
 | pip, pip3, `python -m pip`, `uv pip` | `install` with package args; `-r <file>`/`--requirement <file>` → **ask** with a general "installs everything listed in `<file>`, not parsed by the guard" warning (v1 does not read the file) | `name==1.2.3` |
 | uv, poetry | `add` | `name==1.2.3` / `name@1.2.3` (poetry) |
@@ -273,8 +282,10 @@ classifier stripping `env`, `sudo`, `timeout <n>`, `nice`):
 
 **Not installs, always allowed:** `npm ci`; `npm install`/`pnpm install`/`yarn`/`bun install`
 with no package args; `pip install -e .`; `pip install .`; `cargo build`; `go build`; `go mod
-download`; any `--help`/`-h`/`--version` invocation **of the package manager itself** (`npm
---version`, `pip --version`). These reinstall what a lockfile or manifest already holds — the
+download`; an invocation whose **only** argument after the tool name is `--help`, `-h`,
+`--version`, `-v` or `-V` (`npm --version`, `pip -V`) — a `--version` inside an install, such as
+`gem install rails --version 7.1.3`, is that install's version spelling and is decided by its
+row. These reinstall what a lockfile or manifest already holds — the
 manifest edit that put it there is what the guard sees. The `--help`/`--version` exemption never
 applies to a flag that follows a package named to a runner (`npx`, `pnpx`, `bunx`, `npm exec`/`x`,
 `pnpm dlx`, `yarn dlx`, `uvx`, `pipx run`): the runner fetches the package before the flag
@@ -287,14 +298,24 @@ intent for the package it names, with no exception for a local copy, and with no
 words after it as some other command: `npx npm install left-pad` is an unpinned npx of the `npm`
 package and is denied at step 1; so is `npx pip --version`. The full D9 design and the reasons it
 failed are in this card's history at commit `29346fd` ("Running a tool the project already has").
-In seven review rounds each version of the shortcut was defeated by a shape it did not list:
-`pnpx` (which is `pnpm dlx`), `npx -p`, `npx --prefix`, grouped or repeated `cd`, `eval` and
-`"$(…)"`, a project-local installer, letter case on a case-insensitive filesystem (`npx NPM`),
-installer aliases (`yarnpkg`, `pn`, `pnx`), a local `node` running another npx, and a `.npmrc`
-`package=` setting (rounds 3–7, both judges, each measured on npm 12.0.1). The safe way to run a
-tool the project already has is to call it directly, `node_modules/.bin/<tool>`, which no install
-form matches; and `node_modules/.bin/npm install x` is still classified as `npm install x`,
-because `program()` takes the basename.
+In the five review rounds it existed for (3–7), each version of the shortcut was defeated by a
+shape it did not list: `pnpx` (which is `pnpm dlx`), `npx -p`, `npx --prefix`, grouped or
+repeated `cd`, `eval` and `"$(…)"`, a project-local installer, letter case on a case-insensitive
+filesystem (`npx NPM`), installer aliases (`yarnpkg`, `pn`, `pnx`), a local `node` running
+another npx, and a `.npmrc` `package=` setting. Most were measured by the judges on npm 12.0.1;
+`pnpx` was measured on pnpm 10.34.5; `pn` and `pnx` were read from pnpm 12.11.2's registry
+metadata and source, not run. The safe way to run a tool the project already has is to call it
+directly, `node_modules/.bin/<tool>`, which no install form matches unless the tool is itself a
+package manager; `program()` takes the lowercased basename, so `node_modules/.bin/npm install x`
+and `node_modules/.bin/NPM install x` are still `npm install x`.
+
+**A runner naming a package manager (`MSG_RUNNER_INSTALLER`).** When the package a runner names
+is itself a package manager — its name, lowercased, is in `INSTALL_TOOL_WORDS` — the intent is
+**denied** with `MSG_RUNNER_INSTALLER`, pinned or not, and `VET_EXEMPT` does not change that:
+`npx npm@12.0.1 install left-pad` would otherwise vet only npm, while left-pad is installed
+unchecked (round-8 compliance judge). There is no reason to fetch a package manager through a
+runner to install something; calling the manager directly lets the guard see the real install.
+**Pending Mark's OK** — Claude proposed this after round 8.
 
 **Not from a registry (`source: other`):** a package argument or manifest value that is
 `workspace:…`, `file:…`, `link:…`, a `git+…`/`github:…`/`http(s)://…` URL, a tarball path, or a
@@ -401,11 +422,13 @@ emits, built with `json.dumps` and compact separators:
 ```
 
 **Every** install intent in the command (all segments, all package arguments) is decided on its
-own by steps 0–3; the command's decision is the strongest of them — deny beats ask beats allow.
+own by steps 0–3 (with 0a); the command's decision is the strongest of them — deny beats ask beats allow.
 Nothing is skipped because an earlier package already produced a decision. A deny's stderr has
 one line per denied package; an ask's reason has one clause per package, joined by `; `.
 
-0. `source: other` → **ask** with the not-a-registry-package warning (above).
+0. A runner naming a package manager → **deny** `MSG_RUNNER_INSTALLER` (Install forms). Not
+   bypassable.
+0a. `source: other` → **ask** with the not-a-registry-package warning (above).
 1. `pinned: false` and ecosystem ≠ homebrew → **deny** `MSG_UNPINNED`, naming the exact spelling
    for that tool. Not bypassable.
 2. No record, or record older than 7 days → **deny** `MSG_VET_FIRST`, printing the exact command
@@ -413,9 +436,16 @@ one line per denied package; an ask's reason has one clause per package, joined 
 
    Message text (stderr, one line each, `<…>` filled from the intent):
    - `MSG_UNPINNED`: `dependency-guard: <ecosystem> <name> has no exact version — pin it, e.g.
-     <exact-spelling-for-tool>, then retry.` When the intent's `form` is `run` (a runner such as
-     `npx`), one more sentence: `If <name> is already installed in this project, run it directly
-     instead: node_modules/.bin/<name>` (npm-family runners) — the route that replaced D9.
+     <exact-spelling-for-tool>, then retry.` One more sentence is added only when **all** hold:
+     the runner is `npx`, `pnpx`, `pnx`, `bunx`, `npm exec`/`npm x`, `pnpm dlx` or `yarn dlx`;
+     the package came from the first non-option argument, not from `-p`/`--package` (whose
+     package name need not match the command it provides); the name has no `@scope/`; and the
+     name is not a package manager (those get `MSG_RUNNER_INSTALLER` instead). The sentence:
+     `If <name> is already installed in this project, run it directly instead:
+     node_modules/.bin/<name>` — the route that replaced D9. Otherwise no advice is given.
+   - `MSG_RUNNER_INSTALLER`: `dependency-guard: <runner> would fetch the package manager <name>
+     — run <name> directly (e.g. <name> install <package>@<exact-version>) so the guard can
+     check what it installs.`
    - `MSG_VET_FIRST`: `dependency-guard: <ecosystem> <name>@<version> has no vetting report from
      the last 7 days — run: <vetter-path> <ecosystem> <name> <version>  — then show Mark the
      report and your recommendation before retrying.` `<vetter-path>` is the absolute path of
@@ -438,8 +468,8 @@ non-blank text, and the raw text
 contains a recognised tool name as a whole word, → **ask** with "dependency-guard cannot read
 this command; it may install a package — check it before approving". The word list is one
 constant, `INSTALL_TOOL_WORDS`, shared with the classifier so the two cannot drift: every program
-name anywhere in the install-forms table — `npm npx pnpm pnpx yarn bun bunx pip pip3 python
-python3 uv uvx poetry pipx cargo go gem brew`. "Whole word" = the regex
+name anywhere in the install-forms table — `npm npx pnpm pn pnpx pnx yarn yarnpkg corepack bun
+bunx pip pip3 python python3 uv uvx poetry pipx cargo go gem brew`. "Whole word" = the regex
 `(?<![A-Za-z0-9_.-])(?:<word>)(?![A-Za-z0-9_.-])`, matched **case-insensitively** (macOS file
 names ignore case, so `NPM` runs npm — round 7). A unit test asserts every
 program named in the install-forms table is in the constant. Without such a word → allow, no
@@ -703,16 +733,37 @@ Scenario: the project's own npm, called directly, is still an npm install
   When Claude runs "node_modules/.bin/npm install left-pad@1.3.0"
   Then the hook exits 2 with MSG_VET_FIRST naming npm left-pad 1.3.0
 
-Scenario Outline: npx of an installer is an unpinned npx of that package
+Scenario Outline: a runner naming a package manager is refused, pinned or not
   When Claude runs "<command>"
-  Then the hook exits 2 with MSG_UNPINNED naming "<package>"
+  Then the hook exits 2 with MSG_RUNNER_INSTALLER naming "<package>"
   Examples:
-    | command                          | package |
-    | npx npm install left-pad@1.3.0   | npm     |
-    | npx NPM install left-pad@1.3.0   | NPM     |
-    | npx yarnpkg add left-pad@1.3.0   | yarnpkg |
-    | npx corepack pnpm add left-pad   | corepack |
-    | npx pip --version                | pip     |
+    | command                                  | package  |
+    | npx npm install left-pad@1.3.0           | npm      |
+    | npx npm@12.0.1 install left-pad          | npm      |
+    | npx NPM install left-pad@1.3.0           | NPM      |
+    | npx yarnpkg add left-pad@1.3.0           | yarnpkg  |
+    | npx corepack pnpm add left-pad           | corepack |
+    | npx pip --version                        | pip      |
+    | VET_EXEMPT=x npx npm@12.0.1 install a    | npm      |
+
+Scenario: yarn's other name, called directly, is still a yarn install
+  Given no record for npm left-pad 1.3.0
+  When Claude runs "node_modules/.bin/yarnpkg add left-pad@1.3.0"
+  Then the hook exits 2 with MSG_VET_FIRST naming npm left-pad 1.3.0
+
+Scenario: corepack is read as the manager it runs
+  Given no record for npm left-pad 1.3.0
+  When Claude runs "corepack pnpm add left-pad@1.3.0"
+  Then the hook exits 2 with MSG_VET_FIRST naming npm left-pad 1.3.0
+
+Scenario: --version inside an install is the version, not a help call
+  Given no record for rubygems rails 7.1.3
+  When Claude runs "gem install rails --version 7.1.3"
+  Then the hook exits 2 with MSG_VET_FIRST naming rubygems rails 7.1.3
+
+Scenario: a scoped runner package gets no local-path advice
+  When Claude runs "npx @scope/tool"
+  Then the hook exits 2 with MSG_UNPINNED and stderr does not contain "node_modules/.bin"
 
 Scenario: npx with no local copy and no version is refused
   Given node_modules/.bin/cowsay does not exist under the session cwd
@@ -786,6 +837,14 @@ Scenario: vetter cannot learn a Homebrew version
 - A command substitution inside double quotes or backticks in an ordinary command — e.g.
   `echo "$(npm i left-pad)"` — is kept as one token by the lexer, so the install inside it is not
   seen.
+- npm configuration can change what a runner fetches without changing the command: a `.npmrc`
+  line `package=left-pad`, or `npm_config_package=left-pad` in the environment, made
+  `npx cowsay@1.6.0` request `left-pad` instead of `cowsay` (round-8 observability judge,
+  measured on npm 12.0.1), so Mark could approve a vetted `cowsay` while something else is
+  fetched. The guard reads only the command text.
+- `corepack` itself may download the package-manager version a project's `packageManager` field
+  names before running it; that download is not vetted (inferred from corepack's purpose; not
+  measured).
 - A pip extra's own additional dependencies (`requests[security]` pulls in more packages than
   `requests`) are not vetted: the extra is dropped from the name before vetting, and PyPI
   `transitive_vulns` is `not_run` in v1 anyway.
@@ -879,7 +938,8 @@ Scenario: vetter cannot learn a Homebrew version
       no list of its own — it compares live wiring with the committed `settings.json` — so the
       check is that it prints nothing at the next session start after merge.
 - [ ] 10. ADR under `docs/decisions/` for the guard (a new enforcement hook, as ADR 0039 was for
-      secret-command-guard): D1–D8, the cannot-read rule, and the speed-bump boundary. Take the
+      secret-command-guard): D1–D8, D9 (adopted, then dropped after round 7, and why), the
+      cannot-read rule, `MSG_RUNNER_INSTALLER`, and the speed-bump boundary. Take the
       next free number from `origin/main` at write time, not local `main`. Then the observability
       judge on the implementation; PR.
 - [ ] 11. After merge: compare primary blobs to the merge commit; one live install attempt
