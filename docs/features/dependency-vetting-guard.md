@@ -16,7 +16,10 @@ branch: none
 > Mark directed the fix (versionless Homebrew vetter line); Mark also decided D9; 614b3fc answered
 > round 2. Round 3 (compliance: fail, 4 findings; observability: risk medium — D9 wrongly covered
 > `pnpx`, which always downloads) reached the 3-round cap; Mark chose "fix all, check once more".
-> This revision answers round 3; round 4 is next, and any finding in it goes straight to Mark.
+> 6e01110 answered round 3. Round 4 (compliance: fail, 2 — two definitions of "pinned"; D9's
+> `cd` handling. Observability: risk medium — `npx --prefix` downloads while D9 allowed) went
+> straight to Mark, who chose to make D9 an allowlist of the single plainest shape. This revision
+> applies that and gives "pinned" one positive definition; round 5 is next and goes to Mark.
 >
 > **Pending Mark's OK before the gate** (Claude proposed each; none was in the brainstorm): the
 > lockfile row (Manifest edits); the scanner names (below); D8, Homebrew skips the pin check;
@@ -115,7 +118,7 @@ Mark chose that over "ranges with a lockfile" on 2026-10-09.
 | D5 | Report lifetime | **7 days, any project**, keyed on ecosystem + name + exact version | fresh every time; forever |
 | D6 | What counts as pinned | **Exact version only**; a range is refused | ranges with a lockfile |
 | D7 | Hook's own failure | **Fall back to `ask`** with a "guard is broken" warning — never silent allow, never blanket deny | fail open; fail closed |
-| D9 (2026-10-12) | `npx tsc`-style runs of a tool the project already has | **Allow when already installed locally** — no download happens; otherwise the normal flow. Applied to `npx` only, the one runner measured to use the local copy (Install forms, D9) | ask every time; keep refusing |
+| D9 (2026-10-12) | `npx tsc`-style runs of a tool the project already has | **Allow when already installed locally** — no download happens; otherwise the normal flow. Applied to `npx` only, the one runner measured to use the local copy, and (Mark, after round 4) only to the plainest shape — a bare `npx <tool> …` as the whole command (Install forms, D9) | ask every time; keep refusing |
 
 ## Measured inputs the design relies on (2026-10-11)
 
@@ -185,12 +188,11 @@ Install intent (classifier output, one per package named in a segment):
 ecosystem: npm | pypi | crates.io | go | rubygems | homebrew
 name: zod                 # as the registry spells it; npm scope kept (@scope/name)
 version: "3.23.8"         # null when not given
-pinned: true              # false for null, a range (^ ~ > < * x || spaces), a dist-tag, or "latest"
+pinned: true              # is_exact_version(ecosystem, version) — the one definition, below; false for null
 tool: npm                 # argv[0] after wrapper stripping
 form: add | run           # run = npx / pnpx / uvx / pipx run / bunx; the ask reason says "runs from registry" for run
 source: registry | other  # other = workspace:, file:, link:, a git/http(s)/tarball URL, a local path (./x, ../x, /x)
-local_candidate: false    # true only for a versionless npx run with no -p/--package (D9); the hook does the filesystem check
-cd_target: null           # the segment's preceding `cd` argument as written, or null
+local_candidate: false    # true only when D9 rules 1-3 hold; the hook checks rule 4 (the filesystem)
 ```
 
 Input validation — applied by the classifiers, `vetting_record.py` and `vet-dependency` alike
@@ -201,7 +203,7 @@ a URL segment or file content:
 |---|---|---|
 | `ecosystem` | one of the six literals above | hook: treated as a guard failure (`ask`, "broken"); vetter: exit 2, usage message |
 | `name` | `^[A-Za-z0-9._@/-]{1,214}$`; not `.`/`..`; no `..` substring; no leading or trailing `/`, no `//`. Slash count by ecosystem: `npm` ≤ 1 and only as `@scope/name`; `go` any (module paths, e.g. `golang.org/x/text`); `homebrew` ≤ 2 (`user/tap/formula`); `pypi`, `crates.io`, `rubygems` 0 | hook: `ask` naming the raw value (sanitised, below); vetter: exit 2 |
-| `version` | `^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$`, no `..` substring, no `/`. **In the hook it applies only to an intent that passed step 1 as pinned** — an absent version or a range never reaches it, so step 1's `MSG_UNPINNED` deny always wins for those. In the vetter it is required, except for `homebrew`, where it must be absent (D8) | hook: `ask` naming the raw value (sanitised); vetter: exit 2 |
+| `version` | `is_exact_version(ecosystem, version)` (below). In the hook this **is** step 1: a value that fails it — absent, a range, a dist-tag, or anything malformed such as `2.32.3/../evil` — is unpinned and denied with `MSG_UNPINNED`, so no path is ever built from it. In the vetter it is required, except for `homebrew`, where it must be absent (D8) | hook: step 1 deny; vetter: exit 2 |
 | record path | after joining, `os.path.realpath` must start with the realpath of `hooks/state/vetting/` + `/` | treated as no record (hook); exit 2 (vetter) |
 
 Before validation the classifiers normalise two spellings, on the command line and in a
@@ -211,6 +213,27 @@ or `"foo": "npm:bar@1.0.0"` in `package.json` → `bar` at `1.0.0`).
 
 Directories under `hooks/state/vetting/` are created mode `0700` and its files `0600`;
 `hooks/state/dependency-guard.log` is created `0600`.
+
+**What "pinned" means — the one definition.** `is_exact_version(ecosystem, version)` in
+`vetting_record.py`, used by both classifiers, the hook and the vetter; nothing else decides
+pinning. A value is pinned only if it matches its ecosystem's positive pattern in full:
+
+| Ecosystem | Pattern (whole value) | Example |
+|---|---|---|
+| npm, crates.io | `^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$` | `3.23.8`, `1.0.0-rc.1` |
+| pypi | `^\d+(\.\d+)*((a\|b\|rc)\d+)?(\.post\d+)?(\.dev\d+)?$` (a PEP 440 subset: no epoch, no local `+…`; the backslashes before `|` are table escaping, not part of the pattern) | `2.32.3`, `1.0rc1` |
+| go | `^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+incompatible)?$` | `v0.3.8` |
+| rubygems | `^\d+(\.\d+)+(\.[0-9A-Za-z]+)*$` (at least two numeric parts before any letter part, so `1.x` is refused) | `7.1.3`, `1.0.0.pre`, `13.0` |
+| homebrew | never consulted (D8) | — |
+
+Every other value — absent, `^`/`~`/`>=`/`*`/`x` forms, `latest` or any dist-tag, a value with
+`/` or `..` — is unpinned. Matching uses `re.fullmatch` (Python's `$` also matches before a
+trailing newline, so `re.match` would accept `3.23.8\n`). Every example above was checked
+against its pattern on 2026-10-12, and `2.32.3/../evil`, `^1.0.0`, `1.x`, `latest`, `~1.2.3`,
+`*`, `>=1.0`, `1.2.3/..` and `..` were checked to be refused by all four (a first draft of the
+rubygems pattern accepted `1.x`). The tool-specific spelling (`name@`, `==`, `-v`, `--version`) only
+locates the value; the pattern decides. These patterns admit no `/` and no `..`, so a pinned value
+is always safe as a path component.
 
 OSV ecosystem names come from a fixed map in `vetting_record.py`: `npm`→`npm`, `pypi`→`PyPI`,
 `crates.io`→`crates.io`, `go`→`Go`, `rubygems`→`RubyGems`; `homebrew` has none (D8).
@@ -236,26 +259,35 @@ with no package args; `pip install -e .`; `pip install .`; `cargo build`; `go bu
 download`; any `--help`/`-h`/`--version` invocation. These reinstall what a lockfile or manifest
 already holds — the manifest edit that put it there is what the guard sees.
 
-**Running a tool the project already has (D9):** applies to **`npx` only** — `npx <arg>` where
-`<arg>` carries **no** version and the segment has no `-p`/`--package` option, and
-`node_modules/.bin/<arg>` exists in the working directory (below) → not an install, allow, no
-output. Measured (npm 12.0.1, registry pointed at an unreachable address): with a local
-`node_modules/.bin/<x>`, `npx <x>` ran the local file; `npx -p <x> <x>` went to the registry
-instead. With a version (`npx tsc@5.6.3`), with `-p`/`--package` (each `-p` value is its own
-install intent), or with no local copy, the normal flow applies.
+**Running a tool the project already has (D9):** an **allowlist of one shape**, not a list of
+excluded ones (Mark, 2026-10-12, after rounds 3–4 found `pnpx`, `-p`, `--prefix`, grouped and
+repeated `cd` each defeating an exclusion list). The exception applies only when **all** hold:
+
+1. the whole command lexes to exactly **one** segment, `has_grouping(src)` is false, and the
+   segment has **no** variable assignments;
+2. that segment's argv, as `segments()` returns it, starts with the literal `npx` — none of this
+   classifier's own wrapper stripping (`env`, `sudo`, `timeout`, `nice`) was needed;
+3. `argv[1]` is the tool: it does not start with `-` (so no npx option precedes it — `-p`,
+   `--package`, `--prefix`, `--yes` and every other option disqualify), carries no `@`, and
+   matches `^[A-Za-z0-9][A-Za-z0-9._-]{0,213}$` (no `/`, so no path);
+4. the payload's `cwd` is an absolute path and `os.access(<cwd>/node_modules/.bin/<argv[1]>,
+   os.X_OK)` is true.
+
+Then → allow, no output. Anything else → the normal flow, where a versionless `npx` is denied by
+step 1. Arguments after the tool are the tool's own and are not inspected. Measured (npm 12.0.1,
+registry pointed at an unreachable address): with a local `node_modules/.bin/<x>`, `npx <x>` ran
+the local file; `npx -p <x> <x>` (author and round-4 compliance judge) and `npx --prefix=<other>
+<x>` (round-4 observability judge) went to the registry; `(cd sub) && npx <x>` ran in the
+original directory (round-4 compliance judge) — each now excluded by rule 1 or 3.
 `pnpx`, `bunx`, `pnpm dlx` and `yarn dlx` get **no** such exception: `pnpx` is `pnpm dlx` and
 always downloads (both round-3 judges measured it on pnpm 10.34.5; an earlier draft of this
 paragraph wrongly listed it), and `bunx` is unmeasured (bun is not installed). D9's reason, "no
 download happens", holds only where it was measured.
 
-Who decides: `classify-install-command.py` stays a pure function of the command text. For an
-`npx` intent that qualifies by text, it sets `local_candidate: true` and reports the segment's
-preceding `cd` target, if any, as `cd_target`. `dependency-guard.sh` (the Python it runs) does the
-filesystem check: working directory = `cd_target` when it is an absolute path; the payload's
-`cwd` joined with `cd_target` when it is relative and contains no `~`, `$` or backtick; the
-payload's `cwd` when there is no `cd_target`. Any other `cd_target` (`~`, a variable, a
-substitution) → no exception, normal flow. The check passes when `os.access(<dir>/node_modules/
-.bin/<arg>, os.X_OK)` is true.
+Who decides: `classify-install-command.py` stays a pure function of the command text and checks
+rules 1–3, setting `local_candidate: true` on the single intent when they hold. `dependency-guard.sh`
+(the Python it runs) checks rule 4 against the payload's `cwd`; no `cd` is ever resolved, because
+a command containing one is never a candidate.
 
 **Not from a registry (`source: other`):** a package argument or manifest value that is
 `workspace:…`, `file:…`, `link:…`, a `git+…`/`github:…`/`http(s)://…` URL, a tarball path, or a
@@ -366,6 +398,10 @@ own by steps 0–3; the command's decision is the strongest of them — deny bea
 Nothing is skipped because an earlier package already produced a decision. A deny's stderr has
 one line per denied package; an ask's reason has one clause per package, joined by `; `.
 
+Before the steps: a command whose single intent has `local_candidate: true` **and** passes D9's
+rule 4 → **allow**, no output, and the steps do not run (Install forms, D9). Every other command
+goes through the steps.
+
 0. `source: other` → **ask** with the not-a-registry-package warning (above).
 1. `pinned: false` and ecosystem ≠ homebrew → **deny** `MSG_UNPINNED`, naming the exact spelling
    for that tool. Not bypassable.
@@ -427,11 +463,11 @@ On `Edit`/`Write`/`NotebookEdit` whose `file_path` basename is a manifest:
 
 - `package.json` — parse old (file on disk, absent → `{}`) and new content as JSON; added or
   changed keys in `dependencies`, `devDependencies`, `optionalDependencies`, `peerDependencies`
-  become install intents with the value as `version` (pinned only if it is an exact `x.y.z`
-  with optional prerelease). For `Edit`, new content = old with `old_string`→`new_string`
+  become install intents with the value as `version` (pinned per `is_exact_version`, above).
+  For `Edit`, new content = old with `old_string`→`new_string`
   applied once (or all, when `replace_all`).
-- `requirements.txt` / `requirements*.txt` — added or changed lines `name==x.y.z` (pinned) or any
-  other specifier (unpinned); comments, `-r`, `-e`, and URLs → ask with a general warning.
+- `requirements.txt` / `requirements*.txt` — added or changed lines `name==<value>` (pinned when
+  `is_exact_version("pypi", value)`) or any other specifier (unpinned); comments, `-r`, `-e`, and URLs → ask with a general warning.
 - `pyproject.toml` — the `[project] dependencies` array and `[tool.poetry.dependencies]` table,
   read by a minimal line-oriented reader; anything it cannot read → ask with a general warning.
 - `Cargo.toml`, `go.mod`, `Gemfile`, `Gemfile.lock`, any `*lock*` file → **ask** with a general
@@ -685,14 +721,23 @@ Scenario: npx -p is an install even with a local copy
   When Claude runs "npx -p cowsay cowsay hi"
   Then the hook exits 2 with MSG_UNPINNED naming cowsay
 
-Scenario: npx after a cd to an unresolvable target gets no exception
+Scenario Outline: any npx shape other than the plain one gets no exception
   Given node_modules/.bin/tsc exists under the session cwd
-  When Claude runs "cd $APP && npx tsc"
+  When Claude runs "<command>"
   Then the hook exits 2 with MSG_UNPINNED
+  Examples:
+    | command                          |
+    | cd app && npx tsc                |
+    | (cd sub) && npx tsc              |
+    | cd a && cd b && npx tsc          |
+    | npx --prefix=/tmp/other tsc      |
+    | npx --yes tsc                    |
+    | FOO=1 npx tsc                    |
+    | env npx tsc                      |
 
-Scenario: a pinned version that fails validation asks instead of building a path
-  When Claude runs "pip install 'requests==2.32.3/../x'"
-  Then stdout is the ask object naming the raw value, and no record path is built
+Scenario: a malformed version is unpinned, so no path is built from it
+  When Claude runs "pip install 'requests==2.32.3/../evil'"
+  Then the hook exits 2 with MSG_UNPINNED and no record path is built
 
 Scenario: vetter cannot learn a Homebrew version
   Given brew info exits non-zero for zz-no-such-formula
@@ -765,16 +810,18 @@ Scenario: vetter cannot learn a Homebrew version
       every "not an install" form, wrappers, chaining, each unpinned spelling, multi-package
       commands (every package returned), `source: other` values, `pip -r`, the cannot-read
       case (`[]` for non-blank text, with and without a tool word), and D9's text half
-      (`local_candidate` true only for a versionless `npx` with no `-p`/`--package`; `pnpx` and
-      `bunx` never; `cd_target` reported as written). Falsify the suite against an
+      (`local_candidate` true only when D9 rules 1–3 all hold — one positive case and one
+      negative case per rule, including every row of the npx Scenario Outline; `pnpx` and `bunx`
+      never). Every pattern in the `is_exact_version` table gets accepted and rejected examples,
+      including `2.32.3/../evil`, `^1.0.0`, `1.x` and `latest`. Falsify the suite against an
       always-allow and an always-deny stub before implementing.
 - [ ] 4. `classify-manifest-edit.py` + `.test.py` (JSON add/change/remove, Edit with
       `replace_all`, requirements specifiers, the pyproject reader, unparseable input).
 - [ ] 5. `dependency-guard.sh` + `dependency-guard.test.sh`: every Scenario above that concerns
       the hook, using real `PreToolUse` payloads with `hook_event_name`, and the broken-guard
       paths (python3 off `PATH`, a lib missing), and D9's filesystem half in a `mktemp -d`
-      project (absolute, relative and `~`/`$VAR` `cd_target`; a `.bin` entry present but not
-      executable).
+      project (D9 rule 4: `.bin` entry present and executable; present but not executable;
+      absent; a payload `cwd` that is not absolute).
 - [ ] 6. `bin/vet-dependency` + tests driven by recorded HTTP fixtures (no network in the suite),
       including the OSV-unreachable and typosquat scenarios; one opt-in live smoke test.
 - [ ] 7. `skills/vetting-dependencies/SKILL.md` per `skills/_standards/authoring-skills-and-agents.md`:
