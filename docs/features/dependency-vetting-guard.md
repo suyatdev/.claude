@@ -24,7 +24,11 @@ branch: none
 > hidden download; version patterns accepted `..` parts and non-ASCII digits and refused
 > `+cu118`; cargo's `@1.2.3` is a range) went to Mark, who chose "fix all, one more check". This
 > revision makes D9 rule 1 a raw-text pattern, rewrites the version patterns, and requires
-> `cargo add name@=…`; round 6 is next and goes to Mark.
+> `cargo add name@=…` (65f0ea3). Round 6 (compliance: fail, 3; observability: risk medium —
+> `npx npm install x` slipped through D9 via a project-local npm; a directory passed the
+> executable check; my "the shell resets every call" sentence was false; cargo's recorded value
+> was unstated) went to Mark, who chose "fix, last chance" with a stop rule (D9 row). This
+> revision applies it; round 7 is next.
 >
 > **Pending Mark's OK before the gate** (Claude proposed each; none was in the brainstorm): the
 > lockfile row (Manifest edits); the scanner names (below); D8, Homebrew skips the pin check;
@@ -123,7 +127,7 @@ Mark chose that over "ranges with a lockfile" on 2026-10-09.
 | D5 | Report lifetime | **7 days, any project**, keyed on ecosystem + name + exact version | fresh every time; forever |
 | D6 | What counts as pinned | **Exact version only**; a range is refused | ranges with a lockfile |
 | D7 | Hook's own failure | **Fall back to `ask`** with a "guard is broken" warning — never silent allow, never blanket deny | fail open; fail closed |
-| D9 (2026-10-12) | `npx tsc`-style runs of a tool the project already has | **Allow when already installed locally** — no download happens; otherwise the normal flow. Applied to `npx` only, the one runner measured to use the local copy, and (Mark, after round 4) only to the plainest shape — a bare `npx <tool> …` as the whole command (Install forms, D9) | ask every time; keep refusing |
+| D9 (2026-10-12) | `npx tsc`-style runs of a tool the project already has | **Allow when already installed locally** — no download happens; otherwise the normal flow. Applied to `npx` only, the one runner measured to use the local copy, and (Mark, after round 4) only to the plainest shape — a bare `npx <tool> …` as the whole command (Install forms, D9). After round 6 (Mark, 2026-10-13): installers reached through npx get the normal check, the local entry must be a real file, and D9 ships switched off until Q3 is measured. **Stop rule:** if round 7 finds another D9 hole, D9 is dropped without asking again — a versionless `npx` is then simply refused | ask every time; keep refusing |
 
 ## Measured inputs the design relies on (2026-10-11)
 
@@ -197,7 +201,7 @@ pinned: true              # is_exact_version(ecosystem, version) — the one def
 tool: npm                 # argv[0] after wrapper stripping
 form: add | run           # run = npx / pnpx / uvx / pipx run / bunx; the ask reason says "runs from registry" for run
 source: registry | other  # other = workspace:, file:, link:, a git/http(s)/tarball URL, a local path (./x, ../x, /x)
-local_candidate: false    # true only when D9 rule 1 (raw text) holds; the hook checks rule 2 (the filesystem)
+local_candidate: false    # true only when D9 rule 1 (raw text) holds; the hook checks rules 2-3 (filesystem, D9_ENABLED)
 ```
 
 Input validation — applied by the classifiers, `vetting_record.py` and `vet-dependency` alike
@@ -223,17 +227,15 @@ Directories under `hooks/state/vetting/` are created mode `0700` and its files `
 `vetting_record.py`, used by both classifiers, the hook and the vetter; nothing else decides
 pinning. A value is pinned only if it matches its ecosystem's positive pattern in full:
 
-| Ecosystem | Pattern (whole value) | Example |
-|---|---|---|
 With `ID = [0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*` (SemVer's dot-separated identifiers — no empty part,
-so no `..`):
+so no `..`) and `N = (0|[1-9][0-9]*)` (a number with no leading zero, so `01.2.3` is refused):
 
 | Ecosystem | Pattern (whole value) | Example |
 |---|---|---|
-| npm, crates.io | `[0-9]+\.[0-9]+\.[0-9]+(-ID)?(\+ID)?` | `3.23.8`, `1.0.0-rc.1`, `1.0.0+build.5` |
-| pypi | `[0-9]+(\.[0-9]+)*((a\|b\|rc)[0-9]+)?(\.post[0-9]+)?(\.dev[0-9]+)?(\+[a-z0-9]+(\.[a-z0-9]+)*)?` — a PEP 440 subset: no epoch; a local label such as `+cu118` **is** exact and admitted (round 5 found an earlier pattern refused it, which would have left such packages no way through). The backslashes before `\|` are table escaping | `2.32.3`, `1.0rc1`, `2.1.0+cu118` |
-| go | `v[0-9]+\.[0-9]+\.[0-9]+(-ID)?(\+incompatible)?` | `v0.3.8`, `v1.2.3-pre.1` |
-| rubygems | `[0-9]+(\.[0-9]+)+(\.[0-9A-Za-z]+)*` (at least two numeric parts before any letter part, so `1.x` is refused) | `7.1.3`, `1.0.0.pre`, `13.0` |
+| npm, crates.io | `N\.N\.N(-ID)?(\+ID)?` | `3.23.8`, `1.0.0-rc.1`, `1.0.0+build.5` |
+| pypi | `[0-9]+(\.[0-9]+)*((a\|b\|rc)[0-9]+)?(\.post[0-9]+)?(\.dev[0-9]+)?(\+[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?` — a PEP 440 subset: no epoch; a local label such as `+cu118` or `+CU118` **is** exact and admitted (round 5 found an earlier pattern refused it, which would have left such packages no way through). The backslashes before `\|` are table escaping | `2.32.3`, `1.0rc1`, `2.1.0+cu118` |
+| go | `vN\.N\.N(-ID)?(\+incompatible)?` | `v0.3.8`, `v1.2.3-pre.1` |
+| rubygems | `N(\.N)+(\.[0-9A-Za-z]+)*` (at least two numeric parts before any letter part, so `1.x` is refused) | `7.1.3`, `1.0.0.pre`, `13.0` |
 | homebrew | never consulted (D8) | — |
 
 Every other value — absent, `^`/`~`/`>=`/`=`/`*`/`x` forms, `latest` or any dist-tag, a value
@@ -242,8 +244,10 @@ because Python's `$` also matches before a trailing newline, and `[0-9]` rather 
 `\d` matches non-ASCII digits such as `３` (round 5). Checked 2026-10-13 with that call: every
 example above is accepted, and `2.32.3/../evil`, `^1.0.0`, `1.x`, `latest`, `~1.2.3`, `*`,
 `>=1.0`, `=1.2.3`, `1.2.3/..`, `..`, `1.0.0-a..b`, `1.0.0+..`, `1.0.0-..`, `v1.0.0-..`,
-`３.２３.８` and `3.23.8\n` are refused by all four. (Earlier drafts accepted `1.x` for rubygems
-and `1.0.0-a..b` for npm, crates.io and go.) The tool-specific spelling (`name@`, `name@=`,
+`３.２３.８` and `3.23.8\n` are refused by all four; `01.2.3`, `1.02.3` and `v01.2.3` are refused
+by the npm/crates.io, go and rubygems patterns; `2.1.0+CU118` is accepted by pypi (re-checked
+2026-10-13 after the `N` and local-label changes). (Earlier drafts accepted `1.x` for rubygems,
+`1.0.0-a..b` for npm, crates.io and go, and `01.2.3` for the numeric ones.) The tool-specific spelling (`name@`, `name@=`,
 `==`, `-v`, `--version`) only locates the value; the pattern decides. These patterns admit no `/`
 and no `..`, so a pinned value is always safe as a path component.
 
@@ -261,7 +265,7 @@ classifier stripping `env`, `sudo`, `timeout <n>`, `nice`):
 | pip, pip3, `python -m pip`, `uv pip` | `install` with package args; `-r <file>`/`--requirement <file>` → **ask** with a general "installs everything listed in `<file>`, not parsed by the guard" warning (v1 does not read the file) | `name==1.2.3` |
 | uv, poetry | `add` | `name==1.2.3` / `name@1.2.3` (poetry) |
 | uvx, `pipx run`, `pipx install` | package arg | `name==1.2.3` |
-| cargo | `add`, `install` | `cargo add name@=1.2.3` — a bare `name@1.2.3` is unpinned there, because Cargo reads it as a default (caret) requirement, `>=1.2.3, <2.0.0`; `cargo install name@1.2.3` or `--version 1.2.3`, which install exactly that version. Cargo docs read 2026-10-13: "Specifying Dependencies → Default requirements"; `cargo add` "crate@version: … a version constraint"; `cargo install --version`: without an operator "will install exactly that version; it is not treated as a caret requirement". `cargo install name@1.2.3` is taken to follow `--version` from the synopsis (`crate[@version]`); cargo is not installed here, so neither form was run |
+| cargo | `add`, `install` | The classifier records the version **as Cargo reads it**, then `is_exact_version` decides: `cargo add name@=1.2.3` → `1.2.3` (pinned); `cargo add name@1.2.3` → `^1.2.3` (unpinned); `cargo install name@1.2.3`, `name@=1.2.3`, `--version 1.2.3` or `--version =1.2.3` → `1.2.3` (pinned); any other operator is kept and so is unpinned. Hence `cargo add name@=1.2.3` — a bare `name@1.2.3` is unpinned there, because Cargo reads it as a default (caret) requirement, `>=1.2.3, <2.0.0`; `cargo install name@1.2.3` or `--version 1.2.3`, which install exactly that version. Cargo docs read 2026-10-13: "Specifying Dependencies → Default requirements"; `cargo add` "crate@version: … a version constraint"; `cargo install --version`: without an operator "will install exactly that version; it is not treated as a caret requirement". `cargo install name@1.2.3` is taken to follow `--version` from the synopsis (`crate[@version]`); cargo is not installed here, so neither form was run |
 | go | `get`, `install` with `module@version` | `@v1.2.3` (not `@latest`) |
 | gem | `install` | `-v 1.2.3` / `--version 1.2.3` |
 | brew | `install`, `reinstall` | none — pin check skipped (D8 below) |
@@ -275,7 +279,7 @@ already holds — the manifest edit that put it there is what the guard sees.
 excluded ones (Mark, 2026-10-12, after rounds 3–4 found `pnpx`, `-p`, `--prefix`, grouped and
 repeated `cd` each defeating an exclusion list; and again, after round 5 showed the lexer itself
 could be fooled, to check the **raw text** instead of the lexer's parse). The exception applies
-only when **both** hold:
+only when **all three** hold:
 
 1. the raw command text, exactly as the payload's `tool_input.command` carries it, satisfies
    `re.fullmatch(D9_PATTERN, text, re.ASCII)` with
@@ -285,9 +289,18 @@ only when **both** hold:
    `&`, `|`, newline), grouping, assignments, every wrapper (`eval`, `time`, `env`, `sudo`, …),
    any npx option before the tool (`-p`, `--package`, `--prefix`, `--yes`, …), a version or path
    as the tool (no `@`, no `/` in the tool name), quotes, `$`, backticks, redirections, globs and
-   `~`. The lexer is not consulted for this decision;
-2. the payload's `cwd` is an absolute path and `os.access(<cwd>/node_modules/.bin/<tool>,
-   os.X_OK)` is true.
+   `~`. The lexer is not consulted for this decision. **And** the tool name is not one of
+   `INSTALL_TOOL_WORDS` or `corepack`: `npx <installer> <words>` — e.g. `npx npm install
+   left-pad@1.3.0`, which reaches a project-local npm (common: `@semantic-release/npm` depends on
+   `npm`) — is instead classified as `<installer> <words>`, exactly as if the installer had been
+   typed directly, and takes the normal flow (round-6 judges, both, measured the local npm
+   fetching);
+2. the payload's `cwd` is an absolute path and `<cwd>/node_modules/.bin/<tool>` is a **regular
+   file** (following symlinks, as npm's `.bin` entries are links) that is executable —
+   `os.path.isfile(p) and os.access(p, os.X_OK)`. A directory of that name does not count: npx
+   only accepts a file (round-6 observability judge, `libnpmexec/lib/file-exists.js`, measured a
+   directory named `tsc` sending `npx tsc` to the registry);
+3. `D9_ENABLED` is true — a named constant that ships **false** (Q3, Open questions).
 
 Then → allow, no output. Anything else → the normal flow, where a versionless `npx` is denied by
 step 1. Plain words after the tool are the tool's own arguments: npx stops reading its own
@@ -300,10 +313,14 @@ observability judge) went to the registry; `(cd sub) && npx <x>` ran in the orig
 one plain `npx <x>` segment and ran the hidden second npx (round-5 judges, both) — every one of
 these fails rule 1.
 
-The command runs in the payload's `cwd`: rule 1 admits no `cd`, and this harness resets the
-shell's directory after every Bash call ("Shell cwd was reset to …", observed in this planning
-session on 2026-10-12). Task 5 confirms it with a probe that prints `pwd` beside the payload's
-`cwd`.
+Where the command runs: rule 1 admits no `cd`, so `npx` runs in the shell's current directory.
+That is the payload's `cwd` only if the payload follows the shell. Measured so far: a `cd`
+**outside** the project is reset after the call ("Shell cwd was reset to …", this session); a
+`cd` **inside** the project persists into the next call (round-6 judges, both). An earlier draft
+of this paragraph said the directory resets after every call — wrong, generalised from the
+outside-the-project case. Whether the payload's `cwd` follows a persisted in-project `cd` is
+**unmeasured** — Q3. Until Task 1 answers it yes, `D9_ENABLED` stays false and D9 never fires:
+a versionless `npx` is denied by step 1, the safe direction.
 `pnpx`, `bunx`, `pnpm dlx` and `yarn dlx` get **no** such exception: `pnpx` is `pnpm dlx` and
 always downloads (both round-3 judges measured it on pnpm 10.34.5; an earlier draft of this
 paragraph wrongly listed it), and `bunx` is unmeasured (bun is not installed). D9's reason, "no
@@ -311,7 +328,7 @@ download happens", holds only where it was measured.
 
 Who decides: `classify-install-command.py` stays a pure function of the command text and checks
 rule 1, setting `local_candidate: true` on the single intent when it holds. `dependency-guard.sh`
-(the Python it runs) checks rule 2 against the payload's `cwd`; no `cd` is ever resolved, because
+(the Python it runs) checks rules 2 and 3 against the payload's `cwd`; no `cd` is ever resolved, because
 a command containing one is never a candidate.
 
 **Not from a registry (`source: other`):** a package argument or manifest value that is
@@ -424,7 +441,7 @@ Nothing is skipped because an earlier package already produced a decision. A den
 one line per denied package; an ask's reason has one clause per package, joined by `; `.
 
 Before the steps: a command whose single intent has `local_candidate: true` **and** passes D9's
-rule 2 → **allow**, no output, and the steps do not run (Install forms, D9). Every other command
+rules 2 and 3 → **allow**, no output, and the steps do not run (Install forms, D9). Every other command
 goes through the steps.
 
 0. `source: other` → **ask** with the not-a-registry-package warning (above).
@@ -709,9 +726,29 @@ Scenario: Go module path with several slashes is accepted
   Then the hook exits 2 with MSG_VET_FIRST naming go golang.org/x/text
 
 Scenario: npx runs a tool the project already has
-  Given node_modules/.bin/tsc exists under the session cwd
+  Given D9_ENABLED is true
+  And node_modules/.bin/tsc is an executable regular file under the session cwd
   When Claude runs "npx tsc --noEmit"
   Then the hook exits 0 with no output
+
+Scenario: D9 off by default
+  Given D9_ENABLED is false
+  And node_modules/.bin/tsc is an executable regular file under the session cwd
+  When Claude runs "npx tsc --noEmit"
+  Then the hook exits 2 with MSG_UNPINNED
+
+Scenario: npx of a project-local installer is the installer's own command
+  Given D9_ENABLED is true
+  And node_modules/.bin/npm is an executable regular file under the session cwd
+  And no record for npm left-pad 1.3.0
+  When Claude runs "npx npm install left-pad@1.3.0"
+  Then the hook exits 2 with MSG_VET_FIRST naming npm left-pad 1.3.0
+
+Scenario: a directory named like the tool does not count
+  Given D9_ENABLED is true
+  And node_modules/.bin/tsc is a directory under the session cwd
+  When Claude runs "npx tsc"
+  Then the hook exits 2 with MSG_UNPINNED
 
 Scenario: npx with no local copy and no version is refused
   Given node_modules/.bin/cowsay does not exist under the session cwd
@@ -747,7 +784,8 @@ Scenario: npx -p is an install even with a local copy
   Then the hook exits 2 with MSG_UNPINNED naming cowsay
 
 Scenario Outline: any npx shape other than the plain one gets no exception
-  Given node_modules/.bin/tsc exists under the session cwd
+  Given D9_ENABLED is true
+  And node_modules/.bin/tsc is an executable regular file under the session cwd
   When Claude runs "<command>"
   Then the hook exits 2 with MSG_UNPINNED
   Examples:
@@ -766,7 +804,8 @@ Scenario Outline: any npx shape other than the plain one gets no exception
     | npx tsc; npx -y cowsay           |
 
 Scenario: a plain npx of a local tool with plain arguments is allowed
-  Given node_modules/.bin/vitest exists under the session cwd
+  Given D9_ENABLED is true
+  And node_modules/.bin/vitest is an executable regular file under the session cwd
   When Claude runs "npx vitest run src/a.test.ts"
   Then the hook exits 0 with no output
 
@@ -817,6 +856,11 @@ Scenario: vetter cannot learn a Homebrew version
   `transitive_vulns` is `not_run`. Task 1.
 - **Q2:** the same for crates.io (`cargo generate-lockfile` in a scratch crate) and Go (`go mod
   download` + `go.sum`). Untested; `not_run` until resolved. Task 1.
+- **Q3:** whether a `PreToolUse` payload's `cwd` equals the shell's directory after an earlier
+  Bash call `cd`'d to a subdirectory inside the project (which persists). Measure with a
+  throwaway hook that logs `cwd`: call 1 `cd <project>/sub`, call 2 `pwd`; compare. Yes → set
+  `D9_ENABLED = True` and record the evidence under Task 1. No, or not measurable → `D9_ENABLED`
+  stays false, Mark is told, and D9's scenarios are marked not-applicable. Task 1.
 
 ## Toolchain (pinned)
 
@@ -869,9 +913,9 @@ Scenario: vetter cannot learn a Homebrew version
 - [ ] 5. `dependency-guard.sh` + `dependency-guard.test.sh`: every Scenario above that concerns
       the hook, using real `PreToolUse` payloads with `hook_event_name`, and the broken-guard
       paths (python3 off `PATH`, a lib missing), and D9's filesystem half in a `mktemp -d`
-      project (D9 rule 2: `.bin` entry present and executable; present but not executable;
-      absent; a payload `cwd` that is not absolute), and one live probe that the payload's `cwd`
-      equals the directory a Bash command runs in (`pwd`), recorded under `## Verification`.
+      project (D9 rule 2: `.bin` entry an executable regular file; a symlink to one; present but
+      not executable; a directory; absent; a payload `cwd` that is not absolute) and rule 3
+      (`D9_ENABLED` false and true — the constant is patched in the test, never flipped by it).
 - [ ] 6. `bin/vet-dependency` + tests driven by recorded HTTP fixtures (no network in the suite),
       including the OSV-unreachable and typosquat scenarios; one opt-in live smoke test.
 - [ ] 7. `skills/vetting-dependencies/SKILL.md` per `skills/_standards/authoring-skills-and-agents.md`:
