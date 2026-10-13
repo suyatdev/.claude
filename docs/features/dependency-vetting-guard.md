@@ -27,8 +27,10 @@ branch: none
 > `cargo add name@=…` (65f0ea3). Round 6 (compliance: fail, 3; observability: risk medium —
 > `npx npm install x` slipped through D9 via a project-local npm; a directory passed the
 > executable check; my "the shell resets every call" sentence was false; cargo's recorded value
-> was unstated) went to Mark, who chose "fix, last chance" with a stop rule (D9 row). This
-> revision applies it; round 7 is next.
+> was unstated) went to Mark, who chose "fix, last chance" with a stop rule (D9 row); 29346fd
+> applied it. Round 7 (compliance: fail, 3; observability: risk high) found new D9 holes, so the
+> stop rule fired: this revision drops D9 and the `npx <installer>` reclassification that came
+> with it. Round 8 is next.
 >
 > **Pending Mark's OK before the gate** (Claude proposed each; none was in the brainstorm): the
 > lockfile row (Manifest edits); the scanner names (below); D8, Homebrew skips the pin check;
@@ -127,7 +129,7 @@ Mark chose that over "ranges with a lockfile" on 2026-10-09.
 | D5 | Report lifetime | **7 days, any project**, keyed on ecosystem + name + exact version | fresh every time; forever |
 | D6 | What counts as pinned | **Exact version only**; a range is refused | ranges with a lockfile |
 | D7 | Hook's own failure | **Fall back to `ask`** with a "guard is broken" warning — never silent allow, never blanket deny | fail open; fail closed |
-| D9 (2026-10-12) | `npx tsc`-style runs of a tool the project already has | **Allow when already installed locally** — no download happens; otherwise the normal flow. Applied to `npx` only, the one runner measured to use the local copy, and (Mark, after round 4) only to the plainest shape — a bare `npx <tool> …` as the whole command (Install forms, D9). After round 6 (Mark, 2026-10-13): installers reached through npx get the normal check, the local entry must be a real file, and D9 ships switched off until Q3 is measured. **Stop rule:** if round 7 finds another D9 hole, D9 is dropped without asking again — a versionless `npx` is then simply refused | ask every time; keep refusing |
+| D9 (2026-10-12) | `npx tsc`-style runs of a tool the project already has | **Allow when already installed locally** — no download happens; otherwise the normal flow. Applied to `npx` only, the one runner measured to use the local copy, and (Mark, after round 4) only to the plainest shape — a bare `npx <tool> …` as the whole command (Install forms, D9). After round 6 (Mark, 2026-10-13): installers reached through npx get the normal check, the local entry must be a real file, and D9 ships switched off until Q3 is measured. **Stop rule:** if round 7 finds another D9 hole, D9 is dropped without asking again — a versionless `npx` is then simply refused. **Outcome: DROPPED after round 7** (both judges found holes: `npx NPM`, installer aliases, a local `node`, a `.npmrc`). A versionless runner is refused; its message points at `node_modules/.bin/<tool>` (Install forms, "D9 — dropped") | ask every time; keep refusing |
 
 ## Measured inputs the design relies on (2026-10-11)
 
@@ -181,7 +183,7 @@ sequenceDiagram
 
 | File | Purpose | Depends on |
 |---|---|---|
-| `hooks/lib/classify-install-command.py` | Pure function: command text → list of install intents (no filesystem access; D9's local check belongs to the hook) | `hooks/lib/shell_segments.py` (`segments()`, `program()`) |
+| `hooks/lib/classify-install-command.py` | Pure function: command text → list of install intents (no filesystem access) | `hooks/lib/shell_segments.py` (`segments()`, `program()`) |
 | `hooks/lib/classify-manifest-edit.py` | Pure function: tool payload for `Edit`/`Write` → list of added dependencies | stdlib `json`, `re`; TOML parsed by a minimal reader (3.9 has no `tomllib`) |
 | `hooks/lib/vetting_record.py` | Read/write/expiry of records; path validation | stdlib |
 | `hooks/dependency-guard.sh` | Hook wrapper for `Bash` and `Edit\|Write\|NotebookEdit` | the three libs above |
@@ -201,7 +203,6 @@ pinned: true              # is_exact_version(ecosystem, version) — the one def
 tool: npm                 # argv[0] after wrapper stripping
 form: add | run           # run = npx / pnpx / uvx / pipx run / bunx; the ask reason says "runs from registry" for run
 source: registry | other  # other = workspace:, file:, link:, a git/http(s)/tarball URL, a local path (./x, ../x, /x)
-local_candidate: false    # true only when D9 rule 1 (raw text) holds; the hook checks rules 2-3 (filesystem, D9_ENABLED)
 ```
 
 Input validation — applied by the classifiers, `vetting_record.py` and `vet-dependency` alike
@@ -272,64 +273,28 @@ classifier stripping `env`, `sudo`, `timeout <n>`, `nice`):
 
 **Not installs, always allowed:** `npm ci`; `npm install`/`pnpm install`/`yarn`/`bun install`
 with no package args; `pip install -e .`; `pip install .`; `cargo build`; `go build`; `go mod
-download`; any `--help`/`-h`/`--version` invocation. These reinstall what a lockfile or manifest
-already holds — the manifest edit that put it there is what the guard sees.
+download`; any `--help`/`-h`/`--version` invocation **of the package manager itself** (`npm
+--version`, `pip --version`). These reinstall what a lockfile or manifest already holds — the
+manifest edit that put it there is what the guard sees. The `--help`/`--version` exemption never
+applies to a flag that follows a package named to a runner (`npx`, `pnpx`, `bunx`, `npm exec`/`x`,
+`pnpm dlx`, `yarn dlx`, `uvx`, `pipx run`): the runner fetches the package before the flag
+reaches it, so `npx pip --version` downloads the npm package `pip` (round-7 observability judge,
+measured).
 
-**Running a tool the project already has (D9):** an **allowlist of one shape**, not a list of
-excluded ones (Mark, 2026-10-12, after rounds 3–4 found `pnpx`, `-p`, `--prefix`, grouped and
-repeated `cd` each defeating an exclusion list; and again, after round 5 showed the lexer itself
-could be fooled, to check the **raw text** instead of the lexer's parse). The exception applies
-only when **all three** hold:
-
-1. the raw command text, exactly as the payload's `tool_input.command` carries it, satisfies
-   `re.fullmatch(D9_PATTERN, text, re.ASCII)` with
-   `D9_PATTERN = r"npx [A-Za-z0-9][A-Za-z0-9._-]{0,213}( [A-Za-z0-9._=:,/@+%-]+)*"` — the word
-   `npx`, one space, the tool name, then zero or more plain words each after one space. Nothing
-   else is admitted, so this one check excludes, without listing them: a second command (`;`,
-   `&`, `|`, newline), grouping, assignments, every wrapper (`eval`, `time`, `env`, `sudo`, …),
-   any npx option before the tool (`-p`, `--package`, `--prefix`, `--yes`, …), a version or path
-   as the tool (no `@`, no `/` in the tool name), quotes, `$`, backticks, redirections, globs and
-   `~`. The lexer is not consulted for this decision. **And** the tool name is not one of
-   `INSTALL_TOOL_WORDS` or `corepack`: `npx <installer> <words>` — e.g. `npx npm install
-   left-pad@1.3.0`, which reaches a project-local npm (common: `@semantic-release/npm` depends on
-   `npm`) — is instead classified as `<installer> <words>`, exactly as if the installer had been
-   typed directly, and takes the normal flow (round-6 judges, both, measured the local npm
-   fetching);
-2. the payload's `cwd` is an absolute path and `<cwd>/node_modules/.bin/<tool>` is a **regular
-   file** (following symlinks, as npm's `.bin` entries are links) that is executable —
-   `os.path.isfile(p) and os.access(p, os.X_OK)`. A directory of that name does not count: npx
-   only accepts a file (round-6 observability judge, `libnpmexec/lib/file-exists.js`, measured a
-   directory named `tsc` sending `npx tsc` to the registry);
-3. `D9_ENABLED` is true — a named constant that ships **false** (Q3, Open questions).
-
-Then → allow, no output. Anything else → the normal flow, where a versionless `npx` is denied by
-step 1. Plain words after the tool are the tool's own arguments: npx stops reading its own
-options at the tool name (round-5 observability judge measured `--prefix`, `--package`, `-p` and
-`--yes` placed after the tool reaching the tool, not npx). Measured (npm 12.0.1, registry pointed
-at an unreachable address): with a local `node_modules/.bin/<x>`, `npx <x>` ran the local file;
-`npx -p <x> <x>` (author and round-4 compliance judge) and `npx --prefix=<other> <x>` (round-4
-observability judge) went to the registry; `(cd sub) && npx <x>` ran in the original directory
-(round-4 compliance judge); `npx <x> "$(npx -y <y>)"` and `eval npx <x> '; npx -y <y>'` lexed as
-one plain `npx <x>` segment and ran the hidden second npx (round-5 judges, both) — every one of
-these fails rule 1.
-
-Where the command runs: rule 1 admits no `cd`, so `npx` runs in the shell's current directory.
-That is the payload's `cwd` only if the payload follows the shell. Measured so far: a `cd`
-**outside** the project is reset after the call ("Shell cwd was reset to …", this session); a
-`cd` **inside** the project persists into the next call (round-6 judges, both). An earlier draft
-of this paragraph said the directory resets after every call — wrong, generalised from the
-outside-the-project case. Whether the payload's `cwd` follows a persisted in-project `cd` is
-**unmeasured** — Q3. Until Task 1 answers it yes, `D9_ENABLED` stays false and D9 never fires:
-a versionless `npx` is denied by step 1, the safe direction.
-`pnpx`, `bunx`, `pnpm dlx` and `yarn dlx` get **no** such exception: `pnpx` is `pnpm dlx` and
-always downloads (both round-3 judges measured it on pnpm 10.34.5; an earlier draft of this
-paragraph wrongly listed it), and `bunx` is unmeasured (bun is not installed). D9's reason, "no
-download happens", holds only where it was measured.
-
-Who decides: `classify-install-command.py` stays a pure function of the command text and checks
-rule 1, setting `local_candidate: true` on the single intent when it holds. `dependency-guard.sh`
-(the Python it runs) checks rules 2 and 3 against the payload's `cwd`; no `cd` is ever resolved, because
-a command containing one is never a candidate.
+**D9 — dropped after round 7 (Mark's stop rule, 2026-10-13).** A versionless `npx`, `pnpx`,
+`bunx`, `npm exec`/`npm x`, `pnpm dlx`, `yarn dlx`, `uvx` or `pipx run` is always an install
+intent for the package it names, with no exception for a local copy, and with no reading of the
+words after it as some other command: `npx npm install left-pad` is an unpinned npx of the `npm`
+package and is denied at step 1; so is `npx pip --version`. The full D9 design and the reasons it
+failed are in this card's history at commit `29346fd` ("Running a tool the project already has").
+In seven review rounds each version of the shortcut was defeated by a shape it did not list:
+`pnpx` (which is `pnpm dlx`), `npx -p`, `npx --prefix`, grouped or repeated `cd`, `eval` and
+`"$(…)"`, a project-local installer, letter case on a case-insensitive filesystem (`npx NPM`),
+installer aliases (`yarnpkg`, `pn`, `pnx`), a local `node` running another npx, and a `.npmrc`
+`package=` setting (rounds 3–7, both judges, each measured on npm 12.0.1). The safe way to run a
+tool the project already has is to call it directly, `node_modules/.bin/<tool>`, which no install
+form matches; and `node_modules/.bin/npm install x` is still classified as `npm install x`,
+because `program()` takes the basename.
 
 **Not from a registry (`source: other`):** a package argument or manifest value that is
 `workspace:…`, `file:…`, `link:…`, a `git+…`/`github:…`/`http(s)://…` URL, a tarball path, or a
@@ -440,10 +405,6 @@ own by steps 0–3; the command's decision is the strongest of them — deny bea
 Nothing is skipped because an earlier package already produced a decision. A deny's stderr has
 one line per denied package; an ask's reason has one clause per package, joined by `; `.
 
-Before the steps: a command whose single intent has `local_candidate: true` **and** passes D9's
-rules 2 and 3 → **allow**, no output, and the steps do not run (Install forms, D9). Every other command
-goes through the steps.
-
 0. `source: other` → **ask** with the not-a-registry-package warning (above).
 1. `pinned: false` and ecosystem ≠ homebrew → **deny** `MSG_UNPINNED`, naming the exact spelling
    for that tool. Not bypassable.
@@ -452,7 +413,9 @@ goes through the steps.
 
    Message text (stderr, one line each, `<…>` filled from the intent):
    - `MSG_UNPINNED`: `dependency-guard: <ecosystem> <name> has no exact version — pin it, e.g.
-     <exact-spelling-for-tool>, then retry.`
+     <exact-spelling-for-tool>, then retry.` When the intent's `form` is `run` (a runner such as
+     `npx`), one more sentence: `If <name> is already installed in this project, run it directly
+     instead: node_modules/.bin/<name>` (npm-family runners) — the route that replaced D9.
    - `MSG_VET_FIRST`: `dependency-guard: <ecosystem> <name>@<version> has no vetting report from
      the last 7 days — run: <vetter-path> <ecosystem> <name> <version>  — then show Mark the
      report and your recommendation before retrying.` `<vetter-path>` is the absolute path of
@@ -477,7 +440,8 @@ this command; it may install a package — check it before approving". The word 
 constant, `INSTALL_TOOL_WORDS`, shared with the classifier so the two cannot drift: every program
 name anywhere in the install-forms table — `npm npx pnpm pnpx yarn bun bunx pip pip3 python
 python3 uv uvx poetry pipx cargo go gem brew`. "Whole word" = the regex
-`(?<![A-Za-z0-9_.-])(?:<word>)(?![A-Za-z0-9_.-])`, case-sensitive. A unit test asserts every
+`(?<![A-Za-z0-9_.-])(?:<word>)(?![A-Za-z0-9_.-])`, matched **case-insensitively** (macOS file
+names ignore case, so `NPM` runs npm — round 7). A unit test asserts every
 program named in the install-forms table is in the constant. Without such a word → allow, no
 output, **and one log line** (`allow-unreadable`, so a later miss is findable): a prose heredoc
 that happens not to lex (e.g. a commit message with an apostrophe) is not an install, and asking
@@ -725,30 +689,30 @@ Scenario: Go module path with several slashes is accepted
   When Claude runs "go get golang.org/x/text@v0.3.8" with no record
   Then the hook exits 2 with MSG_VET_FIRST naming go golang.org/x/text
 
-Scenario: npx runs a tool the project already has
-  Given D9_ENABLED is true
-  And node_modules/.bin/tsc is an executable regular file under the session cwd
+Scenario: a versionless npx is refused even when the project has the tool
+  Given node_modules/.bin/tsc is an executable regular file under the session cwd
   When Claude runs "npx tsc --noEmit"
+  Then the hook exits 2 with MSG_UNPINNED, which also says to run node_modules/.bin/tsc directly
+
+Scenario: running the project's own copy directly is not an install
+  When Claude runs "node_modules/.bin/tsc --noEmit"
   Then the hook exits 0 with no output
 
-Scenario: D9 off by default
-  Given D9_ENABLED is false
-  And node_modules/.bin/tsc is an executable regular file under the session cwd
-  When Claude runs "npx tsc --noEmit"
-  Then the hook exits 2 with MSG_UNPINNED
-
-Scenario: npx of a project-local installer is the installer's own command
-  Given D9_ENABLED is true
-  And node_modules/.bin/npm is an executable regular file under the session cwd
-  And no record for npm left-pad 1.3.0
-  When Claude runs "npx npm install left-pad@1.3.0"
+Scenario: the project's own npm, called directly, is still an npm install
+  Given no record for npm left-pad 1.3.0
+  When Claude runs "node_modules/.bin/npm install left-pad@1.3.0"
   Then the hook exits 2 with MSG_VET_FIRST naming npm left-pad 1.3.0
 
-Scenario: a directory named like the tool does not count
-  Given D9_ENABLED is true
-  And node_modules/.bin/tsc is a directory under the session cwd
-  When Claude runs "npx tsc"
-  Then the hook exits 2 with MSG_UNPINNED
+Scenario Outline: npx of an installer is an unpinned npx of that package
+  When Claude runs "<command>"
+  Then the hook exits 2 with MSG_UNPINNED naming "<package>"
+  Examples:
+    | command                          | package |
+    | npx npm install left-pad@1.3.0   | npm     |
+    | npx NPM install left-pad@1.3.0   | NPM     |
+    | npx yarnpkg add left-pad@1.3.0   | yarnpkg |
+    | npx corepack pnpm add left-pad   | corepack |
+    | npx pip --version                | pip     |
 
 Scenario: npx with no local copy and no version is refused
   Given node_modules/.bin/cowsay does not exist under the session cwd
@@ -773,19 +737,15 @@ Scenario: OSV answer carrying only a page token is not clean
   When the vetter runs for npm zod 3.23.8
   Then it exits non-zero and no record file exists afterwards
 
-Scenario: pnpx gets no local-copy exception
-  Given node_modules/.bin/tsc exists under the session cwd
+Scenario: pnpx is refused without a version
   When Claude runs "pnpx tsc"
   Then the hook exits 2 with MSG_UNPINNED
 
-Scenario: npx -p is an install even with a local copy
-  Given node_modules/.bin/cowsay exists under the session cwd
+Scenario: npx -p names an install
   When Claude runs "npx -p cowsay cowsay hi"
   Then the hook exits 2 with MSG_UNPINNED naming cowsay
 
-Scenario Outline: any npx shape other than the plain one gets no exception
-  Given D9_ENABLED is true
-  And node_modules/.bin/tsc is an executable regular file under the session cwd
+Scenario Outline: a versionless npx is refused in any shape
   When Claude runs "<command>"
   Then the hook exits 2 with MSG_UNPINNED
   Examples:
@@ -802,12 +762,6 @@ Scenario Outline: any npx shape other than the plain one gets no exception
     | npx tsc "$(npx -y cowsay)"       |
     | npx tsc `npx -y cowsay`          |
     | npx tsc; npx -y cowsay           |
-
-Scenario: a plain npx of a local tool with plain arguments is allowed
-  Given D9_ENABLED is true
-  And node_modules/.bin/vitest is an executable regular file under the session cwd
-  When Claude runs "npx vitest run src/a.test.ts"
-  Then the hook exits 0 with no output
 
 Scenario: cargo add without = is a range
   When Claude runs "cargo add serde@1.0.210"
@@ -831,7 +785,7 @@ Scenario: vetter cannot learn a Homebrew version
 - Variable indirection (`P=zod; npm i $P@1`).
 - A command substitution inside double quotes or backticks in an ordinary command — e.g.
   `echo "$(npm i left-pad)"` — is kept as one token by the lexer, so the install inside it is not
-  seen (D9's raw-text rule refuses such text, so it cannot widen this gap).
+  seen.
 - A pip extra's own additional dependencies (`requests[security]` pulls in more packages than
   `requests`) are not vetted: the extra is dropped from the name before vetting, and PyPI
   `transitive_vulns` is `not_run` in v1 anyway.
@@ -856,11 +810,6 @@ Scenario: vetter cannot learn a Homebrew version
   `transitive_vulns` is `not_run`. Task 1.
 - **Q2:** the same for crates.io (`cargo generate-lockfile` in a scratch crate) and Go (`go mod
   download` + `go.sum`). Untested; `not_run` until resolved. Task 1.
-- **Q3:** whether a `PreToolUse` payload's `cwd` equals the shell's directory after an earlier
-  Bash call `cd`'d to a subdirectory inside the project (which persists). Measure with a
-  throwaway hook that logs `cwd`: call 1 `cd <project>/sub`, call 2 `pwd`; compare. Yes → set
-  `D9_ENABLED = True` and record the evidence under Task 1. No, or not measurable → `D9_ENABLED`
-  stays false, Mark is told, and D9's scenarios are marked not-applicable. Task 1.
 
 ## Toolchain (pinned)
 
@@ -887,14 +836,7 @@ Scenario: vetter cannot learn a Homebrew version
       from the planning branch's head, not from `origin/main` — `origin/main` does not carry this
       card until the planning branch merges, and a branch without the card has no phase to read.
 - [ ] 1. Resolve Q1/Q2 by measurement in a `mktemp -d`; record the commands and outputs under this
-      task. A negative result keeps `not_run`; it does not grow scope. Also copy into this task the
-      D9 probe lists used in planning (accepted: `npx tsc`, `npx tsc --noEmit`, `npx vitest run
-      src/a.test.ts`, `npx eslint . --fix`, `npx tsc --prefix=x`; refused: the 12 rows of the npx
-      Scenario Outline, plus `npx -p tsc tsc`, `npx tsc@5.6.3`, `npx ../x`, a newline-joined
-      second command, `npx tsc > out`, `npx tsc *`, `npx tsc ~`, a doubled space, a trailing
-      space, `npx @scope/tool`, `npx tsc | cat`) so Task 3 tests them. A 2026-10-13 probe ran
-      exactly these lists through `re.fullmatch(D9_PATTERN, text, re.ASCII)`: 5 of 5 accepted,
-      12 of 12 and 11 of 11 refused.
+      task. A negative result keeps `not_run`; it does not grow scope.
 - [ ] 2. `vetting_record.py` + `vetting_record.test.py` (every Input validation rule, including
       `..`, `/` in a version and a path that resolves outside the store; expiry boundary at
       exactly 7 days; bad JSON; wrong schema; Homebrew newest-fresh-record lookup; the OSV
@@ -902,20 +844,17 @@ Scenario: vetter cannot learn a Homebrew version
 - [ ] 3. `classify-install-command.py` + `.test.py` covering every row of the install-forms table,
       every "not an install" form, wrappers, chaining, each unpinned spelling, multi-package
       commands (every package returned), `source: other` values, `pip -r`, the cannot-read
-      case (`[]` for non-blank text, with and without a tool word), and D9's text half
-      (`local_candidate` true only when D9 rule 1's raw-text pattern holds — every command in the
-      probe lists recorded under Task 1; `pnpx` and `bunx` never). Every pattern in the `is_exact_version` table
-      gets every accepted example and every refused value listed under it. Falsify the suite
-      against an
-      always-allow and an always-deny stub before implementing.
+      case (`[]` for non-blank text, with and without a tool word, in upper and lower case), and
+      every runner form with no version — including every row of both npx Scenario Outlines and
+      `npx pip --version` — returning an unpinned intent for the package the runner names. Every
+      pattern in the `is_exact_version` table gets every accepted example and every refused value
+      listed under it. Falsify the suite against an always-allow and an always-deny stub before
+      implementing.
 - [ ] 4. `classify-manifest-edit.py` + `.test.py` (JSON add/change/remove, Edit with
       `replace_all`, requirements specifiers, the pyproject reader, unparseable input).
 - [ ] 5. `dependency-guard.sh` + `dependency-guard.test.sh`: every Scenario above that concerns
       the hook, using real `PreToolUse` payloads with `hook_event_name`, and the broken-guard
-      paths (python3 off `PATH`, a lib missing), and D9's filesystem half in a `mktemp -d`
-      project (D9 rule 2: `.bin` entry an executable regular file; a symlink to one; present but
-      not executable; a directory; absent; a payload `cwd` that is not absolute) and rule 3
-      (`D9_ENABLED` false and true — the constant is patched in the test, never flipped by it).
+      paths (python3 off `PATH`, a lib missing).
 - [ ] 6. `bin/vet-dependency` + tests driven by recorded HTTP fixtures (no network in the suite),
       including the OSV-unreachable and typosquat scenarios; one opt-in live smoke test.
 - [ ] 7. `skills/vetting-dependencies/SKILL.md` per `skills/_standards/authoring-skills-and-agents.md`:
