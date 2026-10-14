@@ -4463,7 +4463,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       ⚠️ **Correction, 2026-10-10 — this used `wc -l` as the leak signal, which is the wrong
       population.** The direction holds (553 of the 560 new would-denies in that window were
       fixture noise) but roughly half of the +983 was `ALLOW` lines that criterion 3 never
-      reads, and 13 other unisolated suites keep producing them after this fix. Measured
+      reads, and 13 other suites have no isolation line at all. Measured
       breakdown and the right signal (`WOULD-DENY` restricted to `var/folders`, never `wc -l`):
       task 18.
 
@@ -5831,6 +5831,15 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
       read that growth as a regression — the exact misreading this task warned about, arriving
       by a route the warning did not anticipate.
 
+      **Then all 13 were run with the log redirected** (round-2 judge, 2026-10-14), which
+      narrows this and strengthens the conclusion below: **7 of the 13 add nothing at all**,
+      the other 6 add **only `ALLOW` lines**, and **not one of the 13 emits a single
+      `WOULD-DENY`**. So the earlier wording here — that 13 suites "keep producing" the lines
+      that matter — was too strong: they pollute the line *count* and are invisible to the
+      review population. That is the best available evidence that `WOULD-DENY` under
+      `var/folders` is the right leak signal, since it is the one measure none of the 13 can
+      move.
+
       *Second, the line count conflates two populations that matter very differently.*
       Measured on the live log at 9829 lines (2026-10-10):
 
@@ -5849,11 +5858,20 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
       8791 → 9774 growth recorded above was called "the leak continuing" without being traced.
       Traced now, by timestamp bucket:
 
-      | window | ALLOW | WOULD-DENY | of which fixture | of which real repo |
+      | window | ALLOW | WOULD-DENY | of which `var/folders` fixture | of which **non**-fixture |
       |---|---:|---:|---:|---:|
       | up to 2026-09-16 | 7367 | 1231 | 1071 | 160 |
       | 2026-09-17 … 09-26 | 638 | 560 | 553 | 7 |
-      | 2026-09-27 … 10-09 | 27 | 6 | **0** | 6 |
+      | 2026-09-27 … 10-10 | 27 | 6 | **0** | 6 |
+
+      ⚠️ **Read the last column as "non-fixture", not "real repository"** — it is simply
+      "path does not contain `var/folders`", so it still includes every agent scratch clone.
+      The `6` in the bottom row is **not** 6 lines to review: two of them are pane scratch
+      clones from 2026-10-09. Only the 4-genuine-root analysis below separates real
+      repositories from scratch. (Mislabelled until 2026-10-14; the column header said "real
+      repo" while the script that produced it classified on `var/folders` alone. The bottom
+      row's window label also read "… 10-09" while the bucket is "09-27 onward" and had
+      already caught a 10-10 line.)
 
       So the direction of that claim was right — 553 of the 560 new would-denies in the
       nine-day window were fixture noise — but roughly half the raw growth was `ALLOW` lines
@@ -5863,14 +5881,39 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
 
       **The practical payoff for the layer-2 criterion-3 re-run.** Of the 173 `WOULD-DENY`
       lines outside `var/folders`, across 63 distinct repository roots, only **four roots are
-      genuine repositories** — `Snatch-Bracket` (7), `mtg-wizard` (7), `vibe-scape` (6),
+      genuine repositories** — `Snatch-Bracket` (7), `mtg-wizard` (7), `vibe-scape` (4),
       `.claude` (3) — totalling **21 lines**. The other 59 roots (152 lines) are agent scratch
       clones under `/private/tmp/r10/`, `/private/tmp/obsjudge-r10/`, `/private/tmp/judge-*`
       and pane `work/clone` directories. Split at the window cut: **19 lines before
       `2026-09-14T20:41:44Z`** — exactly the population the 2026-09-08 layer-2 review read and
       judged 19/19 CORRECT, which confirms that figure was right and correctly scoped — and
       **2 lines after**, both `vibe-scape`, at `2026-10-04T04:44:29Z` and
-      `2026-10-05T20:45:46Z`. **The layer-2 re-run therefore has 2 new lines to read, not the
+      `2026-10-05T20:45:46Z`.
+      ⚠️ The per-repo breakdown read `vibe-scape (6)` until 2026-10-14, which made the four
+      roots sum to 23 rather than the stated 21. The live log has **4**; the total 21 was
+      right and the digit wrong — the same species of slip as the 941 above, a part that does
+      not add up to its own total. Found by the round-2 observability judge at `386cb00`.
+
+      ⚠️ **A third unattributed group exists on the live log, and the "4 unattributed" figure
+      is extract-scoped.** The round-2 judge noticed two post-cut lines whose path shape
+      matches no suite on this branch; re-measured against the **live** log on 2026-10-14
+      rather than the committed TSV:
+
+      | fixture sub-path | lines | roots | dates | attributed |
+      |---|---:|---:|---|---|
+      | `full/` | 2 | 2 | 2026-09-05 | **none found** |
+      | `shallow/` | 2 | 2 | 2026-09-05 | **none found** |
+      | `on-feature/` | 2 | 2 | 2026-09-26 | **none found** |
+      | everything else (`repo`, `repo.*`, bare `.git`, `rebasing`, `detached`) | 1618 | — | 09-01 … 09-17 | matches a known template |
+      | **total `var/folders` WOULD-DENY, live log** | **1624** | | | |
+
+      So the honest count is **6 unattributed, not 4** — `grep -rl on-feature hooks/` returns
+      nothing, so that group is unexplained rather than demonstrated fixture noise. The
+      evidence files' "4 of 1066" stays correct *for the committed extract*, which is a
+      snapshot; the live log has since grown to 1624 such lines. State the scope with the
+      figure whenever either is quoted, because the two differ by more than the unattributed
+      count itself.
+      **The layer-2 re-run therefore has 2 new lines to read, not the
       571 the raw delta suggests.**
 
       **Result, 2026-09-17.** Both suites severed. The falsifier is the log line count, not a
