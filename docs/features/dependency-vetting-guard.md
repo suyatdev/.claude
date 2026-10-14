@@ -1054,9 +1054,24 @@ Scenario: vetter cannot learn a Homebrew version
 - [ ] 5. `dependency-guard.sh` + `dependency-guard.test.sh`: every Scenario above that concerns
       the hook, using real `PreToolUse` payloads with `hook_event_name`, and the broken-guard
       paths (python3 off `PATH`, a lib missing).
+      2026-10-14: code committed. Hook suite 145 passed, 0 failed (red first: 137 failed);
+      stubs always-allow 15/130, always-deny 1/144 (the one shared pass is "the real
+      `hooks/state` log was not touched"). Decision logic lives in a new
+      `hooks/lib/decide-dependency.py` (68 passed, 0 failed; its unit test was written after the code,
+      the hook suite was the red-first test); the wrapper takes its state dir from
+      `DEPENDENCY_GUARD_STATE_DIR`. Readings taken: a versionless install prints
+      `<name>@<exact-version>` as the spelling; an invalid name is checked after step 1; `(log
+      write failed)` is appended once; an empty payload is unparseable (ask).
 - [ ] 6. `bin/vet-dependency` + tests driven by recorded HTTP fixtures (no network in the suite),
       including the OSV-unreachable and typosquat scenarios; one opt-in live smoke test.
-- [ ] 7. `skills/vetting-dependencies/SKILL.md` per `skills/_standards/authoring-skills-and-agents.md`:
+      2026-10-14: code committed. Checks live in a new paired `hooks/lib/vet_checks.py` (167
+      passed, 0 failed); `hooks/bin/vet-dependency` is a thin CLI (94 passed, 0 failed, 1 skipped —
+      the live smoke, `VET_LIVE_SMOKE=1`, not yet run). No-network proof: a socket/DNS trap
+      blocked every attempt, and both suites pass under `sandbox-exec -n no-network`. All
+      fixtures are hand-written from the API shapes, not recorded; the live smoke is what checks
+      them against real registries. On success it prints a summary, `INCOMPLETE:` when relevant,
+      and `report:`/`record:` paths.
+- [x] 7. `skills/vetting-dependencies/SKILL.md` per `skills/_standards/authoring-skills-and-agents.md`:
       running the vetter, the report layout relayed to Mark, the ✅ / ⚠️ / ⛔ recommendation with
       a reason and a safer alternative when ⛔, and the judgment checks no hook can see, each from
       Mark's request (verbatim in `## Mark's request` above):
@@ -1071,6 +1086,11 @@ Scenario: vetter cannot learn a Homebrew version
       (d) **imports** — an `import` of a package not yet installed goes through the vetter before
       the install is proposed.
       Gate stub in `rules/gates.md`.
+      Done 2026-10-14: skill (61 lines) + a 2-line gate stub after "Secret-gate override". Mark
+      chose: a clean but `complete: false` record is ✅ with the unrun checks named in the same
+      sentence (⚠️ would make every non-npm package permanently yellow); ⛔ = any `stop`, ⚠️ =
+      any `caution`. Mark also chose to add a `vetting-dependencies` line to the CLAUDE.md
+      Skills Catalog.
 - [ ] 8. Vet osv-scanner 2.6.0 with the new flow; show Mark the report; install only on approval,
       from the release asset named in Toolchain after its SHA-256 matches `osv-scanner_SHA256SUMS`.
 - [ ] 9. Register in `settings.json` (`PreToolUse` `Bash` group after `secret-command-guard`, and the
