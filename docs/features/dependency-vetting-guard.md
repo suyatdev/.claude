@@ -973,10 +973,15 @@ Scenario: vetter cannot learn a Homebrew version
         `GOTOOLCHAIN=local GOENV=off`: `go get golang.org/x/text@v0.14.0` then `go list -m all`
         listed 4 modules (x/mod v0.8.0, x/sys v0.5.0, x/text v0.14.0, x/tools v0.6.0) while
         `go.sum` held only the 2 x/text lines. `go.sum` is not the full transitive set.
-- [ ] 2. `vetting_record.py` + `vetting_record.test.py` (every Input validation rule, including
+- [x] 2. `vetting_record.py` + `vetting_record.test.py` (every Input validation rule, including
       `..`, `/` in a version and a path that resolves outside the store; expiry boundary at
       exactly 7 days; bad JSON; wrong schema; Homebrew newest-fresh-record lookup; the OSV
       ecosystem map). Test first, red, then implement.
+      Done 2026-10-14: 586 passed, 0 failed (red first: import failed, module absent). Decisions
+      where the spec is silent: a `vetted_at` in the future is not fresh; a Homebrew record's
+      version (it becomes a file name) must match `^[A-Za-z0-9._+-]{1,64}$` and not be `.`/`..`;
+      extra record keys are ignored. Also exposes `write_report`/`report_path` for the vetter's
+      `.md` (same atomic write and containment). `is_exact_version` lives here.
 - [ ] 3. `classify-install-command.py` + `.test.py` covering every row of the install-forms table,
       every "not an install" form, wrappers, chaining, each unpinned spelling, multi-package
       commands (every package returned), `source: other` values, `pip -r`, the cannot-read
