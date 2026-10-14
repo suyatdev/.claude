@@ -995,6 +995,15 @@ Scenario: vetter cannot learn a Homebrew version
       implementing.
 - [ ] 4. `classify-manifest-edit.py` + `.test.py` (JSON add/change/remove, Edit with
       `replace_all`, requirements specifiers, the pyproject reader, unparseable input).
+      2026-10-14: code + suite committed, 327 passed, 0 failed (red first). Box stays open until
+      Mark answers two questions: pyproject optional-dependencies / poetry groups /
+      `[dependency-groups]` are not read (no Known-gaps row covers it); and `gitlab:`,
+      `bitbucket:`, `gist:`, `git://`, `ssh://`, `git@`, `~/` are treated as `source: other`
+      (ask) while the GitHub shorthand `user/repo` is unpinned (refused). Decisions taken: other
+      requirements option lines (`--extra-index-url`, `-i`, `-c`, `--find-links`) and `name @ url`
+      ask; manifest basenames match case-insensitively; an unparseable old `package.json` counts
+      as `{}`; output items carry `kind: dependency|warning`; names are returned raw for the hook
+      to validate with `vetting_record.validate_name`.
 - [ ] 5. `dependency-guard.sh` + `dependency-guard.test.sh`: every Scenario above that concerns
       the hook, using real `PreToolUse` payloads with `hook_event_name`, and the broken-guard
       paths (python3 off `PATH`, a lib missing).
