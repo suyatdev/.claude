@@ -35,12 +35,26 @@ pass=0; fail=0
 ok()  { printf 'ok   — %s\n' "$1"; pass=$((pass+1)); }
 bad() { printf 'FAIL — %s\n%s\n' "$1" "$2"; fail=$((fail+1)); }
 
-# The fixture repos live under a fake HOME, so there is no ~/.gitconfig to name a
-# committer and no system config to inherit. Both are supplied here rather than
+# The fixture repos live under a fake HOME, and the identity is supplied here rather than
 # written into each repo, so a fixture is one `git init` and nothing else.
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid
 export GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 export GIT_CONFIG_NOSYSTEM=1
+
+# ⚠️ The fake HOME does NOT sever the global config, and believing it did is what let this
+# suite leak. `$HOME` is only ever a PATH here: the fixture-building commands below
+# (`git -C "$G" checkout`, `commit`, `rebase`) run in this script's own environment, where
+# HOME is the real one, so git reads the real `~/.gitconfig` — which on this machine sets
+# `core.hooksPath` to the worktree guard's layer-2 `reference-transaction` hook. Every
+# fixture HEAD move was therefore judged, and in `log` mode RECORDED, as a HEAD write in a
+# primary checkout. Measured 2026-09-17: one run appended 40 lines to
+# `hooks/state/reference-transaction.log`; the `rebasing` and `detached` fixtures alone
+# accounted for 95 lines of that machine-wide log.
+#
+# `GIT_CONFIG_NOSYSTEM` above covers the system config only and never closed this.
+# Safe to sever: this suite takes its identity from the GIT_AUTHOR/GIT_COMMITTER variables
+# above, not from any config file. See `docs/features/worktree-location-guard.md` task 18.
+export GIT_CONFIG_GLOBAL=/dev/null
 
 # ---------------------------------------------------------------------------
 # Fixture
