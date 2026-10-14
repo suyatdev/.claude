@@ -993,6 +993,17 @@ Scenario: vetter cannot learn a Homebrew version
       pattern in the `is_exact_version` table gets every accepted example and every refused value
       listed under it. Falsify the suite against an always-allow and an always-deny stub before
       implementing.
+      2026-10-14: code + suite committed, 842 passed, 0 failed; stubs: always-allow 227/615,
+      always-intent 119/723, no check passes both. Sync decision: the `RUNNERS` and
+      `INSTALL_TOOL_WORDS` sync tests parse this card's install-forms table directly (a copy could
+      drift), failing loudly if the table is missing, duplicated or not 11 rows.
+      **GATE: Spec change needed** — box stays open. The intent contract (`### Contracts`) has no
+      field for three things later steps need: the owning segment's `VET_EXEMPT` (step 2), whether a
+      runner's package came from `-p`/`--package` (the `MSG_UNPINNED` advice sentence), and a
+      `pip -r <file>` marker (its own warning, distinct from a local path). Also: the classifier
+      treats npm `user/repo` as `source: other` (ask) while the spec and `classify-manifest-edit`
+      treat it as unpinned (refuse); and `npx -p cowsay@1.6.0 cowsay` is refused because the bare
+      `cowsay` is read literally as a second, unpinned intent.
 - [ ] 4. `classify-manifest-edit.py` + `.test.py` (JSON add/change/remove, Edit with
       `replace_all`, requirements specifiers, the pyproject reader, unparseable input).
       2026-10-14: code + suite committed, 327 passed, 0 failed (red first). Box stays open until
