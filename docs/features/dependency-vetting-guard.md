@@ -1,7 +1,7 @@
 ---
-phase: planning
-model_tier: high
-branch: none
+phase: implementation
+model_tier: low
+branch: feat/dependency-vetting-guard
 ---
 
 # Dependency vetting guard — scan before anything is installed, then ask
@@ -45,7 +45,7 @@ branch: none
 > was missing from the table, one hand-written runner list remained, and manifest intents
 > skipped step 0a. This revision fixes those four.
 >
-> **Pending Mark's OK before the gate** (Claude proposed each; none was in the brainstorm): the
+> **Approved by Mark 2026-10-13 ("Approve all"), before the gate** (Claude proposed each; none was in the brainstorm): the
 > lockfile row (Manifest edits); the scanner names (below); D8, Homebrew skips the pin check;
 > the cannot-read rule (Hook decisions); osv-scanner from the GitHub release instead of Homebrew
 > (Toolchain); `MSG_RUNNER_INSTALLER`, refusing a runner that names a package manager (Install
@@ -126,7 +126,7 @@ injection rules already in `writing-secure-code`), all of pillar 3, and pillar 4
 Disclosure". Pillar 2's injection and parameterization bullets are already covered by
 `skills/writing-secure-code/SKILL.md:8-30` and need no change.
 
-**Pending Mark's OK — scanner names:** pillar 4 names "npm audit, Snyk, pip-audit, or SonarQube";
+**Approved by Mark 2026-10-13 — scanner names:** pillar 4 names "npm audit, Snyk, pip-audit, or SonarQube";
 task 7c names `osv-scanner`, `npm audit`, `pip-audit`. Snyk is a hosted service needing an account,
 and SonarQube is a code (SAST) scanner rather than a dependency scanner, so neither is in 7c — a
 narrowing Claude proposed while writing, not one Mark chose.
@@ -335,7 +335,7 @@ is itself a package manager — its name, lowercased, is in `INSTALL_TOOL_WORDS`
 `npx npm@12.0.1 install left-pad` would otherwise vet only npm, while left-pad is installed
 unchecked (round-8 compliance judge). There is no reason to fetch a package manager through a
 runner to install something; calling the manager directly lets the guard see the real install.
-**Pending Mark's OK** — Claude proposed this after round 8.
+**Approved by Mark 2026-10-13** — Claude proposed this after round 8.
 
 **Not from a registry (`source: other`):** a package argument or manifest value that is
 `workspace:…`, `file:…`, `link:…`, a `git+…`/`github:…`/`http(s)://…` URL, a tarball path, or a
@@ -416,7 +416,7 @@ drift in these unpinned system tools is visible per report.
 
 ### D8 — Homebrew has no pin
 
-**Pending Mark's OK** — Claude proposed this while writing; it relaxes Mark's D6 ("exact version
+**Approved by Mark 2026-10-13** — Claude proposed this while writing; it relaxes Mark's D6 ("exact version
 only") for one ecosystem and is not in the Decisions table. The alternative is to deny every
 `brew install` (D6 applied as written), which would leave **no** way through: step 1's unpinned
 deny is not bypassable, `VET_EXEMPT` included. (An earlier draft said `VET_EXEMPT` would be the
@@ -498,7 +498,7 @@ program named in the install-forms table is in the constant. Without such a word
 output, **and one log line** (`allow-unreadable`, so a later miss is findable): a prose heredoc
 that happens not to lex (e.g. a commit message with an apostrophe) is not an install, and asking
 on every one would bury the real prompts. This mirrors `classify-git-command.py:505-512`, which
-refuses instead; ask is used here to match D7. **Pending Mark's OK** — added after the round-1
+refuses instead; ask is used here to match D7. **Approved by Mark 2026-10-13** — added after the round-1
 judges found the gap; not in the brainstorm.
 
 **Log.** Every non-allow decision — deny, ask, broken, cannot-read — appends one line per intent
@@ -533,7 +533,7 @@ On `Edit`/`Write`/`NotebookEdit` whose `file_path` basename is a manifest:
   "Any `*lock*` file" means exactly these basenames, never a substring match (a substring would
   catch `clock.js`): `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock`, `pnpm-lock.yaml`,
   `bun.lockb`, `bun.lock`, `poetry.lock`, `uv.lock`, `Pipfile.lock`, `Cargo.lock`, `go.sum`,
-  `Gemfile.lock`. **Pending Mark's OK** — this lockfile row was added while writing the spec and
+  `Gemfile.lock`. **Approved by Mark 2026-10-13** — this lockfile row was added while writing the spec and
   was not shown in the brainstorm.
 
 Intents from a manifest go through decision steps 0a–3 exactly as a command's do (step 0 cannot
@@ -933,7 +933,7 @@ Scenario: vetter cannot learn a Homebrew version
 
 | Tool | Version | Source |
 |---|---|---|
-| osv-scanner | **2.6.0** | GitHub release asset `osv-scanner_darwin_arm64` at tag `v2.6.0`, checked against that release's `osv-scanner_SHA256SUMS` before use, placed in `~/.local/bin/` — not Homebrew, which installs whatever is current stable and so cannot hold 2.6.0 (D8's own reason). Installed only after Mark approves its own vetting report. **Pending Mark's OK** — the earlier draft said Homebrew; changed after the round-1 judge. Re-pin = a deliberate edit of this row plus re-vetting |
+| osv-scanner | **2.6.0** | GitHub release asset `osv-scanner_darwin_arm64` at tag `v2.6.0`, checked against that release's `osv-scanner_SHA256SUMS` before use, placed in `~/.local/bin/` — not Homebrew, which installs whatever is current stable and so cannot hold 2.6.0 (D8's own reason). Installed only after Mark approves its own vetting report. **Approved by Mark 2026-10-13** — the earlier draft said Homebrew; changed after the round-1 judge. Re-pin = a deliberate edit of this row plus re-vetting |
 | python3 | 3.9.6 (system) | stdlib only — no new Python packages |
 | npm, brew | 12.0.1, 6.0.14 (measured 2026-10-12) | system tools, **not pinned** — the vetter calls `npm install --package-lock-only` and `brew info`; each report prints the versions used, so drift is visible |
 | shell lexer | `hooks/lib/shell_segments.py` at `origin/main` `54129e2` | existing |
