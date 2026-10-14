@@ -27,7 +27,14 @@ __all__ = ["classify", "is_unreadable", "mentions_install_tool", "is_exact_versi
 
 ECO_NPM, ECO_PYPI, ECO_CRATES, ECO_GO, ECO_GEMS, ECO_BREW = (
     "npm", "pypi", "crates.io", "go", "rubygems", "homebrew")
-REGISTRY, OTHER = "registry", "other"
+REGISTRY, OTHER, REQUIREMENTS_FILE = "registry", "other", "requirements-file"
+
+# The plain-word allowlist for a VET_EXEMPT value. A local copy of the one at
+# hooks/lib/secret_approval.py:261 (_EXEMPT_VALUE_ALLOWED_RE), not an import: that name is private to
+# another guard's module, and its `^...$` form lets `$` match before a trailing newline, so this one is
+# applied with fullmatch. Keep the character set in step with that line.
+EXEMPT_VAR = "VET_EXEMPT"
+EXEMPT_VALUE_RE = re.compile(r"[A-Za-z0-9._,:/-]+")
 
 # The one list of commands that fetch a package and run it (card, "RUNNERS"). An intent has
 # form "run" exactly when its runner is a member; _runner_name() refuses to emit anything else.
@@ -251,11 +258,13 @@ def _runner_name(prog, sub=None):
     return name
 
 
-def _intent(ecosystem, parsed, tool, runner=None):
+def _intent(ecosystem, parsed, tool, runner=None, via_package_option=False):
+    """`exempt` is filled in by classify(), which is the only place that knows the owning segment."""
     name, version, source = parsed
     pinned = source == REGISTRY and version is not None and is_exact_version(ecosystem, version)
     return {"ecosystem": ecosystem, "name": name, "version": version, "pinned": pinned, "tool": tool,
-            "runner": runner, "form": "run" if runner else "add", "source": source}
+            "runner": runner, "form": "run" if runner else "add", "source": source, "exempt": None,
+            "via_package_option": via_package_option}
 
 
 def _other(ecosystem, value, tool, runner=None):
@@ -272,10 +281,13 @@ def _runner_intents(prog, runner, args, ecosystem):
     runners every -p/--package value does too. Words after the package are its own arguments."""
     npm_registry = ecosystem == ECO_NPM
     items, _ = _scan(args, NPM_RUNNER_VALUE_FLAGS if npm_registry else PYPI_RUNNER_VALUE_FLAGS, first_only=True)
-    specs = [value for flag, value in items
-             if flag is None or (npm_registry and flag in NPM_PACKAGE_FLAGS and value)]
     parse = _parse_npm if npm_registry else _pypi_parser()
-    return _intents(ecosystem, specs, parse, prog, runner)
+    found = []
+    for flag, value in items:
+        via_option = npm_registry and flag in NPM_PACKAGE_FLAGS and bool(value)
+        if flag is None or via_option:
+            found.append(_intent(ecosystem, parse(value), prog, runner, via_package_option=via_option))
+    return found
 
 
 def _node_manager(prog, args):
@@ -298,7 +310,7 @@ def _pypi_items(prog, items, parse, skip_local_dot=False):
     found = []
     for flag, value in items:
         if flag in REQUIREMENT_FLAGS and value:
-            found.append(_other(ECO_PYPI, value, prog))
+            found.append(_intent(ECO_PYPI, (value, None, REQUIREMENTS_FILE), prog))
         elif flag is None or (flag in EDITABLE_FLAGS and value):
             if skip_local_dot and (value == "." or value.startswith(".[")):
                 continue
@@ -486,12 +498,20 @@ def _classify_argv(argv):
 
 
 # ---------------------------------------------------------------------------------------- public
+def _exempt_value(assigns):
+    """The VET_EXEMPT value from THIS segment's own prefix assignments, else None. Exact name only;
+    an assignment made by env or sudo is not the segment's own and is not read."""
+    value = assigns.get(EXEMPT_VAR, "")
+    return value if EXEMPT_VALUE_RE.fullmatch(value) else None
+
+
 def classify(src):
     """Return the install intents of every segment of `src`, in command order. [] when there are none
     -- including when the lexer cannot read `src` (see is_unreadable)."""
     intents = []
-    for _assigns, argv in segments(src):
-        intents.extend(_classify_argv(argv))
+    for assigns, argv in segments(src):
+        exempt = _exempt_value(assigns)
+        intents.extend(dict(intent, exempt=exempt) for intent in _classify_argv(argv))
     return intents
 
 

@@ -224,7 +224,7 @@ tool: npm                 # argv[0] after wrapper stripping
 runner: null              # the RUNNERS member that matched, as written (e.g. "pnpm dlx"), or null; fills <runner> in MSG_RUNNER_INSTALLER
 form: add | run           # run = the command form is in RUNNERS (below) — exactly that set; the ask reason says "runs from registry" for run
 source: registry | other | requirements-file  # other = workspace:, file:, link:, a git/http(s)/tarball URL, a git-host shorthand, a local path (./x, ../x, /x); requirements-file = the <file> of `pip -r <file>` (name = the file as written)
-exempt: null              # the owning segment's VET_EXEMPT value when it matches the plain-word allowlist (Log, below), else null; always null for a manifest edit
+exempt: null              # the owning segment's VET_EXEMPT value when it matches the plain-word allowlist (the `VET_EXEMPT` paragraph under Hook decisions), else null; always null for a manifest edit
 via_package_option: false # true only for a runner intent taken from `-p`/`--package`/`--package=`; false for every other intent
 ```
 
@@ -290,7 +290,7 @@ classifier stripping `env`, `sudo`, `timeout <n>`, `nice`):
 | npm | `install` and every alias npm 12.0.1 lists for it (`add`, `i`, `in`, `ins`, `inst`, `insta`, `instal`, `isnt`, `isnta`, `isntal`, `isntall`), and `install-test`/`it`, each with ≥1 package arg; `exec`/`x` | `name@1.2.3` |
 | pnpm, yarn, bun — and their other command names `pn` (= pnpm), `pnx` (= `pnpm dlx`), `yarnpkg` (= yarn) | `add`; `pnpm`/`pn`/`yarn`/`yarnpkg`/`bun` `install` with package args; runners `pnpx`, `pnx`, `bunx`, `bun x`, `pnpm dlx`, `pn dlx`, `yarn dlx`, `yarnpkg dlx` | `name@1.2.3` |
 | corepack | `corepack <manager>[@<version>] <args>` is read as `<manager> <args>`, the `@<version>` stripped (corepack is a wrapper that runs that manager; syntax from corepack 0.36.0's README, `corepack <binary name>[@<version>] [... args]`) | as for the manager |
-| npx | any registry package as first non-flag arg; every `-p <pkg>`/`--package <pkg>`/`--package=<pkg>` value is also an intent | `name@1.2.3` |
+| npx | any registry package as the first non-flag arg — a word that is neither an option nor an option's value, so in `npx -p cowsay@1.6.0 cowsay` it is the second `cowsay`, an unpinned intent, refused (Mark, 2026-10-14; `npx cowsay@1.6.0` is the route); every `-p <pkg>`/`--package <pkg>`/`--package=<pkg>` value is also an intent | `name@1.2.3` |
 | pip, pip3, `python -m pip`, `uv pip` | `install` with package args; `-r <file>`/`--requirement <file>` → an intent with `source: requirements-file`, **ask**ed at step 0a with a general "installs everything listed in `<file>`, not parsed by the guard" warning (v1 does not read the file) | `name==1.2.3` |
 | uv, poetry | `add` | `name==1.2.3` / `name@1.2.3` (poetry) |
 | uvx, `uv tool run`, `uv tool install`, `pipx run`, `pipx install` | package arg | `name==1.2.3` |
@@ -856,6 +856,10 @@ Scenario: npx -p names an install
   When Claude runs "npx -p cowsay cowsay hi"
   Then the hook exits 2 with MSG_UNPINNED naming cowsay
 
+Scenario: a pinned -p does not pin the command word
+  When Claude runs "npx -p cowsay@1.6.0 cowsay"
+  Then the hook exits 2 with MSG_UNPINNED naming cowsay
+
 Scenario Outline: a versionless npx is refused in any shape
   When Claude runs "<command>"
   Then the hook exits 2 with MSG_UNPINNED
@@ -907,10 +911,10 @@ Scenario: vetter cannot learn a Homebrew version
   project's `packageManager` field names before running it. Those downloads are not vetted
   (corepack 0.36.0 README; not run).
 - A package manager the guard does not know, fetched through a runner, is vetted as a package
-  while what it installs is not: `npx cnpm@9.4.0 install left-pad`, or `npx -p @pnpm/exe@12.11.2
-  pnpm add left-pad` (`@pnpm/exe` ships `pnpm`, `pn`, `pnx`, `pnpx` under a different package
-  name). `MSG_RUNNER_INSTALLER` checks only the package's name (round-9 judges, from `npm view`;
-  not run).
+  while what it installs is not: `npx cnpm@9.4.0 install left-pad`. `MSG_RUNNER_INSTALLER`
+  checks only the package's name (round-9 judges, from `npm view`; not run). The round-9
+  example `npx -p @pnpm/exe@12.11.2 pnpm add left-pad` is no longer a gap: the command word
+  `pnpm` is its own intent (npx row) and step 0 denies it.
 - `uvx --from <pkg>==1.0 <cmd>` and `pipx run --spec <pkg> <cmd>` name the downloaded package in
   a flag, so the guard vets `<cmd>` instead (round-10 observability judge, from their docs; not
   run) — the uv/pipx counterpart of `npx -p`, which the npx row does handle.
@@ -1021,6 +1025,13 @@ Scenario: vetter cannot learn a Homebrew version
       `via_package_option`) to the contract; every git-host shorthand, bare `user/repo`
       included, is `source: other` (ask); `npx -p <pkg>@<v> <cmd>` stays refused — the literal
       reading is the safe direction and `npx <pkg>@<v>` is the route. Spec edited to match.
+      Implemented 2026-10-14: 905 passed, 0 failed (red first: 403, mostly the new keys); stubs
+      always-allow 228/677, always-intent 120/785, none passes both. `exempt` uses a local
+      `EXEMPT_VALUE_RE` citing `secret_approval.py:261` with `fullmatch` (that module's constant is
+      private, and its `$` matches before a trailing newline); `env VET_EXEMPT=x npm i …` gives
+      null — not the segment's own prefix assignment, as in `classify-pr-command.py`. `uv add -r`
+      also yields `requirements-file` (same code path; card silent). Open: the test file is 888
+      lines, over the 800 maximum.
 - [ ] 4. `classify-manifest-edit.py` + `.test.py` (JSON add/change/remove, Edit with
       `replace_all`, requirements specifiers, the pyproject reader, unparseable input).
       2026-10-14: code + suite committed, 327 passed, 0 failed (red first). Box stays open until
@@ -1035,6 +1046,9 @@ Scenario: vetter cannot learn a Homebrew version
       Mark decided 2026-10-14: bare `user/repo` is `source: other` (ask), like every git-host
       shorthand; the pyproject sections not read are disclosed in Known gaps. Manifest intents
       also carry the new `exempt: null` and `via_package_option: false`.
+      Implemented 2026-10-14, 351 passed, 0 failed (red first: 10). Shorthand = the manifest
+      value fully matching `owner/repo[#ref]`, each half starting alphanumeric; so `user/.github`
+      stays unpinned (refused), the safe direction, and `@scope/name` values are untouched.
 - [ ] 5. `dependency-guard.sh` + `dependency-guard.test.sh`: every Scenario above that concerns
       the hook, using real `PreToolUse` payloads with `hook_event_name`, and the broken-guard
       paths (python3 off `PATH`, a lib missing).

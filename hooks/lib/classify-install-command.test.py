@@ -46,13 +46,14 @@ classify = _MOD.classify
 # ---------------------------------------------------------------------------------------------
 
 
-def _intent(eco, name, version, tool, pinned, runner=None, source="registry"):
+def _intent(eco, name, version, tool, pinned, runner=None, source="registry", exempt=None, via=False):
     return {"ecosystem": eco, "name": name, "version": version, "pinned": pinned, "tool": tool,
-            "runner": runner, "form": "run" if runner else "add", "source": source}
+            "runner": runner, "form": "run" if runner else "add", "source": source, "exempt": exempt,
+            "via_package_option": via}
 
 
-def npm(name, version, pinned, tool="npm", runner=None):
-    return _intent("npm", name, version, tool, pinned, runner)
+def npm(name, version, pinned, tool="npm", runner=None, via=False):
+    return _intent("npm", name, version, tool, pinned, runner, via=via)
 
 
 def pypi(name, version, pinned, tool="pip", runner=None):
@@ -77,6 +78,15 @@ def brew(name):
 
 def other(eco, name, tool, runner=None):
     return _intent(eco, name, None, tool, False, runner, "other")
+
+
+def reqfile(name, tool):
+    return _intent("pypi", name, None, tool, False, source="requirements-file")
+
+
+def exempt(intents, value):
+    """The same intents, each carrying the segment's VET_EXEMPT value."""
+    return [dict(i, exempt=value) for i in intents]
 
 
 _CHECKS = []  # (name, thunk -> (ok, detail))
@@ -156,12 +166,35 @@ add_cases("npx row", [
     ("npx --yes --no-install cowsay@1.6.0", [npm("cowsay", "1.6.0", True, "npx", "npx")], "two boolean flags"),
     ("npx @scope/tool@2.0.0", [npm("@scope/tool", "2.0.0", True, "npx", "npx")], "scoped"),
     ("npx --package=a@1.0.0 --package b@2.0.0 -p c@3.0.0 cmd",
-     [npm("a", "1.0.0", True, "npx", "npx"), npm("b", "2.0.0", True, "npx", "npx"),
-      npm("c", "3.0.0", True, "npx", "npx"), npm("cmd", None, False, "npx", "npx")],
-     "every -p/--package value is an intent, and so is the first non-flag arg (card line 287)"),
+     [npm("a", "1.0.0", True, "npx", "npx", via=True), npm("b", "2.0.0", True, "npx", "npx", via=True),
+      npm("c", "3.0.0", True, "npx", "npx", via=True), npm("cmd", None, False, "npx", "npx")],
+     "every -p/--package value is an intent (via_package_option), and so is the first non-flag arg"),
     ("npx -p cowsay cowsay hi",
-     [npm("cowsay", None, False, "npx", "npx"), npm("cowsay", None, False, "npx", "npx")],
-     "scenario 'npx -p names an install'; the literal reading yields the -p value AND the positional"),
+     [npm("cowsay", None, False, "npx", "npx", via=True), npm("cowsay", None, False, "npx", "npx")],
+     "scenario 'npx -p names an install'; the -p value AND the positional (via_package_option only on the first)"),
+    ("npx -p cowsay@1.6.0 cowsay",
+     [npm("cowsay", "1.6.0", True, "npx", "npx", via=True), npm("cowsay", None, False, "npx", "npx")],
+     "Mark kept this refused: the bare command word is a second, unpinned intent"),
+    ("npx --package cowsay@1.6.0 cowsay",
+     [npm("cowsay", "1.6.0", True, "npx", "npx", via=True), npm("cowsay", None, False, "npx", "npx")],
+     "--package <v> separate value"),
+    ("npx -pcowsay@1.6.0 cowsay",
+     [npm("cowsay", "1.6.0", True, "npx", "npx", via=True), npm("cowsay", None, False, "npx", "npx")],
+     "attached short value"),
+    ("npx cowsay@1.6.0 -p other@2.0.0", [npm("cowsay", "1.6.0", True, "npx", "npx")],
+     "-p after the package belongs to the command being run"),
+    ("pnpm dlx -p a@1.0.0 cmd@2.0.0",
+     [npm("a", "1.0.0", True, "pnpm", "pnpm dlx", via=True), npm("cmd", "2.0.0", True, "pnpm", "pnpm dlx")],
+     "pnpm dlx -p"),
+    ("npm exec --package=a@1.0.0 -- cmd",
+     [npm("a", "1.0.0", True, "npm", "npm exec", via=True), npm("cmd", None, False, "npm", "npm exec")],
+     "npm exec --package="),
+    ("yarn dlx --package a@1.0.0 cmd",
+     [npm("a", "1.0.0", True, "yarn", "yarn dlx", via=True), npm("cmd", None, False, "yarn", "yarn dlx")],
+     "yarn dlx --package"),
+    ("uvx -p 3.12 ruff==0.6.0 check", [pypi("ruff", "0.6.0", True, "uvx", "uvx")],
+     "uvx -p is --python, not a package option: no intent, via_package_option false"),
+    ("uvx --python 3.12 ruff check", [pypi("ruff", None, False, "uvx", "uvx")], "uvx --python"),
     ("npx -- cowsay@1.6.0", [npm("cowsay", "1.6.0", True, "npx", "npx")], "after -- the next token is the package"),
     ("npx github:user/repo", [other("npm", "github:user/repo", "npx", "npx")], "a git source"),
     ("npx NPX-NOT-A-FLAG@1.0.0", [npm("NPX-NOT-A-FLAG", "1.0.0", True, "npx", "npx")], "name spelling kept"),
@@ -183,14 +216,14 @@ add_cases("pip row", [
      "environment marker dropped"),
     ("pip install 'requests == 2.32.3'", [pypi("requests", "2.32.3", True)], "spaces around =="),
     ("pip install 'torch==2.1.0+cu118'", [pypi("torch", "2.1.0+cu118", True)], "local label is exact"),
-    ("pip install -r requirements.txt", [other("pypi", "requirements.txt", "pip")], "-r -> not parsed, ask"),
-    ("pip install --requirement reqs.txt", [other("pypi", "reqs.txt", "pip")], "long form"),
-    ("pip install --requirement=reqs.txt", [other("pypi", "reqs.txt", "pip")], "long form, ="),
-    ("pip install -rreqs.txt", [other("pypi", "reqs.txt", "pip")], "attached short form"),
+    ("pip install -r requirements.txt", [reqfile("requirements.txt", "pip")], "-r is a requirements-file source, not parsed"),
+    ("pip install --requirement reqs.txt", [reqfile("reqs.txt", "pip")], "long form"),
+    ("pip install --requirement=reqs.txt", [reqfile("reqs.txt", "pip")], "long form, ="),
+    ("pip install -rreqs.txt", [reqfile("reqs.txt", "pip")], "attached short form"),
     ("pip install -r reqs.txt requests==2.32.3",
-     [other("pypi", "reqs.txt", "pip"), pypi("requests", "2.32.3", True)], "-r and a package, in order"),
-    ("uv pip install -r reqs.txt", [other("pypi", "reqs.txt", "uv")], "uv pip -r"),
-    ("python -m pip install -r reqs.txt", [other("pypi", "reqs.txt", "python")], "python -m pip -r"),
+     [reqfile("reqs.txt", "pip"), pypi("requests", "2.32.3", True)], "-r and a package, in order"),
+    ("uv pip install -r reqs.txt", [reqfile("reqs.txt", "uv")], "uv pip -r"),
+    ("python -m pip install -r reqs.txt", [reqfile("reqs.txt", "python")], "python -m pip -r"),
 ])
 
 add_cases("uv/poetry row", [
@@ -198,7 +231,7 @@ add_cases("uv/poetry row", [
     ("uv add requests", [pypi("requests", None, False, tool="uv")], "uv add, unpinned"),
     ("uv add --dev pytest==8.0.0", [pypi("pytest", "8.0.0", True, tool="uv")], "uv add --dev"),
     ("uv add --group lint ruff==0.6.0", [pypi("ruff", "0.6.0", True, tool="uv")], "a valued flag"),
-    ("uv add -r reqs.txt", [other("pypi", "reqs.txt", "uv")], "uv add -r"),
+    ("uv add -r reqs.txt", [reqfile("reqs.txt", "uv")], "uv add -r"),
     ("poetry add requests@2.32.3", [pypi("requests", "2.32.3", True, tool="poetry")], "poetry name@version"),
     ("poetry add requests==2.32.3", [pypi("requests", "2.32.3", True, tool="poetry")], "poetry accepts =="),
     ("poetry add requests", [pypi("requests", None, False, tool="poetry")], "poetry, unpinned"),
@@ -372,6 +405,76 @@ add_cases("known gap", [
 ])
 
 # ---------------------------------------------------------------------------------------------
+# VET_EXEMPT: the owning segment's own assignment, exact name, plain-word value only
+# ---------------------------------------------------------------------------------------------
+A1 = [npm("a", "1.0.0", True)]
+add_cases("exempt", [
+    ("VET_EXEMPT=offline-mirror npm install zod@3.23.8", exempt(Z, "offline-mirror"), "the card's scenario"),
+    ("VET_EXEMPT=x npm install zod", exempt([npm("zod", None, False)], "x"),
+     "reported on an unpinned intent too; the hook denies it at step 1"),
+    ("VET_EXEMPT=a.b_c,d:e/f-g npm i zod@3.23.8", exempt(Z, "a.b_c,d:e/f-g"), "every allowlisted character class"),
+    ("VET_EXEMPT=x1 npm i zod@3.23.8", exempt(Z, "x1"), "digits"),
+    ("VET_EXEMPT='x' npm i zod@3.23.8", exempt(Z, "x"), "the lexer removes cleanly balanced quotes"),
+    ("VET_EXEMPT='a;b' npm install zod@3.23.8", Z, "the card's metacharacter scenario: ignored"),
+    ("VET_EXEMPT=a;b npm install zod@3.23.8", [],
+     "an unquoted ; ends the segment: the next one starts with the command word b, not npm"),
+    ('VET_EXEMPT="two words" npm i zod@3.23.8', Z, "a space is outside the allowlist"),
+    ("VET_EXEMPT='a b' npm i zod@3.23.8", Z, "a space is outside the allowlist"),
+    ("VET_EXEMPT= npm i zod@3.23.8", Z, "empty value is absent"),
+    ("VET_EXEMPT=$HOME npm i zod@3.23.8", Z, "$ is outside the allowlist"),
+    ("VET_EXEMPT='a$b' npm i zod@3.23.8", Z, "quoted $ is outside the allowlist"),
+    ("VET_EXEMPT='a`b' npm i zod@3.23.8", Z, "backtick"),
+    ("VET_EXEMPT='a|b' npm i zod@3.23.8", Z, "pipe"),
+    ("VET_EXEMPT='a&b' npm i zod@3.23.8", Z, "ampersand"),
+    ("VET_EXEMPT='a>b' npm i zod@3.23.8", Z, "redirect character"),
+    ("VET_EXEMPT='a*b' npm i zod@3.23.8", Z, "glob"),
+    ("VET_EXEMPT='a\\\\b' npm i zod@3.23.8", Z, "backslash"),
+    ("VET_EXEMPT=\"a'b\" npm i zod@3.23.8", Z, "embedded quote"),
+    ("VET_EXEMPT=caf\u00e9 npm i zod@3.23.8", Z, "non-ASCII letter"),
+    ("VET_EXEMPT=\uff11 npm i zod@3.23.8", Z, "non-ASCII digit"),
+    ("vet_exempt=x npm i zod@3.23.8", Z, "the name is exact: case matters"),
+    ("MY_VET_EXEMPT=x npm i zod@3.23.8", Z, "a longer name that ends in the name"),
+    ("VET_EXEMPT_X=x npm i zod@3.23.8", Z, "a longer name that starts with the name"),
+    ("JUDGE_EXEMPT=x npm i zod@3.23.8", Z, "another guard's exemption"),
+    ("MERGE_EXEMPT=x npm i zod@3.23.8", Z, "another guard's exemption"),
+    ("VET_EXEMPT=x true && npm i a@1.0.0", A1, "the card's rule: it belongs to the segment that carries it"),
+    ("VET_EXEMPT=x true; npm i a@1.0.0", A1, "; ends the segment"),
+    ("VET_EXEMPT=x true || npm i a@1.0.0", A1, "|| ends the segment"),
+    ("VET_EXEMPT=x true | npm i a@1.0.0", A1, "a pipe ends the segment"),
+    ("VET_EXEMPT=x cd app && npm i a@1.0.0", A1, "a non-install segment's exemption is not borrowed"),
+    ("npm i a@1.0.0 && VET_EXEMPT=y pip install b==2.0",
+     A1 + exempt([pypi("b", "2.0", True)], "y"), "only the second segment carries it"),
+    ("VET_EXEMPT=y npm i a@1.0.0 && pip install b==2.0", exempt(A1, "y") + [pypi("b", "2.0", True)],
+     "only the first segment carries it"),
+    ("VET_EXEMPT=x npm i a@1.0.0 b@2.0.0", exempt([npm("a", "1.0.0", True), npm("b", "2.0.0", True)], "x"),
+     "every package of the owning segment"),
+    ("VET_EXEMPT=x npx cowsay@1.6.0", exempt([npm("cowsay", "1.6.0", True, "npx", "npx")], "x"), "a runner"),
+    ("VET_EXEMPT=x npx npm@12.0.1 install a", exempt([npm("npm", "12.0.1", True, "npx", "npx")], "x"),
+     "the card's runner-of-a-manager scenario: reported, and step 0 still refuses it"),
+    ("VET_EXEMPT=x pip install -r reqs.txt", exempt([reqfile("reqs.txt", "pip")], "x"), "a requirements file"),
+    ("VET_EXEMPT=x npm install ./local", exempt([other("npm", "./local", "npm")], "x"), "source other"),
+    ("VET_EXEMPT=x FOO=1 npm i zod@3.23.8", exempt(Z, "x"), "two assignments"),
+    ("FOO=1 VET_EXEMPT=x npm i zod@3.23.8", exempt(Z, "x"), "the exemption second"),
+    ("VET_EXEMPT=x VET_EXEMPT=y npm i zod@3.23.8", exempt(Z, "y"), "bash applies the last assignment"),
+    ("VET_EXEMPT=x sudo npm i zod@3.23.8", exempt(Z, "x"), "before a wrapper this classifier strips"),
+    ("time VET_EXEMPT=x npm i zod@3.23.8", exempt(Z, "x"), "after a shell_segments wrapper"),
+    ("env VET_EXEMPT=x npm i zod@3.23.8", Z,
+     "set by env, not by the segment's own prefix: not read (fail toward not exempting)"),
+    ("sudo VET_EXEMPT=x npm i zod@3.23.8", Z, "set by sudo, not by the segment's own prefix: not read"),
+    ("VET_EXEMPT=x corepack pnpm add left-pad@1.3.0", exempt([npm("left-pad", "1.3.0", True, "pnpm")], "x"),
+     "through corepack"),
+    ("npm i zod@3.23.8", Z, "absent"),
+])
+_SHAPE_COMMANDS = ["npm i a@1.0.0", "pip install -r r.txt", "npx -p a@1.0.0 b", "brew install jq",
+                   "cargo add c@=1.0.0", "go get m.example/x@v1.0.0", "gem install g -v 1.0.0"]
+add_check("shape: every intent of every ecosystem has exactly the 10 contract keys", lambda: (
+    all(len(classify(c)) >= 1 for c in _SHAPE_COMMANDS)
+    and all(sorted(i) == sorted(["ecosystem", "name", "version", "pinned", "tool", "runner", "form", "source",
+                                 "exempt", "via_package_option"])
+            for c in _SHAPE_COMMANDS for i in classify(c)),
+    "an intent has the contract's fields and no others"))
+
+# ---------------------------------------------------------------------------------------------
 # Unpinned spellings, per ecosystem
 # ---------------------------------------------------------------------------------------------
 for _v in ["^3.23.8", "~3.23.8", "latest", "next", "3", "3.23", "*", "x", "3.x", ">=3", "v3.23.8",
@@ -425,7 +528,9 @@ add_cases("multi-package", [
 # ---------------------------------------------------------------------------------------------
 # source: other
 # ---------------------------------------------------------------------------------------------
-NPM_OTHER = ["./local-pkg", "../sibling", "/abs/pkg", "github:user/repo", "user/repo", "file:../foo", "link:../foo",
+NPM_OTHER = ["./local-pkg", "../sibling", "/abs/pkg", "github:user/repo", "gitlab:user/repo",
+             "bitbucket:user/repo", "gist:abc123", "git:github.com/u/r", "git@github.com:u/r.git", "user/repo",
+             "user/repo#semver:^1.0.0", "file:../foo", "link:../foo",
              "workspace:*", "git+https://github.com/u/r.git", "git+ssh://git@github.com/u/r.git",
              "https://example.com/p.tgz", "http://example.com/p.tgz", "./pkg.tgz", "pkg.tar.gz", "~/pkg"]
 add_cases("source other", [("npm install {}".format(v), [other("npm", v, "npm")], "npm: {}".format(v))

@@ -53,6 +53,10 @@ REQUIREMENTS_RE = re.compile(r"requirements.*\.txt")
 NPM_OTHER_PREFIXES = ("workspace:", "file:", "link:", "git+", "git://", "git@", "ssh://", "github:",
                       "gitlab:", "bitbucket:", "gist:", "http://", "https://", "./", "../", "/", "~/")
 NPM_OTHER_SUFFIXES = (".tgz", ".tar.gz", ".tar")
+# npm's bare `owner/repo[#ref]` means GitHub (Mark 2026-10-14). Matched against the manifest VALUE
+# only: a scope (`@scope/name`) starts with `@`, and each part must start alphanumeric, so
+# `1.0.0/..` and `a/b/c` are not shorthand and stay unpinned registry values.
+NPM_SHORTHAND_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*(?:#.*)?")
 
 # The one definition of "pinned" lives in vetting_record.py. Loaded by path because the hyphenated
 # sibling modules are not importable by name and `python3 -I` does not put this directory on sys.path.
@@ -87,7 +91,9 @@ def _clip(text):
 def _dependency(ecosystem, tool, name, version, source="registry"):
     return {"kind": KIND_DEPENDENCY, "ecosystem": ecosystem, "name": name, "version": version,
             "pinned": source == "registry" and is_exact_version(ecosystem, version), "tool": tool,
-            "runner": None, "form": "add", "source": source}
+            "runner": None, "form": "add", "source": source,
+            # A manifest edit can never carry VET_EXEMPT or come from -p/--package (Contracts).
+            "exempt": None, "via_package_option": False}
 
 
 # ---- package.json ---------------------------------------------------------------------------
@@ -113,7 +119,8 @@ def _load_npm_sections(text):
 
 def _npm_dependency(key, value):
     lowered = value.lower()
-    if lowered.startswith(NPM_OTHER_PREFIXES) or lowered.endswith(NPM_OTHER_SUFFIXES):
+    if (lowered.startswith(NPM_OTHER_PREFIXES) or lowered.endswith(NPM_OTHER_SUFFIXES)
+            or NPM_SHORTHAND_RE.fullmatch(value)):
         return _dependency("npm", "package.json", key, value, "other")
     if not lowered.startswith("npm:"):
         return _dependency("npm", "package.json", key, value)

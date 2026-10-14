@@ -179,10 +179,6 @@ def test_package_json_values():
         ("", ("zod", "", False, "registry")),
         ("v1.2.3", ("zod", "v1.2.3", False, "registry")),
         ("01.2.3", ("zod", "01.2.3", False, "registry")),
-        # Spec consequence, pinned on purpose: GitHub shorthand is NOT in the `source: other` list
-        # (Contracts), so it is an unpinned registry value -- refused at step 1, never asked about.
-        ("user/repo", ("zod", "user/repo", False, "registry")),
-        ("user/repo#semver:^1.0.0", ("zod", "user/repo#semver:^1.0.0", False, "registry")),
     ]
     for value, want in cases:
         check("package.json value {!r}".format(value), deps(write(PJ, pkg(dependencies={"zod": value}))), [want])
@@ -192,10 +188,53 @@ def test_package_json_non_registry_sources():
     values = ["workspace:*", "workspace:^1.0.0", "file:../foo", "link:../foo", "git+https://h/x.git",
               "git+ssh://git@h/x.git", "git://h/x.git", "git@h:x/y.git", "github:user/repo",
               "gitlab:user/repo", "bitbucket:user/repo", "gist:abc", "http://h/x.tgz", "https://h/x.tgz",
-              "./local", "../local", "/abs/local", "~/local", "pkg.tgz", "dir/pkg.tar.gz"]
+              "./local", "../local", "/abs/local", "~/local", "pkg.tgz", "dir/pkg.tar.gz",
+              # Mark 2026-10-14: npm's bare `owner/repo` means GitHub, so it asks like `github:`.
+              "user/repo", "user/repo#semver:^1.0.0", "user/repo#v1.2.3", "user/repo#", "a/b",
+              "Owner-1/repo.js", "o_w.n/r-e_p.o"]
     for value in values:
         got = deps(write(PJ, pkg(dependencies={"foo": value})))
         check("source other: {!r}".format(value), got, [("foo", value, False, "other")])
+
+
+def test_package_json_shorthand_boundaries():
+    # Shorthand is decided by the manifest VALUE, never the key, and never catches a scope.
+    check("a scoped key with a real version stays a pinned registry package",
+          deps(write(PJ, pkg(dependencies={"@scope/pkg": "1.0.0"}))), [("@scope/pkg", "1.0.0", True, "registry")])
+    check("a scoped key with a range stays an unpinned registry package",
+          deps(write(PJ, pkg(dependencies={"@scope/pkg": "^1.0.0"}))), [("@scope/pkg", "^1.0.0", False, "registry")])
+    check("a key that looks like owner/repo does not make its version shorthand",
+          deps(write(PJ, pkg(dependencies={"owner/repo": "1.0.0"}))), [("owner/repo", "1.0.0", True, "registry")])
+    for value in ["@scope/name", "@scope/name#v1", "a/b/c", "1.0.0/..", "user/", "user//repo",
+                  "user/.hidden", "user/-x", "us er/repo", "user/re po"]:
+        got = deps(write(PJ, pkg(dependencies={"foo": value})))
+        check("not shorthand (stays unpinned registry, refused): {!r}".format(value), got,
+              [("foo", value, False, "registry")])
+    check("an alias to a scoped package is untouched by the shorthand rule",
+          deps(write(PJ, pkg(dependencies={"foo": "npm:@s/bar@1.0.0"}))), [("@s/bar", "1.0.0", True, "registry")])
+    check("an alias to owner/repo-looking text is still an alias",
+          deps(write(PJ, pkg(dependencies={"foo": "npm:bar@1.0.0"}))), [("bar", "1.0.0", True, "registry")])
+
+
+def test_intent_contract_fields():
+    # Contracts (e0b4234): every item carries exempt and via_package_option; a manifest edit can
+    # never carry VET_EXEMPT or come from -p/--package.
+    results = [
+        write(PJ, pkg(dependencies={"a": "1.0.0", "b": "^2", "c": "file:../c", "d": "user/repo",
+                                    "e": "npm:f@1.0.0"})),
+        write(REQ, "a==1.0\nb>=2\nc\n"),
+        write(PP, '[project]\ndependencies = ["a==1.0", "b"]\n[tool.poetry.dependencies]\n'
+                  'c = "1.0.0"\nd = {git = "https://h/d.git"}\n'),
+    ]
+    items = [d for r in results for d in r if d["kind"] == "dependency"]
+    check("enough items to mean something", len(items) >= 12, True)
+    check("every dependency item has exempt: None", [d.get("exempt", "MISSING") for d in items],
+          [None] * len(items))
+    check("every dependency item has via_package_option: False",
+          [d.get("via_package_option", "MISSING") for d in items], [False] * len(items))
+    check("the full key set of a dependency item", sorted(items[0]), sorted(
+        ["kind", "ecosystem", "name", "version", "pinned", "tool", "runner", "form", "source", "exempt",
+         "via_package_option"]))
 
 
 def test_package_json_aliases():
@@ -639,7 +678,8 @@ def test_cli():
 def main():
     for fn in (test_package_json_add_change_remove, test_package_json_sections,
                test_package_json_edit_application, test_package_json_values,
-               test_package_json_non_registry_sources, test_package_json_aliases,
+               test_package_json_non_registry_sources, test_package_json_shorthand_boundaries,
+               test_intent_contract_fields, test_package_json_aliases,
                test_package_json_unreadable, test_requirements_specifiers,
                test_requirements_add_change_remove, test_requirements_ignored_and_asked,
                test_requirements_filenames, test_pyproject_project_dependencies, test_pyproject_diff,
