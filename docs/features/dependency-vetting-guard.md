@@ -223,8 +223,14 @@ pinned: true              # is_exact_version(ecosystem, version) — the one def
 tool: npm                 # argv[0] after wrapper stripping
 runner: null              # the RUNNERS member that matched, as written (e.g. "pnpm dlx"), or null; fills <runner> in MSG_RUNNER_INSTALLER
 form: add | run           # run = the command form is in RUNNERS (below) — exactly that set; the ask reason says "runs from registry" for run
-source: registry | other  # other = workspace:, file:, link:, a git/http(s)/tarball URL, a local path (./x, ../x, /x)
+source: registry | other | requirements-file  # other = workspace:, file:, link:, a git/http(s)/tarball URL, a git-host shorthand, a local path (./x, ../x, /x); requirements-file = the <file> of `pip -r <file>` (name = the file as written)
+exempt: null              # the owning segment's VET_EXEMPT value when it matches the plain-word allowlist (Log, below), else null; always null for a manifest edit
+via_package_option: false # true only for a runner intent taken from `-p`/`--package`/`--package=`; false for every other intent
 ```
+
+The last three fields (`requirements-file`, `exempt`, `via_package_option`) were added 2026-10-14 by
+Mark's decision during implementation (Task 3 found later steps needed them; spec change, not a
+workaround).
 
 Input validation — applied by the classifiers, `vetting_record.py` and `vet-dependency` alike
 (one function in `vetting_record.py`, imported by the others), before any value becomes a path,
@@ -285,7 +291,7 @@ classifier stripping `env`, `sudo`, `timeout <n>`, `nice`):
 | pnpm, yarn, bun — and their other command names `pn` (= pnpm), `pnx` (= `pnpm dlx`), `yarnpkg` (= yarn) | `add`; `pnpm`/`pn`/`yarn`/`yarnpkg`/`bun` `install` with package args; runners `pnpx`, `pnx`, `bunx`, `bun x`, `pnpm dlx`, `pn dlx`, `yarn dlx`, `yarnpkg dlx` | `name@1.2.3` |
 | corepack | `corepack <manager>[@<version>] <args>` is read as `<manager> <args>`, the `@<version>` stripped (corepack is a wrapper that runs that manager; syntax from corepack 0.36.0's README, `corepack <binary name>[@<version>] [... args]`) | as for the manager |
 | npx | any registry package as first non-flag arg; every `-p <pkg>`/`--package <pkg>`/`--package=<pkg>` value is also an intent | `name@1.2.3` |
-| pip, pip3, `python -m pip`, `uv pip` | `install` with package args; `-r <file>`/`--requirement <file>` → **ask** with a general "installs everything listed in `<file>`, not parsed by the guard" warning (v1 does not read the file) | `name==1.2.3` |
+| pip, pip3, `python -m pip`, `uv pip` | `install` with package args; `-r <file>`/`--requirement <file>` → an intent with `source: requirements-file`, **ask**ed at step 0a with a general "installs everything listed in `<file>`, not parsed by the guard" warning (v1 does not read the file) | `name==1.2.3` |
 | uv, poetry | `add` | `name==1.2.3` / `name@1.2.3` (poetry) |
 | uvx, `uv tool run`, `uv tool install`, `pipx run`, `pipx install` | package arg | `name==1.2.3` |
 | cargo | `add`, `install` | The classifier records the version **as Cargo reads it**, then `is_exact_version` decides: `cargo add name@=1.2.3` → `1.2.3` (pinned); `cargo add name@1.2.3` → `^1.2.3` (unpinned); `cargo install name@1.2.3`, `name@=1.2.3`, `--version 1.2.3` or `--version =1.2.3` → `1.2.3` (pinned); any other operator is kept and so is unpinned. Hence `cargo add name@=1.2.3` — a bare `name@1.2.3` is unpinned there, because Cargo reads it as a default (caret) requirement, `>=1.2.3, <2.0.0`; `cargo install name@1.2.3` or `--version 1.2.3`, which install exactly that version. Cargo docs read 2026-10-13: "Specifying Dependencies → Default requirements"; `cargo add` "crate@version: … a version constraint"; `cargo install --version`: without an operator "will install exactly that version; it is not treated as a caret requirement". `cargo install name@1.2.3` is taken to follow `--version` from the synopsis (`crate[@version]`); cargo is not installed here, so neither form was run |
@@ -341,8 +347,9 @@ runner to install something; calling the manager directly lets the guard see the
 **Approved by Mark 2026-10-13** — Claude proposed this after round 8.
 
 **Not from a registry (`source: other`):** a package argument or manifest value that is
-`workspace:…`, `file:…`, `link:…`, a `git+…`/`github:…`/`http(s)://…` URL, a tarball path, or a
-local path → **ask** with a general "not a registry package — cannot be vetted" warning naming the
+`workspace:…`, `file:…`, `link:…`, a `git+…`/`git://…`/`ssh://…`/`git@host:…`/`http(s)://…` URL,
+a git-host shorthand (`github:…`, `gitlab:…`, `bitbucket:…`, `gist:…`, or npm's bare
+`user/repo`, which means GitHub), a tarball path, or a local path → **ask** with a general "not a registry package — cannot be vetted" warning naming the
 value. No pin check and no record lookup apply: there is no registry version to pin or vet, and a
 deny would have no way through.
 
@@ -451,18 +458,20 @@ one line per denied package; an ask's reason has one clause per package, joined 
 
 0. A runner naming a package manager → **deny** `MSG_RUNNER_INSTALLER` (Install forms). Not
    bypassable.
-0a. `source: other` → **ask** with the not-a-registry-package warning (above).
+0a. `source: other` → **ask** with the not-a-registry-package warning (above);
+   `source: requirements-file` → **ask** with the `pip -r` warning (Install forms).
 1. `pinned: false` and ecosystem ≠ homebrew → **deny** `MSG_UNPINNED`, naming the exact spelling
    for that tool. Not bypassable.
 2. No record, or record older than 7 days → **deny** `MSG_VET_FIRST`, printing the exact command
-   to run — unless the segment carries `VET_EXEMPT=<reason>`, which skips to step 3 and logs.
+   to run — unless the segment carries `VET_EXEMPT=<reason>` (the intent's `exempt` is set),
+   which skips to step 3 and logs.
 
    Message text (stderr, one line each, `<…>` filled from the intent):
    - `MSG_UNPINNED`: `dependency-guard: <ecosystem> <name> has no exact version — pin it, e.g.
      <exact-spelling-for-tool>, then retry.` One more sentence is added only when **all** hold:
      the runner is one of the npm-registry members of `RUNNERS` (all except `uvx`, `uv tool
      run` and `pipx run`, which fetch from PyPI);
-     the package came from the first non-option argument, not from `-p`/`--package` (whose
+     the package came from the first non-option argument (`via_package_option: false`), not from `-p`/`--package` (whose
      package name need not match the command it provides); the name has no `@scope/`; and the
      name is not a package manager (those get `MSG_RUNNER_INSTALLER` instead). The sentence:
      `If <name> is already installed in this project, run it directly instead:
@@ -540,7 +549,7 @@ On `Edit`/`Write`/`NotebookEdit` whose `file_path` basename is a manifest:
   was not shown in the brainstorm.
 
 Intents from a manifest go through decision steps 0a–3 exactly as a command's do (step 0 cannot
-apply: a manifest names no runner), so a `file:`, `workspace:`, `link:`, URL or path value is
+apply: a manifest names no runner), so a `file:`, `workspace:`, `link:`, URL, git-host shorthand or path value is
 asked about at step 0a, never refused as unpinned. Unparseable JSON
 in a `package.json` → ask with a general warning (the edit may be mid-way).
 
@@ -914,6 +923,10 @@ Scenario: vetter cannot learn a Homebrew version
   `pipenv`, `pdm`, `hatch`, `composer`, `dotnet add package`, `apt`, `port` (round-2 judge
   confirmed `conda install numpy` and `pipenv install requests` parse and match no row).
 - A manifest edited through Bash (`sed -i`, heredoc, `jq … > package.json`).
+- `pyproject.toml` sections other than `[project] dependencies` and `[tool.poetry.dependencies]`
+  — `[project.optional-dependencies]`, poetry groups (`[tool.poetry.group.*.dependencies]`) and
+  `[dependency-groups]` — are not read, so a package added there passes with no warning (found
+  by Task 4; Mark chose 2026-10-14 to disclose it rather than widen the reader in v1).
 - A bare `npm install` after `package.json` changed outside the guard (by Mark, another tool, or
   a `git pull`).
 - `transitive_vulns` for PyPI, crates.io, Go and RubyGems — always `not_run` in v1 (see Open
@@ -1004,6 +1017,10 @@ Scenario: vetter cannot learn a Homebrew version
       treats npm `user/repo` as `source: other` (ask) while the spec and `classify-manifest-edit`
       treat it as unpinned (refuse); and `npx -p cowsay@1.6.0 cowsay` is refused because the bare
       `cowsay` is read literally as a second, unpinned intent.
+      Mark decided 2026-10-14: add the three fields (`source: requirements-file`, `exempt`,
+      `via_package_option`) to the contract; every git-host shorthand, bare `user/repo`
+      included, is `source: other` (ask); `npx -p <pkg>@<v> <cmd>` stays refused — the literal
+      reading is the safe direction and `npx <pkg>@<v>` is the route. Spec edited to match.
 - [ ] 4. `classify-manifest-edit.py` + `.test.py` (JSON add/change/remove, Edit with
       `replace_all`, requirements specifiers, the pyproject reader, unparseable input).
       2026-10-14: code + suite committed, 327 passed, 0 failed (red first). Box stays open until
@@ -1015,6 +1032,9 @@ Scenario: vetter cannot learn a Homebrew version
       ask; manifest basenames match case-insensitively; an unparseable old `package.json` counts
       as `{}`; output items carry `kind: dependency|warning`; names are returned raw for the hook
       to validate with `vetting_record.validate_name`.
+      Mark decided 2026-10-14: bare `user/repo` is `source: other` (ask), like every git-host
+      shorthand; the pyproject sections not read are disclosed in Known gaps. Manifest intents
+      also carry the new `exempt: null` and `via_package_option: false`.
 - [ ] 5. `dependency-guard.sh` + `dependency-guard.test.sh`: every Scenario above that concerns
       the hook, using real `PreToolUse` payloads with `hook_event_name`, and the broken-guard
       paths (python3 off `PATH`, a lib missing).
