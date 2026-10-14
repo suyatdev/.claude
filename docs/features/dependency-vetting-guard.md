@@ -6,6 +6,9 @@ branch: feat/dependency-vetting-guard
 
 # Dependency vetting guard — scan before anything is installed, then ask
 
+> **Now (2026-10-13): phase implementation — gate confirmed, see the frontmatter and Tasks.** The
+> history below is the planning record and its "Next:" steps are all done.
+>
 > **Phase: planning.** Spec written 2026-10-11 from a brainstorm in which Mark approved the
 > design in three parts (components + flow; checks; failure handling + testing). No code exists.
 > That approval licensed *writing* this spec; it is not approval *of* the spec, and not the gate.
@@ -948,11 +951,13 @@ Scenario: vetter cannot learn a Homebrew version
 
 ## Tasks
 
-- [ ] 0. Model-switch + worktree: on `gate confirmed`, flip `phase: implementation`, create
+- [x] 0. Model-switch + worktree: on `gate confirmed`, flip `phase: implementation`, create
       `feat/dependency-vetting-guard`, record it under `branch:`.
       Clarified 2026-10-12: create it **in this same worktree** (`~/.worktrees/.claude/dependency-vetting-guard`)
       from the planning branch's head, not from `origin/main` — `origin/main` does not carry this
       card until the planning branch merges, and a branch without the card has no phase to read.
+      Done 2026-10-13: gate commit 5456385 (branched from 8d0428b in this worktree, pushed). Model
+      switch answered "Stay on Opus, then clear" (implementers Sonnet high, judges Opus high).
 - [ ] 1. Resolve Q1/Q2 by measurement in a `mktemp -d`; record the commands and outputs under this
       task. A negative result keeps `not_run`; it does not grow scope.
 - [ ] 2. `vetting_record.py` + `vetting_record.test.py` (every Input validation rule, including
