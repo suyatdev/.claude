@@ -999,7 +999,7 @@ Scenario: vetter cannot learn a Homebrew version
       version (it becomes a file name) must match `^[A-Za-z0-9._+-]{1,64}$` and not be `.`/`..`;
       extra record keys are ignored. Also exposes `write_report`/`report_path` for the vetter's
       `.md` (same atomic write and containment). `is_exact_version` lives here.
-- [ ] 3. `classify-install-command.py` + `.test.py` covering every row of the install-forms table,
+- [x] 3. `classify-install-command.py` + `.test.py` covering every row of the install-forms table,
       every "not an install" form, wrappers, chaining, each unpinned spelling, multi-package
       commands (every package returned), `source: other` values, `pip -r`, the cannot-read
       case (`[]` for non-blank text, with and without a tool word, in upper and lower case), and
@@ -1030,9 +1030,11 @@ Scenario: vetter cannot learn a Homebrew version
       `EXEMPT_VALUE_RE` citing `secret_approval.py:261` with `fullmatch` (that module's constant is
       private, and its `$` matches before a trailing newline); `env VET_EXEMPT=x npm i …` gives
       null — not the segment's own prefix assignment, as in `classify-pr-command.py`. `uv add -r`
-      also yields `requirements-file` (same code path; card silent). Open: the test file is 888
-      lines, over the 800 maximum.
-- [ ] 4. `classify-manifest-edit.py` + `.test.py` (JSON add/change/remove, Edit with
+      also yields `requirements-file` (same code path; card silent). The test file is 888 lines,
+      over the 800 maximum: Mark chose 2026-10-14 to keep it whole, because a split-out case file
+      has no `.test` sibling, so the commit guard's pass receipt would not cover it.
+      Re-entry compliance round 2 PASS on blob 5b599570 (b2cf25a).
+- [x] 4. `classify-manifest-edit.py` + `.test.py` (JSON add/change/remove, Edit with
       `replace_all`, requirements specifiers, the pyproject reader, unparseable input).
       2026-10-14: code + suite committed, 327 passed, 0 failed (red first). Box stays open until
       Mark answers two questions: pyproject optional-dependencies / poetry groups /
