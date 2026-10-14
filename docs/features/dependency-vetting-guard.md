@@ -958,8 +958,21 @@ Scenario: vetter cannot learn a Homebrew version
       card until the planning branch merges, and a branch without the card has no phase to read.
       Done 2026-10-13: gate commit 5456385 (branched from 8d0428b in this worktree, pushed). Model
       switch answered "Stay on Opus, then clear" (implementers Sonnet high, judges Opus high).
-- [ ] 1. Resolve Q1/Q2 by measurement in a `mktemp -d`; record the commands and outputs under this
+- [x] 1. Resolve Q1/Q2 by measurement in a `mktemp -d`; record the commands and outputs under this
       task. A negative result keeps `not_run`; it does not grow scope.
+      Done 2026-10-14 (measured by a subagent, then each result below re-run by the main session).
+      All three stay `transitive_vulns: not_run`. osv-scanner reading any of these files was NOT
+      measured (osv-scanner is not installed yet; Task 8).
+      - Q1 PyPI → no. `/usr/bin/pip3 install --dry-run --report <tmp>/r.json requests==2.31.0`
+        → `no such option: --dry-run`, rc=2 (system pip 21.2.4, below the 22.2 floor). A second
+        pip exists, `/opt/homebrew/bin/pip3` 26.1.2 (python 3.14), whose dry-run report did list
+        the full 5-package set for `requests==2.31.0` (subagent only); using it would add an
+        unpinned, non-system tool, so per this task's rule it is not adopted.
+      - Q2 crates.io → cannot measure here: `command -v cargo` → rc=1 (not installed).
+      - Q2 Go → no. go1.21.3, scratch module with `GOPATH`/`GOMODCACHE`/`GOCACHE` in the temp dir and
+        `GOTOOLCHAIN=local GOENV=off`: `go get golang.org/x/text@v0.14.0` then `go list -m all`
+        listed 4 modules (x/mod v0.8.0, x/sys v0.5.0, x/text v0.14.0, x/tools v0.6.0) while
+        `go.sum` held only the 2 x/text lines. `go.sum` is not the full transitive set.
 - [ ] 2. `vetting_record.py` + `vetting_record.test.py` (every Input validation rule, including
       `..`, `/` in a version and a path that resolves outside the store; expiry boundary at
       exactly 7 days; bad JSON; wrong schema; Homebrew newest-fresh-record lookup; the OSV
