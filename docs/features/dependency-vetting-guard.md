@@ -324,11 +324,15 @@ one of them silently. A subcommand that changes installed versions but is **not*
 a Known gap (listed there), not covered by this promise. A segment in one of the forms yields one
 intent per package argument, or, with none, one intent whose `name` is the tool as written (it
 updates everything). Each has `source: update` (`source: indirect` for `xargs`), `version: null`,
-`pinned: false`, `form: add`, and `ecosystem` taken from the tool's row in the install-forms table
-(npm, pnpm, pn, yarn, yarnpkg, bun → `npm`; uv, poetry, pipx → `pypi`; cargo → `crates.io`; go →
-`go`; gem → `rubygems`; brew → `homebrew`). A package argument is a word that is neither an option
-nor an option's value, as for installs; for `uv`, the value of `--upgrade-package <pkg>` /
-`--upgrade-package=<pkg>` is the package. Each intent is asked at step 0a with:
+`pinned: false`, `form: add`, `tool` = the tool word as written (for `xargs`, the first tool word
+after it), and `ecosystem` from this map, which covers **every** `INSTALL_TOOL_WORDS` member so
+that an `xargs` intent always has one (a unit test asserts the map's keys equal
+`INSTALL_TOOL_WORDS`): npm, npx, pnpm, pn, pnpx, pnx, yarn, yarnpkg, corepack, bun, bunx → `npm`;
+pip, pip3, python, python3, uv, uvx, poetry, pipx → `pypi`; cargo → `crates.io`; go → `go`; gem
+→ `rubygems`; brew → `homebrew`. For these intents `ecosystem` only fills the log; nothing is
+looked up by it. A package argument is a word that is neither an option nor an option's value, as
+for installs; the value of uv's `-P <pkg>` / `--upgrade-package <pkg>` (and `=` forms) and of
+cargo's `-p <pkg>` / `--package <pkg>` is the package. Each intent is asked at step 0a with:
 - update: `<form> <name>: an update or upgrade the guard does not vet — check what it will change
   before approving`, where `<form>` is the tool as written followed by the words of the matched
   table entry (`npm update`, `uv lock --upgrade`, `go get -u`, `npm audit fix`), and `<name>` is
@@ -339,8 +343,9 @@ nor an option's value, as for installs; for `uv`, the value of `--upgrade-packag
 Like `source: other`, these intents skip name validation (step 0a decides them before any name
 rule applies, and they build no path and look up no record); the name appears in the ask text and
 the log only after the sanitising every field gets (Log, under Hook decisions). Each writes the
-usual one log line per intent, with decision `ask`, the intent's `ecosystem` and `name`, the
-`version` field written as for any null version, and the ask clause as `reason`.
+usual one log line per intent, with decision `ask`, the intent's `ecosystem` and `name`, `-` in
+the `version` field (the value already written for every null version, `NO_VALUE` in
+`decide-dependency.py`), and the ask clause as `reason`.
 
 These intents are added to the intents the same segment already yields and replace none of them:
 `go get -u m@v1.2.3` is both a pinned install intent (steps 1–3) and an update intent (step 0a), and
@@ -359,7 +364,7 @@ the strongest decision wins. `VET_EXEMPT` changes nothing here, because there is
 | go | `get` carrying `-u` or `-u=patch` | `go help get` |
 | gem | `update` | `gem help update` |
 | brew | `upgrade` | `brew help upgrade` |
-| `xargs` | an `xargs` segment in which any later word, read with `program()`, is in `INSTALL_TOOL_WORDS` → `source: indirect`, whatever the subcommand; `<tool>` is the first such word. xargs options are **not** parsed, so `xargs -n 1 npm i` and `xargs -I{} npm i {}` both match (an `xargs` that installs nothing but names a tool word also asks — accepted) | — |
+| `xargs` | an `xargs` segment in which any later word, read with `program()`, is in `INSTALL_TOOL_WORDS` → `source: indirect`, whatever the subcommand; `<tool>` is the first such word. xargs options are **not** parsed, so `xargs -n 1 npm i` and `xargs -I{} npm i {}` both match (an `xargs` that installs nothing but names a tool word also asks — accepted). Reading words after `xargs` with `program()`, which its docstring reserves for command position, is deliberate: here every later word may be the command xargs runs, and a wrong match can only add an ask | — |
 
 `yarn global add` / `yarnpkg global add` is **not** in this table: it is read as `add`, so it takes
 the normal install path (steps 1–3) like `pnpm add -g`.
@@ -1021,6 +1026,9 @@ Scenario Outline: an install run through xargs is asked about, whatever its opti
     | xargs -n 1 npm i x    |
     | xargs -I{} npm i {}   |
     | xargs sudo npm i      |
+    | sudo xargs npm i      |
+    | xargs pip install     |
+    | xargs corepack pnpm add x |
 
 Scenario: yarn global add takes the normal install path
   Given no vetting record exists for npm left-pad 1.3.0
@@ -1038,7 +1046,8 @@ Scenario: an update beside a pinned install still reaches the strongest decision
 - A subcommand that changes installed versions but is not in the update-forms table (Install forms,
   "Updates, upgrades and indirect installs") is allowed silently. Measured or named by the
   2026-10-15 judges: `uv self update`, `pnpm self-update`, `go mod tidy`, `uv pip sync`, Ruby's
-  `bundle` (not a recognised tool at all), and `find … -exec npm i` (`find` is not `xargs`).
+  `bundle` (not a recognised tool at all), `uv export -U` and `uv tree -U` (both re-lock),
+  `find … -exec npm i` and GNU `parallel npm i ::: …` (neither is `xargs`).
   Extending the table is a deliberate edit, not drift.
 - An install inside a script file, a Makefile target, or a `package.json` `scripts` entry.
 - `bash -c "…"`, `sh -c`, `eval "…"` (quoted), backticks — the lexer keeps the body as one token
@@ -1280,8 +1289,11 @@ Scenario: an update beside a pinned install still reaches the strongest decision
 - [ ] 10a. Updates, upgrades and indirect installs → ask (Mark, 2026-10-15, after the
       implementation-stage observability judge measured 11 allowed silently): classifier yields
       `source: update` / `source: indirect` intents and reads `yarn global add` as `add`; decider
-      asks at step 0a; tests first for every row of the update-forms table and the four new
-      scenarios. Then compliance judge on the spec change and observability judge round 2.
+      asks at step 0a; tests first for every row of the update-forms table **and every flag and
+      subcommand named in a row** (e.g. `uv add -U`, `uv run --upgrade-group g`, `uv sync
+      --upgrade-package=x`, `uv lock -P x`), the new scenarios, the ecosystem map's coverage of
+      `INSTALL_TOOL_WORDS`, and the log fields of one update ask. Then compliance judge on the
+      spec change and observability judge round 2.
 - [ ] 11. After merge: compare primary blobs to the merge commit; one live install attempt
       end-to-end; record under `## Verification`.
       Before the primary pulls the merge, run `git status` there: on 2026-10-09 it held an
