@@ -367,7 +367,7 @@ Order is the spec's: A, B, C. RED and GREEN are separate commits (`rules/core-co
 never tests and implementation in one step). Every commit is `git commit -F <msg> -- <paths>`,
 with `TEST_EXEMPT` per the table above.
 
-- [ ] Task 1 — A: rewrite the header line in `hooks/handoff/handoff-keep-guard.sh` to
+- [x] Task 1 — A: rewrite the header line in `hooks/handoff/handoff-keep-guard.sh` to
   `~/.local/bin/claude`, keep the version; record `grep -c '/Users/'` = 0 in Verification.
 - [ ] Task 2 — B RED: add the three review-claims scenarios to `hooks/phase-guard.test.sh`,
   next to the existing `B5` supersede assertion; run, confirm the first fails and the other two
@@ -439,3 +439,38 @@ with `TEST_EXEMPT` per the table above.
 ## Verification
 
 <Appended during review: pass/fail per area and open issues only.>
+
+### Task 1 — A: the contract header names the binary without a machine path — PASS
+
+Measured 2026-10-15 in `~/.worktrees/.claude/trim-safety-followups`.
+
+| Check | Before | After |
+|---|---|---|
+| `grep -c '/Users/' hooks/handoff/handoff-keep-guard.sh` | 1 (line 11) | **0** |
+| header phrase, read across the line 11/12 wrap | `/Users/<name>/.local/bin/claude, version 2.1.267 (2026-09-10)` | `~/.local/bin/claude, version 2.1.267 (2026-09-10)` |
+| `env -u CLAUDE_PANE_AGENT bash hooks/handoff/handoff-keep-guard.test.sh` | 61/61 | **61/61** |
+
+The phrase was checked by joining lines 11-12 and stripping the comment markers, **not** by a
+line-based grep: the phrase wraps across the two lines, so a per-line grep for it reports 0 on a
+correct file. The suite was baselined green *before* the edit so that a post-edit failure would
+have been attributable; the `env -u CLAUDE_PANE_AGENT` prefix is required or the runner exits
+early and scores 19/61 (`handoff-keep-guard.sh:62`).
+
+**Receipt: real, and hand-checked.** Written by `hooks/lib/write-test-marker.py` immediately
+after the green run. Its `subject.blob` is `01e11dc458576aa9e611e4baeacb128f6f3911b3` and its
+`test.blob` is `8567dae95db315c7cd5b87b2b2c070faf8aa6238`; both equal the hash of the committed
+bytes. The comparison discriminates — the pre-edit subject blob was
+`aa653cab2b83b84e6bd4261ca3b1a3610e92727a`, so a receipt written before the edit would have
+mismatched rather than silently agreed.
+
+⚠️ **Deviation from the card, with the user’s explicit go-ahead (2026-10-15).** The card assumes
+the implementation session is rooted in this worktree. It was not — task 1 was done from
+`~/.worktrees/.claude/handoff-trim-safety`. Every operation aimed here from outside is refused by
+`test-marker-guard` as `MSG_UNSUPPORTED_FORM (FOREIGN_REPO)`, so the commit carries
+`TEST_EXEMPT`. That flag suppresses the guard’s **check**, never the receipt: the receipt above
+is genuine and was verified by hand against the committed blobs. So the card’s requirement that
+tasks 1 and 3 carry real receipts is met in substance, and what is absent is the guard’s
+*independent* confirmation. The honest scope of this row: the receipt is real and matches; it was
+not adversarially re-checked by the gate itself. Re-run the gate on these bytes from a session
+rooted in this worktree if that independent check is wanted — and prefer to root task 3 here,
+since it is the other receipt-bearing task.
