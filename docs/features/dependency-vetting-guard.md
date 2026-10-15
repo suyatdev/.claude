@@ -229,7 +229,7 @@ pinned: true              # is_exact_version(ecosystem, version) — the one def
 tool: npm                 # argv[0] after wrapper stripping
 runner: null              # the RUNNERS member that matched, as written (e.g. "pnpm dlx"), or null; fills <runner> in MSG_RUNNER_INSTALLER
 form: add | run           # run = the command form is in RUNNERS (below) — exactly that set; the ask reason says "runs from registry" for run
-source: registry | other | requirements-file  # other = workspace:, file:, link:, a git/http(s)/tarball URL, a git-host shorthand, a local path (./x, ../x, /x); requirements-file = the <file> of `pip -r <file>` (name = the file as written)
+source: registry | other | requirements-file | update | indirect  # other = workspace:, file:, link:, a git/http(s)/tarball URL, a git-host shorthand, a local path (./x, ../x, /x); requirements-file = the <file> of `pip -r <file>` (name = the file as written); update / indirect = the "Updates, upgrades and indirect installs" paragraph under Install forms
 exempt: null              # the owning segment's VET_EXEMPT value when it matches the plain-word allowlist (the `VET_EXEMPT` paragraph under Hook decisions), else null; always null for a manifest edit
 via_package_option: false # true only for a runner intent taken from `-p`/`--package`/`--package=`; false for every other intent
 ```
@@ -294,7 +294,7 @@ classifier stripping `env`, `sudo`, `timeout <n>`, `nice`):
 | Tool | Install forms | Exact-version spelling |
 |---|---|---|
 | npm | `install` and every alias npm 12.0.1 lists for it (`add`, `i`, `in`, `ins`, `inst`, `insta`, `instal`, `isnt`, `isnta`, `isntal`, `isntall`), and `install-test`/`it`, each with ≥1 package arg; `exec`/`x` | `name@1.2.3` |
-| pnpm, yarn, bun — and their other command names `pn` (= pnpm), `pnx` (= `pnpm dlx`), `yarnpkg` (= yarn) | `add`; `pnpm`/`pn`/`yarn`/`yarnpkg`/`bun` `install` with package args; runners `pnpx`, `pnx`, `bunx`, `bun x`, `pnpm dlx`, `pn dlx`, `yarn dlx`, `yarnpkg dlx` | `name@1.2.3` |
+| pnpm, yarn, bun — and their other command names `pn` (= pnpm), `pnx` (= `pnpm dlx`), `yarnpkg` (= yarn) | `add` (and `yarn`/`yarnpkg` `global add`); `pnpm`/`pn`/`yarn`/`yarnpkg`/`bun` `install` with package args; runners `pnpx`, `pnx`, `bunx`, `bun x`, `pnpm dlx`, `pn dlx`, `yarn dlx`, `yarnpkg dlx` | `name@1.2.3` |
 | corepack | `corepack <manager>[@<version>] <args>` is read as `<manager> <args>`, the `@<version>` stripped (corepack is a wrapper that runs that manager; syntax from corepack 0.36.0's README, `corepack <binary name>[@<version>] [... args]`) | as for the manager |
 | npx | any registry package as the first non-flag arg — a word that is neither an option nor an option's value, so in `npx -p cowsay@1.6.0 cowsay` it is the second `cowsay`, an unpinned intent, refused (Mark, 2026-10-14; `npx cowsay@1.6.0` is the route); every `-p <pkg>`/`--package <pkg>`/`--package=<pkg>` value is also an intent | `name@1.2.3` |
 | pip, pip3, `python -m pip`, `uv pip` | `install` with package args; `-r <file>`/`--requirement <file>` → an intent with `source: requirements-file`, **ask**ed at step 0a with a general "installs everything listed in `<file>`, not parsed by the guard" warning (v1 does not read the file) | `name==1.2.3` |
@@ -314,6 +314,41 @@ pnpm/yarn/bun row; and `uvx`, `uv tool run`, `pipx run` in the uvx row (whose `u
 and `pipx install` are plain installs). A unit test asserts that set equals `RUNNERS`, in both
 directions. (`bun x` is listed from bun's documentation; bun is not
 installed here, so it was not run.)
+
+**Updates, upgrades and indirect installs → ask (Mark, 2026-10-15).** Added after the
+implementation-stage observability judge measured eleven such commands (`npm update`, `brew
+upgrade`, `yarn global add`, `xargs npm i`, …) allowed with no output and no log line. They change
+which version is installed, but name no version the guard can vet, or name one the tool need not
+honour, so v1 does not vet them: it **asks**, and never allows them silently. A segment in one of
+the forms below yields one intent per package argument, or, with none, one intent whose `name` is
+the tool as written (it updates everything). Each has `source: update` (`source: indirect` for
+`xargs`), `version: null`, `pinned: false`, `form: add`, and is asked at step 0a with:
+- update: `<tool> <subcommand> <name>: an update or upgrade the guard does not vet — check what it
+  will change before approving` (`<name>` is `everything` when no package is named);
+- indirect: `xargs <tool>: the packages come from input the guard cannot read — check it before
+  approving`.
+
+These intents are added to the intents the same segment already yields and replace none of them:
+`go get -u m@v1.2.3` is both a pinned install intent (steps 1–3) and an update intent (step 0a), and
+the strongest decision wins. `VET_EXEMPT` changes nothing here, because there is no record to skip.
+
+| Tool | Update forms | Where the spelling comes from |
+|---|---|---|
+| npm | `update` and its aliases `u`, `up`, `upgrade`, `udpate` | `npm help update`, npm 12.0.1 |
+| pnpm, pn | `update`, `up`, `upgrade`, with or without `-g` | `pnpm update --help`, pnpm 10.34.5 |
+| yarn, yarnpkg | `upgrade`, `up`, `upgrade-interactive`, `global upgrade` | yarn documentation; not installed here, not run |
+| bun | `update`; `upgrade` (replaces bun itself) | bun documentation; not installed here, not run |
+| uv | `tool upgrade`; `lock` or `sync` carrying `-U`, `--upgrade` or `--upgrade-package` | `uv tool --help`, `uv lock --help`, uv 0.11.28 |
+| poetry | `update` | poetry documentation; not installed here, not run |
+| pipx | `upgrade`, `upgrade-all`, `reinstall`, `reinstall-all` | pipx documentation; not installed here, not run |
+| cargo | `update` | cargo documentation; not installed here, not run |
+| go | `get` carrying `-u` or `-u=patch` | `go help get` |
+| gem | `update` | `gem help update` |
+| brew | `upgrade` | `brew help upgrade` |
+| `xargs` | `xargs [options] <tool> …` where `<tool>` is in `INSTALL_TOOL_WORDS` → `source: indirect`, whatever the subcommand | — |
+
+`yarn global add` / `yarnpkg global add` is **not** in this table: it is read as `add`, so it takes
+the normal install path (steps 1–3) like `pnpm add -g`.
 
 **Not installs, always allowed:** `npm ci`; `npm install`/`pnpm install`/`yarn`/`bun install`
 with no package args; `pip install -e .`; `pip install .`; `cargo build`; `go build`; `go mod
@@ -484,7 +519,9 @@ one line per denied package; an ask's reason has one clause per package, joined 
 0. A runner naming a package manager → **deny** `MSG_RUNNER_INSTALLER` (Install forms). Not
    bypassable.
 0a. `source: other` → **ask** with the not-a-registry-package warning (above);
-   `source: requirements-file` → **ask** with the `pip -r` warning (Install forms).
+   `source: requirements-file` → **ask** with the `pip -r` warning (Install forms);
+   `source: update` / `source: indirect` → **ask** with the update / indirect warning (Install
+   forms, "Updates, upgrades and indirect installs").
 1. `pinned: false` and ecosystem ≠ homebrew → **deny** `MSG_UNPINNED`, naming the exact spelling
    for that tool. Not bypassable.
 2. No record, or record older than 7 days → **deny** `MSG_VET_FIRST`, printing the exact command
@@ -939,6 +976,38 @@ Scenario: vetter cannot learn a Homebrew version
   Given brew info exits non-zero for zz-no-such-formula
   When Claude runs "vet-dependency homebrew zz-no-such-formula"
   Then it exits non-zero and no record file exists afterwards
+
+Scenario Outline: an update or upgrade is asked about, never allowed silently (Mark, 2026-10-15)
+  When Claude runs "<command>"
+  Then the hook prints an ask whose reason contains "an update or upgrade the guard does not vet"
+  Examples:
+    | command                 |
+    | npm update zod@4.0.0    |
+    | npm upgrade zod         |
+    | npm update              |
+    | pnpm up zod             |
+    | pnpm update -g          |
+    | yarn upgrade zod        |
+    | yarn up zod             |
+    | bun update zod          |
+    | uv lock --upgrade       |
+    | gem update rails        |
+    | brew upgrade jq         |
+    | go get -u ./...         |
+
+Scenario: an install run through xargs is asked about
+  When Claude runs "xargs npm i"
+  Then the hook prints an ask whose reason contains "the packages come from input the guard cannot read"
+
+Scenario: yarn global add takes the normal install path
+  Given no vetting record exists for npm left-pad 1.3.0
+  When Claude runs "yarn global add left-pad@1.3.0"
+  Then the hook exits 2 with MSG_VET_FIRST
+
+Scenario: an update beside a pinned install still reaches the strongest decision
+  Given no vetting record exists for go example.com/m v1.2.3
+  When Claude runs "go get -u example.com/m@v1.2.3"
+  Then the hook exits 2 with MSG_VET_FIRST
 ```
 
 ## Known gaps — disclosed, not fixed in v1
@@ -1179,6 +1248,11 @@ Scenario: vetter cannot learn a Homebrew version
       cannot-read rule, `MSG_RUNNER_INSTALLER`, and the speed-bump boundary. Take the
       next free number from `origin/main` at write time, not local `main`. Then the observability
       judge on the implementation; PR.
+- [ ] 10a. Updates, upgrades and indirect installs → ask (Mark, 2026-10-15, after the
+      implementation-stage observability judge measured 11 allowed silently): classifier yields
+      `source: update` / `source: indirect` intents and reads `yarn global add` as `add`; decider
+      asks at step 0a; tests first for every row of the update-forms table and the four new
+      scenarios. Then compliance judge on the spec change and observability judge round 2.
 - [ ] 11. After merge: compare primary blobs to the merge commit; one live install attempt
       end-to-end; record under `## Verification`.
       Before the primary pulls the merge, run `git status` there: on 2026-10-09 it held an

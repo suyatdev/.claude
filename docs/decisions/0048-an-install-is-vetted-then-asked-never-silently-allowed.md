@@ -16,8 +16,9 @@
   `MSG_…` names (`MSG_UNPINNED`, `MSG_VET_FIRST`, `MSG_RUNNER_INSTALLER`) are the card's names
   for the deny messages, not code constants: `hooks/lib/decide-dependency.py` builds each one in
   the matching `msg_…` function (`msg_unpinned`, `msg_vet_first`, `msg_runner_installer`).
-- **Note on the number:** `0048` was checked against every local and remote ref with
-  `git log --all -- docs/decisions/0048*` (and `0049*`) on 2026-10-15 and no ref carries either.
+- **Note on the number:** on 2026-10-15 the remote-tracking refs matched `git ls-remote origin`
+  branch for branch (40 heads, no difference), and `git log --all -- docs/decisions/0048*` found
+  only this branch's file.
 
 ## Context
 
@@ -43,6 +44,12 @@ For every install the hook can see, it decides in order:
 A non-registry source (`file:`, a git URL, a local path) and `pip -r <file>` are asked about
 instead of denied, because there is no registry version to pin or vet, and a deny would have no way
 through. Every package in a command is decided on its own; the strongest decision wins.
+
+An update or upgrade (`npm update`, `brew upgrade`, `go get -u`, …) or an install run through
+`xargs` is asked about with a warning that the guard does not vet it. These forms were allowed
+with no output until the implementation-stage observability judge measured eleven of them; Mark
+chose "ask" on 2026-10-15 over disclosing them as a gap or vetting them fully. The forms are listed
+in the card's "Updates, upgrades and indirect installs" paragraph.
 
 ## Decision 1 — the choices Mark made (D1–D8)
 
