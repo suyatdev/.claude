@@ -284,7 +284,7 @@ def decide_intent(ctx, intent):
         return decision("ask", msg_update(intent), intent)
     if intent["source"] == "indirect":
         return decision("ask", msg_indirect(intent), intent)
-    if eco !="homebrew" and not intent["pinned"]:
+    if eco != "homebrew" and not intent["pinned"]:
         return decision("deny", msg_unpinned(ctx, intent), intent)
     try:
         vr.validate_name(eco, name)

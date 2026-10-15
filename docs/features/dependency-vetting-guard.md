@@ -352,10 +352,13 @@ the `version` field (the value already written for every null version, `NO_VALUE
 `decide-dependency.py`), and the ask clause as `reason`.
 
 An `xargs` segment yields exactly **one** indirect intent, however many words follow. An update
-segment carrying `--help` or `-h` anywhere yields **no** update intent (a help call changes
-nothing) — the one exception to "every form in the table asks"; this widens the existing
-help-only rule under "Not installs" for update forms only. For `uv run`, only options before the
-command uv runs are uv's own, so `uv run pytest --upgrade` yields nothing.
+segment in which `--help` or `-h` is **one of the tool's own options** yields **no** update intent
+(a help call changes nothing) — the one exception to "every form in the table asks"; this widens
+the existing help-only rule under "Not installs" for update forms only. The tool's own options are
+its words before a `--`, and for `uv run` only those before the command uv runs. So `npm update
+-h` and `uv lock --upgrade -h` are allowed, while `npm update -- -h` and `uv run --upgrade pytest
+-h` ask (that `-h` belongs to the package or to pytest), and `uv run pytest --upgrade` yields
+nothing (the flag is pytest's).
 
 These intents are added to the intents the same segment already yields and replace none of them:
 `go get -u m@v1.2.3` is both a pinned install intent (steps 1–3) and an update intent (step 0a), and
@@ -1021,6 +1024,8 @@ Scenario Outline: an update or upgrade is asked about, never allowed silently (M
     | bun update zod          |
     | uv lock --upgrade       |
     | uv lock -P requests     |
+    | uv run --upgrade pytest -h |
+    | npm update -- -h        |
     | npm audit fix --force   |
     | pnpm audit --fix        |
     | gem update rails        |
@@ -1059,6 +1064,10 @@ Scenario: an update beside a pinned install still reaches the strongest decision
   `bundle` (not a recognised tool at all), `uv export -U` and `uv tree -U` (both re-lock),
   `find … -exec npm i` and GNU `parallel npm i ::: …` (neither is `xargs`).
   Extending the table is a deliberate edit, not drift.
+- yarn's workspace forms — `yarn workspace <name> add|up …` and `yarn workspaces foreach … add|up
+  …` — install or update with no output (measured by the implementation-stage observability judge
+  round 2, 2026-10-15; already silent before the update ask). pnpm's, npm's and bun's workspace
+  forms are caught.
 - An install inside a script file, a Makefile target, or a `package.json` `scripts` entry.
 - `bash -c "…"`, `sh -c`, `eval "…"` (quoted), backticks — including under `xargs` (`xargs sh -c
   'npm i {}'`) — the lexer keeps the body as one token

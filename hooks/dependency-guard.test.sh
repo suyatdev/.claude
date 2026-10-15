@@ -390,6 +390,17 @@ lacks "VET_EXEMPT is not echoed for an update" "$(ask_reason)" "VET_EXEMPT" "$UP
 for c in 'uv lock' 'uv sync' 'uv run pytest' 'brew update' 'npm update --help' 'brew upgrade -h' 'npm audit' 'pnpm audit'; do
   allow_cmd "not an update, or help only: $c" "$c"
 done
+# help counts only among the tool's own options: before `--`, and for uv run before the command
+for c in 'npm update -h' 'uv lock --upgrade -h' 'go get -u -h' 'uv run pytest --upgrade'; do
+  allow_cmd "help or flag belongs to the tool's own options, or not the tool's: $c" "$c"
+done
+for c in 'uv run --upgrade pytest -h' 'npm update -- -h'; do
+  ask_cmd "a help flag that is not the tool's own does not exempt the update: $c" "$c" "$UPDATE_NOTE"
+done
+# Known gap (card, 2026-10-15): yarn's workspace forms pass silently — pinned so closing it is a deliberate edit
+for c in 'yarn workspace app add zod@1.0.0' 'yarn workspaces foreach -A add zod@1.0.0' 'yarn workspace app up zod'; do
+  allow_cmd "known gap: yarn workspace form allowed: $c" "$c"
+done
 before="$(log_count)"; run "$(bash_payload "npm update zod")"
 [ $(( $(log_count) - before )) -eq 1 ] && say_ok "an update ask appends exactly one log line" || say_bad "an update ask appends exactly one log line" "gained $(( $(log_count) - before ))"
 case "$(tail -n 1 "$STATE/dependency-guard.log")" in
