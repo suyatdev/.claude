@@ -6,8 +6,11 @@ branch: feat/dependency-vetting-guard
 
 # Dependency vetting guard — scan before anything is installed, then ask
 
-> **Now (2026-10-13): phase implementation — gate confirmed, see the frontmatter and Tasks.** The
-> history below is the planning record and its "Next:" steps are all done.
+> **Now (2026-10-15): phase implementation — Tasks 0–7 done (code exists, suites green, not yet
+> registered in `settings.json`); Task 8 is next.** See the frontmatter and Tasks.
+>
+> **2026-10-13: phase implementation — gate confirmed.** The history below is the planning
+> record and its "Next:" steps are all done; its "No code exists" is no longer true.
 >
 > **Phase: planning.** Spec written 2026-10-11 from a brainstorm in which Mark approved the
 > design in three parts (components + flow; checks; failure handling + testing). No code exists.
