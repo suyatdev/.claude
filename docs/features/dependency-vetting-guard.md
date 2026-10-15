@@ -206,8 +206,10 @@ sequenceDiagram
 | `hooks/lib/classify-install-command.py` | Pure function: command text → list of install intents (no filesystem access) | `hooks/lib/shell_segments.py` (`segments()`, `program()`) |
 | `hooks/lib/classify-manifest-edit.py` | Pure function: tool payload for `Edit`/`Write` → list of added dependencies | stdlib `json`, `re`; TOML parsed by a minimal reader (3.9 has no `tomllib`) |
 | `hooks/lib/vetting_record.py` | Read/write/expiry of records; path validation | stdlib |
-| `hooks/dependency-guard.sh` | Hook wrapper for `Bash` and `Edit\|Write\|NotebookEdit` | the three libs above |
-| `hooks/bin/vet-dependency` | The vetter: runs every check, writes report + record | `vetting_record.py`, network, `osv-scanner` (optional) |
+| `hooks/dependency-guard.sh` | Hook wrapper for `Bash` and `Edit\|Write\|NotebookEdit`: owns only its own failures (python3 missing, decider missing or crashing) | `hooks/lib/decide-dependency.py` |
+| `hooks/lib/decide-dependency.py` | Steps 0–3, the cannot-read rule, the log and the broken-guard ask | the three libs above |
+| `hooks/bin/vet-dependency` | The vetter's command line: arguments, report rendering, the report and record writes, exit codes | `hooks/lib/vet_checks.py`, `vetting_record.py` |
+| `hooks/lib/vet_checks.py` | Every check and its threshold constants; network, subprocess and clock injectable for tests | `vetting_record.py`, network, `osv-scanner` (optional) |
 | `skills/vetting-dependencies/SKILL.md` | How to run the vetter, present the report, and form the recommendation | — |
 | `rules/gates.md` | 2-line stub pointing at the skill and hook | — |
 
@@ -239,7 +241,7 @@ a URL segment or file content:
 | Field | Rule | On failure |
 |---|---|---|
 | `ecosystem` | one of the six literals above | hook: treated as a guard failure (`ask`, "broken"); vetter: exit 2, usage message |
-| `name` | `^[A-Za-z0-9._@/-]{1,214}$`; not `.`/`..`; no `..` substring; no leading or trailing `/`, no `//`. Slash count by ecosystem: `npm` ≤ 1 and only as `@scope/name`; `go` any (module paths, e.g. `golang.org/x/text`); `homebrew` ≤ 2 (`user/tap/formula`); `pypi`, `crates.io`, `rubygems` 0 | hook: `ask` naming the raw value (sanitised, below); vetter: exit 2 |
+| `name` | `^[A-Za-z0-9._@/-]{1,214}$`; not `.`/`..`; no `..` substring; no leading `-` (it would read as an option to `brew info` and the vetter); no leading or trailing `/`, no `//`. Slash count by ecosystem: `npm` ≤ 1 and only as `@scope/name`; `go` any (module paths, e.g. `golang.org/x/text`); `homebrew` ≤ 2 (`user/tap/formula`); `pypi`, `crates.io`, `rubygems` 0 | hook: `ask` naming the raw value (sanitised, below); vetter: exit 2 |
 | `version` | `is_exact_version(ecosystem, version)` (below). In the hook this **is** step 1: a value that fails it — absent, a range, a dist-tag, or anything malformed such as `2.32.3/../evil` — is unpinned and denied with `MSG_UNPINNED`, so no path is ever built from it. In the vetter it is required, except for `homebrew`, where it must be absent (D8) | hook: step 1 deny; vetter: exit 2 |
 | record path | after joining, `os.path.realpath` must start with the realpath of `hooks/state/vetting/` + `/` | treated as no record (hook); exit 2 (vetter) |
 
@@ -350,7 +352,14 @@ runner to install something; calling the manager directly lets the guard see the
 `workspace:…`, `file:…`, `link:…`, a `git+…`/`git://…`/`ssh://…`/`git@host:…`/`http(s)://…` URL,
 a git-host shorthand (`github:…`, `gitlab:…`, `bitbucket:…`, `gist:…`, or npm's bare
 `user/repo`, which means GitHub), a tarball path, or a local path → **ask** with a general "not a registry package — cannot be vetted" warning naming the
-value. No pin check and no record lookup apply: there is no registry version to pin or vet, and a
+value. The same holds wherever such a value sits: after `name@` on an npm-family command line
+(`npm install foo@user/repo`), after `npm:` in an alias (`foo@npm:user/repo`, `"foo":
+"npm:user/repo"`), or as a pip argument containing `/` (pip reads it as a local directory) —
+both classifiers return `source: other` for every one of these forms. For a git URL or a
+git-host shorthand the warning adds: "downloads from a git host, not vetted, and the code can
+change unless pinned to a commit". `source: other` intents skip name validation: step 0a
+decides them before any name rule applies, so their ask and log line always say "not a
+registry package". No pin check and no record lookup apply: there is no registry version to pin or vet, and a
 deny would have no way through.
 
 Vetting record — `hooks/state/vetting/<ecosystem>/<safe-name>/<version>.json` (gitignored under
@@ -379,14 +388,14 @@ against.
 
 ### Checks
 
-Thresholds are named constants at the top of `vet-dependency`.
+Thresholds are named constants at the top of `hooks/lib/vet_checks.py`.
 
 | Check | Source | `stop` | `caution` |
 |---|---|---|---|
 | `direct_vulns` | OSV `/v1/query` for the exact version | any advisory | — |
 | `transitive_vulns` | npm: `npm install --package-lock-only --ignore-scripts` in a `mktemp -d` holding a one-dependency `package.json`, then `osv-scanner scan -L <lock> --format json` | any advisory | — |
 | `deprecated` | npm version `deprecated`; PyPI `info.yanked`; crates.io `yanked` | set | — |
-| `typosquat` | Variants of the name (single deletion, adjacent transposition, doubled-letter collapse, `-`↔`_`↔`.`, scope dropped); npm: bulk downloads for every unscoped variant that exists, one request per scoped name (the bulk endpoint refuses scoped names — Measured inputs) | a variant with ≥ `TYPOSQUAT_RATIO` (100)× the requested name's weekly downloads | PyPI/crates: a variant exists (no popularity source) |
+| `typosquat` | Variants of the name (single deletion, adjacent transposition, doubled-letter collapse, `-`↔`_`↔`.`, scope dropped); npm: bulk downloads for every unscoped variant that exists, one request per scoped name (the bulk endpoint refuses scoped names — Measured inputs) | a variant with ≥ `TYPOSQUAT_RATIO` (100)× the requested name's weekly downloads, a zero or unknown count read as 1 | PyPI/crates: a variant exists (no popularity source); one request per variant, at most `MAX_EXISTENCE_PROBES` (80), and a name with more variants than that, none found, is `not_run` |
 | `release_age` | npm `time[version]`; PyPI `upload_time_iso_8601`; crates `created_at` | — | < `MIN_RELEASE_AGE_DAYS` (7) |
 | `popularity` | npm weekly downloads | — | < `MIN_WEEKLY_DOWNLOADS` (1000) |
 | `install_scripts` | npm version `scripts.preinstall`/`install`/`postinstall` | — | present |
@@ -406,7 +415,8 @@ Which checks run per ecosystem in v1 (`not_run` makes the record `complete: fals
 | `source_link` | run | run | run | not_run | not_run | not_run |
 
 `transitive_vulns` result mapping, from osv-scanner's documented exit codes (Measured inputs):
-exit `0` → `ok`; exit `1` → parse the JSON, `stop` with every advisory listed; exit `128` →
+exit `0` → `ok`; exit `1` → parse the JSON, `stop` with every advisory listed (exit `1` with
+no advisory in the JSON → `not_run`, "osv-scanner exit 1 listed no advisories"); exit `128` →
 `not_run` ("no packages found"); any other exit, JSON that does not parse, or a timeout
 (`SUBPROCESS_TIMEOUT_SECONDS`, 120) → `not_run` with the exit code or "timeout" in
 `incomplete_reasons`. A failing `npm install --package-lock-only` (non-zero or timeout) → `not_run`
@@ -1071,6 +1081,14 @@ Scenario: vetter cannot learn a Homebrew version
       fixtures are hand-written from the API shapes, not recorded; the live smoke is what checks
       them against real registries. On success it prints a summary, `INCOMPLETE:` when relevant,
       and `report:`/`record:` paths.
+      Spec change, Mark approved 2026-10-14 (from Tasks 5–6 and the observability architecting
+      read on e0b4234, risk low): names may not start with `-`; Units list `decide-dependency.py`
+      and `vet_checks.py`, which holds the thresholds; typosquat reads a zero/unknown count as 1;
+      osv-scanner exit 1 with no advisory → `not_run`; PyPI/crates probes capped at 80; git-host
+      values are `source: other` in every position (`foo@user/repo`, `npm:user/repo`, a pip arg
+      with `/`) in both classifiers; their warning says the code can change unless pinned to a
+      commit; `source: other` skips name validation. Left for later (Mark): telling the user when
+      a `VET_EXEMPT` value is ignored for failing the allowlist.
 - [x] 7. `skills/vetting-dependencies/SKILL.md` per `skills/_standards/authoring-skills-and-agents.md`:
       running the vetter, the report layout relayed to Mark, the ✅ / ⚠️ / ⛔ recommendation with
       a reason and a safer alternative when ⛔, and the judgment checks no hook can see, each from
