@@ -41,6 +41,11 @@ _MAX_SLASHES = {"npm": 1, "pypi": 0, "crates.io": 0, "go": None, "rubygems": 0, 
 _NAME_RE = re.compile(r"[A-Za-z0-9._@/-]{1,%d}" % NAME_MAX_LENGTH)
 _NPM_SCOPED_RE = re.compile(r"@[A-Za-z0-9._-]+/[A-Za-z0-9._-]+")
 _SAFE_NAME_RE = re.compile(r"[A-Za-z0-9._@-]+")
+# npm's bare `owner/repo[#ref]` GitHub shorthand: the one definition (spec, "Not from a registry").
+# The owner is a GitHub account name -- letters, digits, hyphens, no dots -- so `1.2.3/evil` is a
+# malformed version, not a source. A bare `#` counts (`#.*`): `owner/repo#` is still a git source,
+# and refusing it would turn an ask into a deny.
+NPM_GIT_SHORTHAND_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+(?:#.*)?")
 # Homebrew's version is whatever `brew info` calls stable; it is only ever a file name here.
 _BREW_VERSION_RE = re.compile(r"[A-Za-z0-9._+-]{1,64}")
 _VETTED_AT_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
@@ -116,6 +121,11 @@ def is_exact_version(ecosystem, version):
     validate_ecosystem(ecosystem)
     pattern = _EXACT_VERSION_PATTERNS.get(ecosystem)
     return isinstance(version, str) and pattern is not None and pattern.fullmatch(version) is not None
+
+
+def is_npm_git_shorthand(value):
+    """True when the whole value is npm's bare `owner/repo[#ref]` GitHub shorthand."""
+    return isinstance(value, str) and NPM_GIT_SHORTHAND_RE.fullmatch(value) is not None
 
 
 def validate_version(ecosystem, version):

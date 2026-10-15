@@ -191,7 +191,7 @@ def test_package_json_non_registry_sources():
               "./local", "../local", "/abs/local", "~/local", "pkg.tgz", "dir/pkg.tar.gz",
               # Mark 2026-10-14: npm's bare `owner/repo` means GitHub, so it asks like `github:`.
               "user/repo", "user/repo#semver:^1.0.0", "user/repo#v1.2.3", "user/repo#", "a/b",
-              "Owner-1/repo.js", "o_w.n/r-e_p.o"]
+              "Owner-1/repo.js", "user/.hidden", "user/-x", "my-org/my.repo_2"]
     for value in values:
         got = deps(write(PJ, pkg(dependencies={"foo": value})))
         check("source other: {!r}".format(value), got, [("foo", value, False, "other")])
@@ -206,12 +206,20 @@ def test_package_json_shorthand_boundaries():
     check("a key that looks like owner/repo does not make its version shorthand",
           deps(write(PJ, pkg(dependencies={"owner/repo": "1.0.0"}))), [("owner/repo", "1.0.0", True, "registry")])
     for value in ["@scope/name", "@scope/name#v1", "a/b/c", "1.0.0/..", "user/", "user//repo",
-                  "user/.hidden", "user/-x", "us er/repo", "user/re po"]:
+                  "us er/repo", "user/re po",
+                  # One shape (spec, "Not from a registry"): an owner has no dots and no leading hyphen.
+                  "1.2.3/evil", "user.name/repo", "o_w.n/r-e_p.o", "-user/repo"]:
         got = deps(write(PJ, pkg(dependencies={"foo": value})))
         check("not shorthand (stays unpinned registry, refused): {!r}".format(value), got,
               [("foo", value, False, "registry")])
     check("an alias to a scoped package is untouched by the shorthand rule",
           deps(write(PJ, pkg(dependencies={"foo": "npm:@s/bar@1.0.0"}))), [("@s/bar", "1.0.0", True, "registry")])
+    for value, want in [("npm:bar@1.2.3/evil", ("bar", "1.2.3/evil", False, "registry")),
+                        ("npm:1.2.3/evil", ("1.2.3/evil", None, False, "registry")),
+                        ("npm:user.name/repo", ("user.name/repo", None, False, "registry")),
+                        ("npm:bar@user.name/repo", ("bar", "user.name/repo", False, "registry"))]:
+        check("an alias with a non-shorthand slash stays an unpinned registry value: {!r}".format(value),
+              deps(write(PJ, pkg(dependencies={"foo": value}))), [want])
     check("an alias to owner/repo-looking text is still an alias",
           deps(write(PJ, pkg(dependencies={"foo": "npm:bar@1.0.0"}))), [("bar", "1.0.0", True, "registry")])
 

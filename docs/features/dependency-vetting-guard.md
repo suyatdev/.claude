@@ -1083,9 +1083,14 @@ Scenario: vetter cannot learn a Homebrew version
       Mark decided 2026-10-14: bare `user/repo` is `source: other` (ask), like every git-host
       shorthand; the pyproject sections not read are disclosed in Known gaps. Manifest intents
       also carry the new `exempt: null` and `via_package_option: false`.
-      Implemented 2026-10-14, 351 passed, 0 failed (red first: 10). Shorthand = the manifest
-      value fully matching `owner/repo[#ref]`, each half starting alphanumeric; so `user/.github`
-      stays unpinned (refused), the safe direction, and `@scope/name` values are untouched.
+      Implemented 2026-10-14, 351 passed, 0 failed (red first: 10). (History: that first cut used
+      its own shorthand pattern. SUPERSEDED the same day by the one shape in Contracts,
+      `NPM_GIT_SHORTHAND_RE`; Mark chose 2026-10-14 that `user/.github` is a shorthand and is
+      asked about, not refused. `@scope/name` values remain registry values.)
+      All three modules moved onto `NPM_GIT_SHORTHAND_RE` 2026-10-14 (vetting_record 716/0,
+      install 987/0, manifest 388/0, decide 117/0); a bare `#` ref counts. A bare
+      `npm install user.name/repo`, `a/b/c` or `user/repo@1.0.0` is now an unpinned registry
+      intent (deny) — not a shorthand — where the old looser install rule had asked.
 - [ ] 5. `dependency-guard.sh` + `dependency-guard.test.sh`: every Scenario above that concerns
       the hook, using real `PreToolUse` payloads with `hook_event_name`, and the broken-guard
       paths (python3 off `PATH`, a lib missing).

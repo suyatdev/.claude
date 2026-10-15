@@ -183,6 +183,26 @@ for eco, bad in [("npm", None), ("npm", "^3.23.8"), ("npm", "../../x"), ("npm", 
                  ("npm", "latest"), ("pypi", "1.x"), ("homebrew", "1.7.1"), ("homebrew", "")]:
     rejects("validate_version({}, {!r})".format(eco, bad), vr.validate_version, eco, bad)
 
+# ---------------------------------------------------------------- npm's bare owner/repo shorthand
+# The one shape (spec, "Not from a registry"): owner = GitHub account name (no dots), repo, optional
+# #ref, whole value must match. Both classifiers and the git-host warning import it.
+for value in ["user/repo", "my-org/my.repo_2", "user/repo#abc123", "user/repo#semver:^1.0.0", "a/b",
+              "Owner-1/repo.js", "user/.hidden", "user/-x", "user/repo#",
+              "user/repo#a@b", "user/repo#a b"]:
+    check("NPM_GIT_SHORTHAND_RE accepts {!r}".format(value),
+          vr.NPM_GIT_SHORTHAND_RE.fullmatch(value) is not None, True)
+    check("is_npm_git_shorthand accepts {!r}".format(value), vr.is_npm_git_shorthand(value), True)
+for value in ["1.2.3/evil", "user.name/repo", "o_w.n/r-e_p.o", "-user/repo", "user/", "/repo", "a/b/c",
+              "user//repo", "@scope/name", "@scope/name#v1", "1.0.0/..", "us er/repo", "user/re po",
+              "user/repo/", "user/repo\n", "user/repo#a\nb", "üser/repo", "user/répo", "", "#abc",
+              "user/repo@1.0.0"]:
+    check("NPM_GIT_SHORTHAND_RE refuses {!r}".format(value),
+          vr.NPM_GIT_SHORTHAND_RE.fullmatch(value) is not None, False)
+    check("is_npm_git_shorthand refuses {!r}".format(value), vr.is_npm_git_shorthand(value), False)
+check("NPM_GIT_SHORTHAND_RE is a compiled pattern", hasattr(vr.NPM_GIT_SHORTHAND_RE, "fullmatch"), True)
+check("is_npm_git_shorthand is False for a non-string",
+      [vr.is_npm_git_shorthand(v) for v in (None, 3, b"user/repo", ["user/repo"])], [False] * 4)
+
 # ---------------------------------------------------------------- helpers
 
 

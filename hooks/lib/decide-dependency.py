@@ -36,7 +36,6 @@ LOG_BROKEN, LOG_CANNOT_READ, LOG_ALLOW_UNREADABLE = "broken", "cannot-read", "al
 NPM_ALIAS_PREFIX = "npm:"
 GIT_PREFIXES = ("git+", "git://", "ssh://", "git@", "github:", "gitlab:", "bitbucket:", "gist:")
 GIT_HOSTS = ("github.com", "gitlab.com", "bitbucket.org")
-GIT_SHORTHAND_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*(?:#.*)?")
 ARCHIVE_SUFFIXES = (".tgz", ".tar.gz", ".tar", ".zip", ".whl")
 GIT_HOST_WARNING = "downloads from a git host, not vetted, and the code can change unless pinned to a commit"
 NO_VALUE = "-"
@@ -62,6 +61,13 @@ def load_module(name, filename):
     spec.loader.exec_module(module)
     sys.modules[name] = module
     return module
+
+
+def is_npm_git_shorthand(value):
+    """npm's bare `owner/repo[#ref]` -- the one shape, defined in vetting_record.py. Read from
+    sys.modules because load_libs() runs before any message is built; if it has not, the KeyError is
+    a guard failure (main's "broken" ask), never a silent no."""
+    return sys.modules["vetting_record"].is_npm_git_shorthand(value)
 
 
 Libs = collections.namedtuple("Libs", "vr install manifest")
@@ -172,7 +178,7 @@ def _is_git_spelling(ecosystem, value):
         parsed = urllib.parse.urlparse(lowered)
         host = parsed.hostname or ""
         return parsed.path.endswith(".git") or any(host == h or host.endswith("." + h) for h in GIT_HOSTS)
-    return (ecosystem == "npm" and GIT_SHORTHAND_RE.fullmatch(value) is not None
+    return (ecosystem == "npm" and is_npm_git_shorthand(value)
             and not lowered.split("#", 1)[0].endswith(ARCHIVE_SUFFIXES))
 
 

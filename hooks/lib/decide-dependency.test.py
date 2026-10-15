@@ -179,11 +179,14 @@ def test_git_source():
                   "github:u/r", "GitHub:u/r", "gitlab:u/r", "bitbucket:u/r", "gist:abc", "user/repo",
                   "user/repo#abc123", "https://github.com/u/r/tarball/main", "https://gist.github.com/u/abc",
                   "https://example.com/r.git", "foo@github:u/r", "foo@user/repo#abc123", "foo@npm:user/repo",
-                  "npm:user/repo"):
+                  "npm:user/repo", "user/repo#", "my-org/my.repo_2", "foo@npm:my-org/my.repo_2"):
         check("git source: " + value, D.is_git_source(other(value)), True)
     for value in ("./local", "../x", "/abs/path", "file:../x", "link:../x", "workspace:*", "x.tgz", "dist/x.tgz",
                   "user/x.tar.gz", "https://example.com/x.tgz", "https://notgithub.com/x", "foo@file:../foo",
-                  "foo@npm:./local", "@scope/name"):
+                  "foo@npm:./local", "@scope/name",
+                  # One shape (vetting_record.NPM_GIT_SHORTHAND_RE): no dots or leading hyphen in the owner.
+                  "1.2.3/evil", "user.name/repo", "-user/repo", "a/b/c", "foo@1.2.3/evil", "foo@user.name/repo",
+                  "foo@npm:1.2.3/evil", "npm:user.name/repo"):
         check("not a git source: " + value, D.is_git_source(other(value)), False)
     check("pip: owner/repo is a local directory, not git", D.is_git_source(other("reqs/dev.txt", eco="pypi")), False)
     check("pip: a git+ URL is git", D.is_git_source(other("git+https://github.com/u/r", eco="pypi")), True)

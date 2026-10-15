@@ -47,16 +47,11 @@ UNPARSED_BASENAMES = frozenset([
     "cargo.lock", "go.sum"])
 REQUIREMENTS_RE = re.compile(r"requirements.*\.txt")
 
-# npm values that are not registry packages (Contracts, `source: other`). GitHub shorthand
-# (`user/repo`) is deliberately absent: the spec's list omits it, so it is an unpinned registry
-# value and is refused, not asked about.
+# npm values that are not registry packages (Contracts, `source: other`). The bare `owner/repo`
+# GitHub shorthand is not listed here: its one shape is vetting_record.NPM_GIT_SHORTHAND_RE.
 NPM_OTHER_PREFIXES = ("workspace:", "file:", "link:", "git+", "git://", "git@", "ssh://", "github:",
                       "gitlab:", "bitbucket:", "gist:", "http://", "https://", "./", "../", "/", "~/")
 NPM_OTHER_SUFFIXES = (".tgz", ".tar.gz", ".tar")
-# npm's bare `owner/repo[#ref]` means GitHub (Mark 2026-10-14). Matched against the manifest VALUE
-# only: a scope (`@scope/name`) starts with `@`, and each part must start alphanumeric, so
-# `1.0.0/..` and `a/b/c` are not shorthand and stay unpinned registry values.
-NPM_SHORTHAND_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*(?:#.*)?")
 
 # The one definition of "pinned" lives in vetting_record.py. Loaded by path because the hyphenated
 # sibling modules are not importable by name and `python3 -I` does not put this directory on sys.path.
@@ -65,6 +60,7 @@ _VETTING_SPEC = importlib.util.spec_from_file_location("vetting_record", _VETTIN
 _VETTING = importlib.util.module_from_spec(_VETTING_SPEC)
 _VETTING_SPEC.loader.exec_module(_VETTING)
 is_exact_version = _VETTING.is_exact_version
+is_npm_git_shorthand = _VETTING.is_npm_git_shorthand
 
 
 class _Unreadable(Exception):
@@ -121,7 +117,7 @@ def _is_non_registry(spec):
     """A git URL, git-host shorthand, URL, tarball or local path -- not a registry version or name."""
     lowered = spec.lower()
     return (lowered.startswith(NPM_OTHER_PREFIXES) or lowered.endswith(NPM_OTHER_SUFFIXES)
-            or NPM_SHORTHAND_RE.fullmatch(spec) is not None)
+            or is_npm_git_shorthand(spec))
 
 
 def _npm_dependency(key, value):

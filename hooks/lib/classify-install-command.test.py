@@ -585,6 +585,11 @@ add_cases("source other after name@", [
     ("npm install zod@3.23.8 foo@user/repo", [npm("zod", "3.23.8", True), other("npm", "foo@user/repo", "npm")],
      "mixed: the registry package is unaffected"),
 ])
+add_cases("source other after name@", [
+    ("npm install foo@user/repo#", [other("npm", "foo@user/repo#", "npm")],
+     "a bare # counts: the shape is #.*, one definition with the manifest classifier"),
+    ("npm install user/repo#", [other("npm", "user/repo#", "npm")], "bare shorthand with a bare #"),
+])
 add_cases("source other after npm:", [
     ("npm install foo@npm:user/repo", [other("npm", "user/repo", "npm")], "alias to a shorthand"),
     ("npm install foo@npm:user/repo#semver:^1.0.0", [other("npm", "user/repo#semver:^1.0.0", "npm")],
@@ -596,10 +601,20 @@ add_cases("source other after npm:", [
 ])
 add_cases("not a shorthand after name@", [
     ("npm install 'zod@3.23.8/../evil'", [npm("zod", "3.23.8/../evil", False)],
-     "a malformed version is unpinned (card line 245), not a source"),
+     "a malformed version is unpinned (spec, Not from a registry), not a source"),
     ("npm install 'zod@1.0/x'", [npm("zod", "1.0/x", False)], "dots are not allowed in a GitHub user"),
     ("npm install 'zod@../x'", [other("npm", "zod@../x", "npm")], "a ../ path is a local path"),
     ("npm install 'zod@a/b/c'", [npm("zod", "a/b/c", False)], "three parts are not user/repo"),
+    ("npm install foo@1.2.3/evil", [npm("foo", "1.2.3/evil", False)],
+     "1.2.3 cannot be an account name: a malformed version, unpinned (spec, Not from a registry)"),
+    ("npm install foo@user.name/repo", [npm("foo", "user.name/repo", False)],
+     "a dot in the owner is not the shorthand shape"),
+    ("npm install foo@-user/repo", [npm("foo", "-user/repo", False)], "an owner cannot start with a hyphen"),
+    ("npm install foo@user/", [npm("foo", "user/", False)], "no repo"),
+    ("npm install foo@user//repo", [npm("foo", "user//repo", False)], "empty path part"),
+    ("npm install 1.2.3/evil", [npm("1.2.3/evil", None, False)], "bare, not the shorthand shape: a registry name"),
+    ("npm install user.name/repo", [npm("user.name/repo", None, False)], "bare, dotted owner: same one shape"),
+    ("npm install a/b/c", [npm("a/b/c", None, False)], "bare, three parts: same one shape"),
     ("npm install zod@next", [npm("zod", "next", False)], "a dist-tag is unpinned, not a source"),
 ])
 add_cases("source other: pip argument with /", [

@@ -20,7 +20,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from shell_segments import ASSIGN_RE, WRAPPERS, program, segments  # noqa: E402
-from vetting_record import is_exact_version  # noqa: E402
+from vetting_record import is_exact_version, is_npm_git_shorthand  # noqa: E402
 
 __all__ = ["classify", "is_unreadable", "mentions_install_tool", "is_exact_version", "RUNNERS",
            "INSTALL_TOOL_WORDS"]
@@ -100,10 +100,6 @@ GEM_VALUE_FLAGS = frozenset(["-v", "--version", "-s", "--source", "-i", "--insta
 NON_REGISTRY_PREFIXES = ("workspace:", "file:", "link:", "git+", "git:", "git@", "github:", "gitlab:",
                          "bitbucket:", "gist:", "http:", "https:", "ssh:", "./", "../", "/", "~/")
 ARCHIVE_SUFFIXES = (".tgz", ".tar.gz", ".tar", ".zip", ".whl")
-# npm's GitHub shorthand (`user/repo`, optionally `#ref`) as it appears after `name@`. A GitHub user
-# name has no dots, so a malformed version such as `3.23.8/../evil` is NOT a shorthand and stays an
-# unpinned registry intent (card line 245).
-GIT_SHORTHAND_VERSION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+(#.*)?")
 # Where a pip requirement's NAME ends; a `/` before this point is a directory, not a name.
 PYPI_NAME_END_RE = re.compile(r"[=<>!~;@\[ ]")
 
@@ -173,18 +169,18 @@ def _subcommand(args, value_flags):
 
 
 # ------------------------------------------------------------------------------------ spec parsing
-def _non_registry(spec, slash_means_other=False):
+def _non_registry(spec):
     if spec in (".", "..") or spec.startswith(NON_REGISTRY_PREFIXES) or "://" in spec:
         return True
     if spec.endswith(ARCHIVE_SUFFIXES):
         return True
-    if not slash_means_other or spec.startswith("@"):
-        return False
-    return "/" in spec.split("@", 1)[0]  # npm `user/repo` (a `/` in a version is not a name)
+    return False
 
 
 def _parse_npm(spec):
-    if _non_registry(spec, slash_means_other=True):
+    # npm's bare `owner/repo[#ref]` is a GitHub source (spec, "Not from a registry"). An account name
+    # has no dots, so `3.23.8/../evil` is no shorthand: it stays an unpinned registry intent.
+    if _non_registry(spec) or is_npm_git_shorthand(spec):
         return spec, None, OTHER
     at = spec.find("@", 1)
     if at == -1:
@@ -192,7 +188,7 @@ def _parse_npm(spec):
     name, version = spec[:at], spec[at + 1:]
     if version.startswith("npm:"):  # alias: the real package is what gets fetched
         return _parse_npm(version[len("npm:"):])
-    if _non_registry(version) or GIT_SHORTHAND_VERSION_RE.fullmatch(version):
+    if _non_registry(version) or is_npm_git_shorthand(version):
         return spec, None, OTHER
     return name, version or None, REGISTRY
 
