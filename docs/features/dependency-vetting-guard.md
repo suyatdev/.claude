@@ -351,7 +351,13 @@ runner to install something; calling the manager directly lets the guard see the
 **Not from a registry (`source: other`):** a package argument or manifest value that is
 `workspace:…`, `file:…`, `link:…`, a `git+…`/`git://…`/`ssh://…`/`git@host:…`/`http(s)://…` URL,
 a git-host shorthand (`github:…`, `gitlab:…`, `bitbucket:…`, `gist:…`, or npm's bare
-`user/repo`, which means GitHub), a tarball path, or a local path → **ask** with a general "not a registry package — cannot be vetted" warning naming the
+`owner/repo`, which means GitHub), a tarball path, or a local path → **ask**. The bare
+shorthand has exactly one shape, `NPM_GIT_SHORTHAND_RE` in `vetting_record.py`, used by both
+classifiers and by the git-host warning check: owner `[A-Za-z0-9][A-Za-z0-9-]*` (a GitHub
+account name — letters, digits and hyphens, no dots), `/`, repo `[A-Za-z0-9._-]+`, then an
+optional `#<ref>`; the whole value must match. So `foo@1.2.3/evil` is not a shorthand (`1.2.3`
+cannot be an account name): it is a malformed version, unpinned, denied at step 1, on the
+command line and in `package.json` alike. Values of that kind → **ask** with a general "not a registry package — cannot be vetted" warning naming the
 value. The same holds wherever such a value sits: after `name@` on an npm-family command line
 (`npm install foo@user/repo`), after `npm:` in an alias (`foo@npm:user/repo`, `"foo":
 "npm:user/repo"`), or as a pip argument with a `/` in its name, before any version operator,
@@ -1105,7 +1111,7 @@ Scenario: vetter cannot learn a Homebrew version
       and `vet_checks.py`, which holds the thresholds; typosquat reads a zero/unknown count as 1;
       osv-scanner exit 1 with no advisory → `not_run`; PyPI/crates probes capped at 80; git-host
       values are `source: other` in every position (`foo@user/repo`, `npm:user/repo`, a pip arg
-      with `/`) in both classifiers; their warning says the code can change unless pinned to a
+      with `/` in its name) in both classifiers; their warning says the code can change unless pinned to a
       commit; `source: other` skips name validation. Left for later (Mark): telling the user when
       a `VET_EXEMPT` value is ignored for failing the allowlist.
 - [x] 7. `skills/vetting-dependencies/SKILL.md` per `skills/_standards/authoring-skills-and-agents.md`:
