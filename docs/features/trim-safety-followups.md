@@ -1,15 +1,19 @@
 ---
-phase: planning
-model_tier: high
-branch: none
+phase: implementation
+model_tier: low
+branch: fix/trim-safety-followups
 worktree: ~/.worktrees/.claude/trim-safety-followups
 ---
 
 # Three follow-ups the handoff-trim-safety card recorded and did not fix
 
-**Status:** planning. Card written 2026-09-18 on `fix/trim-safety-followups` (the branch exists
-only to carry this card's docs commits from an isolated worktree — the primary checkout is
-off-limits to every session; it is not recorded above until the gate opens).
+**Status:** implementation. The gate opened on the literal phrase `gate confirmed`, 2026-10-15,
+and the branch is now recorded in the frontmatter above. Card written 2026-09-18 on
+`fix/trim-safety-followups` — the branch existed first only to carry this card's docs commits
+from an isolated worktree, because the primary checkout is off-limits to every session. Rebased
+onto `origin/main` at the gate: 14 commits, and both judge ledgers were checked row-for-row
+afterwards (0 upstream rows lost, exactly this card's own 3 compliance + 3 observability rows
+added, 0 duplicate lines) because they carry `merge=union`.
 
 ## Background
 
