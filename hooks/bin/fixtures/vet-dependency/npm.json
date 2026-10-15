@@ -1,0 +1,30 @@
+{
+  "zod_packument": {"status": 200, "body": {
+    "name": "zod",
+    "dist-tags": {"latest": "3.23.8"},
+    "maintainers": [{"name": "colinhacks", "email": "x@example.invalid"}],
+    "repository": {"type": "git", "url": "git+https://github.com/colinhacks/zod.git"},
+    "time": {"created": "2020-03-07T00:00:00.000Z", "modified": "2024-05-08T19:13:04.545Z", "3.23.8": "2024-05-08T19:13:04.545Z"},
+    "versions": {"3.23.8": {"name": "zod", "version": "3.23.8", "scripts": {"build": "tsc"},
+                            "repository": {"type": "git", "url": "git+https://github.com/colinhacks/zod.git"}}}
+  }},
+  "lodahs_packument": {"status": 200, "body": {
+    "name": "lodahs",
+    "dist-tags": {"latest": "1.0.0"},
+    "maintainers": [{"name": "someone", "email": "y@example.invalid"}],
+    "time": {"created": "2024-01-01T00:00:00.000Z", "modified": "2024-01-01T00:00:00.000Z", "1.0.0": "2024-01-01T00:00:00.000Z"},
+    "versions": {"1.0.0": {"name": "lodahs", "version": "1.0.0", "scripts": {"postinstall": "node setup.js"}}}
+  }},
+  "downloads_zod": {"status": 200, "body": {"downloads": 20000000, "start": "2026-10-04", "end": "2026-10-10", "package": "zod"}},
+  "downloads_lodahs": {"status": 200, "body": {"downloads": 170, "start": "2026-10-04", "end": "2026-10-10", "package": "lodahs"}},
+  "downloads_bulk_lodahs_variants": {"status": 200, "body": {
+    "lodash": {"downloads": 163294778, "start": "2026-10-04", "end": "2026-10-10", "package": "lodash"},
+    "lodas": {"downloads": 68, "start": "2026-10-04", "end": "2026-10-10", "package": "lodas"},
+    "lodah": null
+  }},
+  "downloads_bulk_none_exist": {"status": 200, "body": {"zo": null, "od": null}},
+  "downloads_not_found": {"status": 404, "body": {"error": "package zod-new not found"}},
+  "lock_zod": {"name": "vet-scratch", "version": "0.0.0", "lockfileVersion": 3, "requires": true,
+    "packages": {"": {"name": "vet-scratch", "version": "0.0.0", "dependencies": {"zod": "3.23.8"}},
+                 "node_modules/zod": {"version": "3.23.8"}}}
+}
