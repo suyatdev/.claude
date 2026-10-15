@@ -99,7 +99,9 @@ for label, argv in [("no arguments", []), ("one argument", ["npm"]), ("four argu
                     ("Scenario: path-traversal version", ["npm", "zod", "../../x"]),
                     ("range version", ["npm", "zod", "^3.23.8"]), ("missing version", ["npm", "zod"]),
                     ("Scenario: vetter refuses a version for Homebrew", ["homebrew", "jq", "1.7.1"]),
-                    ("option-looking name", ["homebrew", "--cask"]), ("option-looking ecosystem", ["--help-me", "x", "1.0.0"])]:
+                    ("option-looking name", ["homebrew", "--cask"]), ("option-looking ecosystem", ["--help-me", "x", "1.0.0"]),
+                    ('Scenario: a name starting with "-" is never passed to a tool', ["npm", "-x", "1.0.0"]),
+                    ("a leading - on a homebrew name", ["homebrew", "-x"])]:
     rc, out, err, store = run(argv, replay.Replay())
     check("usage error: {} -> exit 2".format(label), rc, 2)
     check("usage error: {} -> usage line on stderr".format(label), "usage: vet-dependency" in err, True)
@@ -109,7 +111,8 @@ check("--help exits 0 with the usage line on stdout", (rc, "usage: vet-dependenc
 
 # the real executable, end to end (fails before any network is needed)
 check("vet-dependency is executable", os.access(SCRIPT, os.X_OK), True)
-for argv, want in [(["npm", "zod", "../../x"], 2), (["homebrew", "jq", "1.7.1"], 2), (["--help"], 0)]:
+for argv, want in [(["npm", "zod", "../../x"], 2), (["homebrew", "jq", "1.7.1"], 2), (["npm", "-x", "1.0.0"], 2),
+                   (["--help"], 0)]:
     proc = subprocess.run([SCRIPT] + argv, cwd=ROOT, capture_output=True, text=True)
     check("executable {} -> exit {}".format(argv, want), proc.returncode, want)
     check("executable {} -> usage text".format(argv), "usage: vet-dependency" in proc.stdout + proc.stderr, True)

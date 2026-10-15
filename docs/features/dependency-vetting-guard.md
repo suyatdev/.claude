@@ -1099,12 +1099,12 @@ Scenario: vetter cannot learn a Homebrew version
       asked about, not refused. `@scope/name` values remain registry values.)
       All three modules moved onto `NPM_GIT_SHORTHAND_RE` 2026-10-14 (vetting_record 716/0,
       install 987/0, manifest 388/0, decide 117/0). Measured with the hook at a5545bf (main
-      session, isolated state dir): `npm install user.name/repo` and `npm install
-      foo@1.2.3/evil` → exit 2, MSG_UNPINNED (not a shorthand); `npm install user/repo@1.0.0` →
+      session, isolated state dir): `npm install user.name/repo`, `npm install a/b/c` (re-measured
+      at 338bed7) and `npm install foo@1.2.3/evil` → exit 2, MSG_UNPINNED (not a shorthand); `npm install user/repo@1.0.0` →
       ask, "not a valid package name" (pinned, then the name row); `npm install user/.github` →
       ask, not a registry package, with the git-host clause. The old looser install rule had
       asked about the first one.
-- [ ] 5. `dependency-guard.sh` + `dependency-guard.test.sh`: every Scenario above that concerns
+- [x] 5. `dependency-guard.sh` + `dependency-guard.test.sh`: every Scenario above that concerns
       the hook, using real `PreToolUse` payloads with `hook_event_name`, and the broken-guard
       paths (python3 off `PATH`, a lib missing).
       2026-10-14: code committed. Hook suite 145 passed, 0 failed (red first: 137 failed);
@@ -1115,7 +1115,7 @@ Scenario: vetter cannot learn a Homebrew version
       `DEPENDENCY_GUARD_STATE_DIR`. Readings taken: a versionless install prints
       `<name>@<exact-version>` as the spelling; an invalid name is checked after step 1; `(log
       write failed)` is appended once; an empty payload is unparseable (ask).
-- [ ] 6. `bin/vet-dependency` + tests driven by recorded HTTP fixtures (no network in the suite),
+- [x] 6. `bin/vet-dependency` + tests driven by recorded HTTP fixtures (no network in the suite),
       including the OSV-unreachable and typosquat scenarios; one opt-in live smoke test.
       2026-10-14: code committed. Checks live in a new paired `hooks/lib/vet_checks.py` (167
       passed, 0 failed); `hooks/bin/vet-dependency` is a thin CLI (94 passed, 0 failed, 1 skipped —

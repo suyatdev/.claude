@@ -353,6 +353,20 @@ lacks "the pip path gets no git-host warning" "$(ask_reason)" "git host" "not a 
 run "$(edit_payload "$PKG" "$old" '"dependencies": {"-x": "1.0.0"}')"
 check_ask "a manifest key with a leading - asks with the invalid-name reason" "not a valid package name" "-x"
 
+# ---- the five Scenarios added to the card with HEAD 338bed7
+ask_cmd "Scenario: a git-host value after name@ asks and says the code can change (npm install foo@user/repo)" \
+  "npm install foo@user/repo" "not a registry package" "the code can change unless pinned to a commit"
+ask_cmd "Scenario: a dot-named GitHub repo is a shorthand and is asked about (npm install user/.github)" \
+  "npm install user/.github" "not a registry package" "the code can change unless pinned to a commit"
+deny_cmd "Scenario: a version with a slash is not a shorthand (npm install foo@1.2.3/evil)" \
+  "npm install foo@1.2.3/evil" "npm foo has no exact version" "foo@<exact-version>"
+lacks "Scenario: the slash version is not echoed or turned into a path" "$ERR" "evil" "has no exact version"
+ask_cmd "Scenario: a local directory is not a registry package (pip install sub/dir)" \
+  "pip install sub/dir" "not a registry package" "sub/dir"
+lacks "Scenario: a local directory gets no git-host clause" "$(ask_reason)" "git host" "not a registry package"
+run "$(write_payload "$PROJ/package.json" '{"name":"app","dependencies":{"-x":"1.0.0"}}')"
+check_ask "Scenario: a Write of package.json adding \"-x\" asks, naming the raw value" "not a valid package name" "-x"
+
 # ---- log forging
 new_state
 before="$(log_count)"
