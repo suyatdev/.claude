@@ -117,18 +117,26 @@ def _load_npm_sections(text):
     return sections
 
 
+def _is_non_registry(spec):
+    """A git URL, git-host shorthand, URL, tarball or local path -- not a registry version or name."""
+    lowered = spec.lower()
+    return (lowered.startswith(NPM_OTHER_PREFIXES) or lowered.endswith(NPM_OTHER_SUFFIXES)
+            or NPM_SHORTHAND_RE.fullmatch(spec) is not None)
+
+
 def _npm_dependency(key, value):
-    lowered = value.lower()
-    if (lowered.startswith(NPM_OTHER_PREFIXES) or lowered.endswith(NPM_OTHER_SUFFIXES)
-            or NPM_SHORTHAND_RE.fullmatch(value)):
+    if _is_non_registry(value):
         return _dependency("npm", "package.json", key, value, "other")
-    if not lowered.startswith("npm:"):
+    if not value.lower().startswith("npm:"):
         return _dependency("npm", "package.json", key, value)
     spec = value[len("npm:"):]
     at = spec.rfind("@")
-    if at > 0:  # an index of 0 is the scope marker, not a version separator
-        return _dependency("npm", "package.json", spec[:at], spec[at + 1:])
-    return _dependency("npm", "package.json", spec, None)
+    version = spec[at + 1:] if at > 0 else None  # an index of 0 is the scope marker
+    # Such a value is `source: other` wherever it sits (card, "Not from a registry"), so an alias
+    # whose target or version is one is reported as written, under the manifest key.
+    if _is_non_registry(spec) or (version is not None and _is_non_registry(version)):
+        return _dependency("npm", "package.json", key, value, "other")
+    return _dependency("npm", "package.json", spec[:at] if at > 0 else spec, version)
 
 
 def _classify_package_json(base, old, new):

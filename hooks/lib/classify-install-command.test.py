@@ -562,6 +562,75 @@ add_cases("source other", [
     ("uvx ./local-tool", [other("pypi", "./local-tool", "uvx", "uvx")], "uvx given a path"),
 ])
 
+# A git URL, git-host shorthand or local path is `source: other` wherever it sits (card, "Not from a
+# registry"): after `name@`, after `npm:` in an alias, and as a pip argument containing `/`.
+SHORTHAND_VERSIONS = ["user/repo", "user/repo#semver:^1.0.0", "my-org/my.repo_2", "user/repo#abc123"]
+for _v in SHORTHAND_VERSIONS:
+    add_cases("source other after name@", [
+        ("npm install foo@{}".format(_v), [other("npm", "foo@" + _v, "npm")], "npm"),
+        ("npm i @scope/foo@{}".format(_v), [other("npm", "@scope/foo@" + _v, "npm")], "scoped name"),
+        ("pnpm add foo@{}".format(_v), [other("npm", "foo@" + _v, "pnpm")], "pnpm add"),
+        ("pnpm install foo@{}".format(_v), [other("npm", "foo@" + _v, "pnpm")], "pnpm install"),
+        ("yarn add foo@{}".format(_v), [other("npm", "foo@" + _v, "yarn")], "yarn add"),
+        ("bun add foo@{}".format(_v), [other("npm", "foo@" + _v, "bun")], "bun add"),
+        ("bun install foo@{}".format(_v), [other("npm", "foo@" + _v, "bun")], "bun install"),
+        ("npx foo@{} hi".format(_v), [other("npm", "foo@" + _v, "npx", "npx")], "npx"),
+        ("pnpm dlx foo@{} hi".format(_v), [other("npm", "foo@" + _v, "pnpm", "pnpm dlx")], "pnpm dlx"),
+        ("npm exec foo@{} -- hi".format(_v), [other("npm", "foo@" + _v, "npm", "npm exec")], "npm exec"),
+    ])
+add_cases("source other after name@", [
+    ("npx -p foo@user/repo cmd",
+     [_intent("npm", "foo@user/repo", None, "npx", False, "npx", "other", via=True), npm("cmd", None, False, "npx", "npx")],
+     "-p value is source other and still marked via_package_option"),
+    ("npm install zod@3.23.8 foo@user/repo", [npm("zod", "3.23.8", True), other("npm", "foo@user/repo", "npm")],
+     "mixed: the registry package is unaffected"),
+])
+add_cases("source other after npm:", [
+    ("npm install foo@npm:user/repo", [other("npm", "user/repo", "npm")], "alias to a shorthand"),
+    ("npm install foo@npm:user/repo#semver:^1.0.0", [other("npm", "user/repo#semver:^1.0.0", "npm")],
+     "alias to a shorthand with a ref"),
+    ("npm install foo@npm:bar@user/repo", [other("npm", "bar@user/repo", "npm")], "alias, shorthand after name@"),
+    ("npm install foo@npm:@s/bar@user/repo", [other("npm", "@s/bar@user/repo", "npm")], "scoped alias target"),
+    ("npm install foo@npm:github:user/repo", [other("npm", "github:user/repo", "npm")], "alias to github:"),
+    ("pnpm add foo@npm:user/repo", [other("npm", "user/repo", "pnpm")], "alias under pnpm"),
+])
+add_cases("not a shorthand after name@", [
+    ("npm install 'zod@3.23.8/../evil'", [npm("zod", "3.23.8/../evil", False)],
+     "a malformed version is unpinned (card line 245), not a source"),
+    ("npm install 'zod@1.0/x'", [npm("zod", "1.0/x", False)], "dots are not allowed in a GitHub user"),
+    ("npm install 'zod@../x'", [other("npm", "zod@../x", "npm")], "a ../ path is a local path"),
+    ("npm install 'zod@a/b/c'", [npm("zod", "a/b/c", False)], "three parts are not user/repo"),
+    ("npm install zod@next", [npm("zod", "next", False)], "a dist-tag is unpinned, not a source"),
+])
+add_cases("source other: pip argument with /", [
+    ("pip install user/repo", [other("pypi", "user/repo", "pip")], "bare user/repo"),
+    ("pip install sub/dir", [other("pypi", "sub/dir", "pip")], "relative directory"),
+    ("pip3 install sub/dir", [other("pypi", "sub/dir", "pip3")], "pip3"),
+    ("python3 -m pip install sub/dir", [other("pypi", "sub/dir", "python3")], "python -m pip"),
+    ("uv pip install sub/dir", [other("pypi", "sub/dir", "uv")], "uv pip"),
+    ("pip install ./pkg", [other("pypi", "./pkg", "pip")], "dot-slash"),
+    ("pip install a/b/c", [other("pypi", "a/b/c", "pip")], "several levels"),
+    ("pip install a/b==1.0", [other("pypi", "a/b==1.0", "pip")], "the slash is in the name part"),
+    ("pip install -e sub/dir", [other("pypi", "sub/dir", "pip")], "editable directory"),
+    ("pip install requests==2.32.3 sub/dir", [pypi("requests", "2.32.3", True), other("pypi", "sub/dir", "pip")],
+     "mixed: the registry package is unaffected"),
+    ("uv add sub/dir", [other("pypi", "sub/dir", "uv")], "uv add"),
+    ("poetry add sub/dir", [other("pypi", "sub/dir", "poetry")], "poetry add"),
+    ("pip install 'requests==2.32.3/../evil'", [pypi("requests", "2.32.3/../evil", False)],
+     "a malformed VERSION stays unpinned (card scenario, MSG_UNPINNED), the slash is not in the name"),
+    ("pip install 'requests>=2/x'", [pypi("requests", ">=2/x", False)], "same, other operator"),
+])
+add_cases("go and homebrew slashes are not sources", [
+    ("go get golang.org/x/text@v0.14.0", [gomod("golang.org/x/text", "v0.14.0", True)],
+     "a Go module path has slashes and is a registry intent"),
+    ("go get github.com/user/repo@v1.2.3", [gomod("github.com/user/repo", "v1.2.3", True)],
+     "a Go module hosted on github is still a Go module"),
+    ("go install golang.org/x/tools/cmd/goimports@v0.20.0",
+     [gomod("golang.org/x/tools/cmd/goimports", "v0.20.0", True)], "go install"),
+    ("brew install user/tap/formula", [brew("user/tap/formula")], "a tap formula is a registry intent"),
+    ("brew install homebrew/core/jq", [brew("homebrew/core/jq")], "a tap formula, core"),
+])
+
 # ---------------------------------------------------------------------------------------------
 # Every runner: each member of RUNNERS names a package and returns form: run
 # ---------------------------------------------------------------------------------------------

@@ -312,6 +312,47 @@ check_allow "a payload with no hook_event_name is allowed with no output"
 run '{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{}}'
 check_allow "a Bash payload with no command has nothing to classify"
 
+# ---- source: other (card, "Not from a registry"): the git-host warning, and no name validation
+new_state
+GITNOTE="downloads from a git host, not vetted, and the code can change unless pinned to a commit"
+for c in 'npm install git+https://github.com/u/r.git' 'npm install git://h/r' 'npm install ssh://git@h/r' \
+         'npm install git@github.com:u/r.git' 'npm install https://github.com/u/r/tarball/main' \
+         'npm install github:u/r' 'npm install gitlab:u/r' 'npm install bitbucket:u/r' 'npm install gist:abc' \
+         'npm install user/repo' 'npm install user/repo#abc123' 'npm install foo@github:u/r' \
+         'npm install foo@npm:user/repo' 'pip install git+https://github.com/u/r'; do
+  ask_cmd "a git source gets the git-host warning: $c" "$c" "not a registry package" "$GITNOTE"
+  lacks "a git source is never refused as an invalid name: $c" "$(ask_reason)" "not a valid package name" "not a registry package"
+done
+for c in 'npm install ./local-pkg' 'npm install file:../x' 'npm install link:../x' 'npm install workspace:*' \
+         'npm install x.tgz' 'npm install dist/x.tgz' 'npm install /abs/path' 'npm install https://example.com/x.tgz' \
+         'npm install foo@file:../foo' 'pip install ./pkg' 'pip install https://h/x.whl'; do
+  ask_cmd "a non-git source asks without the git-host warning: $c" "$c" "not a registry package"
+  lacks "a non-git source gets no git-host warning: $c" "$(ask_reason)" "git host" "not a registry package"
+done
+run "$(bash_payload "npm install github:u/r")"
+case "$(tail -n 1 "$STATE/dependency-guard.log")" in
+  *"${TAB}ask${TAB}npm${TAB}"*"not a registry package"*) say_ok "the log line for a source:other ask says 'not a registry package'" ;;
+  *) say_bad "the log line for a source:other ask says 'not a registry package'" "$(tail -n 1 "$STATE/dependency-guard.log")" ;; esac
+lacks "the log line never says invalid name" "$(tail -n 1 "$STATE/dependency-guard.log")" "valid package name" "not a registry package"
+old='"dependencies": {}'
+for v in 'github:u/r' 'npm:user/repo' 'user/repo#abc123' 'git+https://github.com/u/r.git' 'https://github.com/u/r/tarball/main'; do
+  run "$(edit_payload "$PKG" "$old" "\"dependencies\": {\"foo\": \"$v\"}")"
+  check_ask "a manifest git value gets the git-host warning: $v" "not a registry package" "$GITNOTE"
+done
+for v in 'file:../foo' 'link:../foo' 'workspace:*' './foo' 'https://example.com/foo.tgz'; do
+  run "$(edit_payload "$PKG" "$old" "\"dependencies\": {\"foo\": \"$v\"}")"
+  check_ask "a manifest non-git value asks without the git-host warning: $v" "not a registry package"
+  lacks "a manifest non-git value gets no git-host warning: $v" "$(ask_reason)" "git host" "not a registry package"
+done
+# These need the classifier to return source:other for a value after `name@` / a pip path with `/`
+# (card: "both classifiers return source: other for every one of these forms").
+ask_cmd "a git ref after name@ is source:other with the git-host warning" "npm install foo@user/repo#abc123" "not a registry package" "$GITNOTE"
+ask_cmd "a pip path containing / is source:other, no git-host warning" "pip install reqs/dev.txt" "not a registry package"
+lacks "the pip path gets no git-host warning" "$(ask_reason)" "git host" "not a registry package"
+# vetting_record.validate_name refusing a leading `-` (card, Input validation `name`)
+run "$(edit_payload "$PKG" "$old" '"dependencies": {"-x": "1.0.0"}')"
+check_ask "a manifest key with a leading - asks with the invalid-name reason" "not a valid package name" "-x"
+
 # ---- log forging
 new_state
 before="$(log_count)"

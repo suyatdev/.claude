@@ -100,6 +100,12 @@ GEM_VALUE_FLAGS = frozenset(["-v", "--version", "-s", "--source", "-i", "--insta
 NON_REGISTRY_PREFIXES = ("workspace:", "file:", "link:", "git+", "git:", "git@", "github:", "gitlab:",
                          "bitbucket:", "gist:", "http:", "https:", "ssh:", "./", "../", "/", "~/")
 ARCHIVE_SUFFIXES = (".tgz", ".tar.gz", ".tar", ".zip", ".whl")
+# npm's GitHub shorthand (`user/repo`, optionally `#ref`) as it appears after `name@`. A GitHub user
+# name has no dots, so a malformed version such as `3.23.8/../evil` is NOT a shorthand and stays an
+# unpinned registry intent (card line 245).
+GIT_SHORTHAND_VERSION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+(#.*)?")
+# Where a pip requirement's NAME ends; a `/` before this point is a directory, not a name.
+PYPI_NAME_END_RE = re.compile(r"[=<>!~;@\[ ]")
 
 # Wrappers this classifier strips beyond shell_segments.WRAPPERS (card: env, sudo, timeout, nice).
 WRAPPER_VALUE_OPTS = {
@@ -186,7 +192,7 @@ def _parse_npm(spec):
     name, version = spec[:at], spec[at + 1:]
     if version.startswith("npm:"):  # alias: the real package is what gets fetched
         return _parse_npm(version[len("npm:"):])
-    if _non_registry(version):
+    if _non_registry(version) or GIT_SHORTHAND_VERSION_RE.fullmatch(version):
         return spec, None, OTHER
     return name, version or None, REGISTRY
 
@@ -197,8 +203,8 @@ _PYPI_SPEC_RE = re.compile(r"([A-Za-z0-9][A-Za-z0-9._-]*)\s*(\[[^\]]*\])?\s*(.*)
 def _pypi_parser(allow_at=False):
     """allow_at: poetry spells a version `name@1.2.3`; elsewhere `@` only starts a direct reference."""
     def parse(spec):
-        if _non_registry(spec):
-            return spec, None, OTHER
+        if _non_registry(spec) or "/" in PYPI_NAME_END_RE.split(spec, 1)[0]:
+            return spec, None, OTHER  # pip reads an argument with a `/` in its name as a directory
         match = _PYPI_SPEC_RE.fullmatch(spec.split(";", 1)[0].strip())
         if not match:
             return spec, None, REGISTRY

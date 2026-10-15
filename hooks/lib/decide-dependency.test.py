@@ -171,6 +171,29 @@ def test_decide_intent():
         check_in("homebrew vetter line has no version", "run: /hooks/bin/vet-dependency homebrew wget  ", d.text)
 
 
+def test_git_source():
+    def other(name, version=None, eco="npm"):
+        return intent(ecosystem=eco, name=name, version=version, pinned=False, source="other")
+
+    for value in ("git+https://github.com/u/r.git", "git://h/r", "ssh://git@h/r", "git@github.com:u/r.git",
+                  "github:u/r", "GitHub:u/r", "gitlab:u/r", "bitbucket:u/r", "gist:abc", "user/repo",
+                  "user/repo#abc123", "https://github.com/u/r/tarball/main", "https://gist.github.com/u/abc",
+                  "https://example.com/r.git", "foo@github:u/r", "foo@user/repo#abc123", "foo@npm:user/repo",
+                  "npm:user/repo"):
+        check("git source: " + value, D.is_git_source(other(value)), True)
+    for value in ("./local", "../x", "/abs/path", "file:../x", "link:../x", "workspace:*", "x.tgz", "dist/x.tgz",
+                  "user/x.tar.gz", "https://example.com/x.tgz", "https://notgithub.com/x", "foo@file:../foo",
+                  "foo@npm:./local", "@scope/name"):
+        check("not a git source: " + value, D.is_git_source(other(value)), False)
+    check("pip: owner/repo is a local directory, not git", D.is_git_source(other("reqs/dev.txt", eco="pypi")), False)
+    check("pip: a git+ URL is git", D.is_git_source(other("git+https://github.com/u/r", eco="pypi")), True)
+    check("manifest: the value (version) decides, not the key",
+          D.is_git_source(other("user/repo", version="file:../x")), False)
+    check("manifest: a git value on an ordinary key", D.is_git_source(other("foo", version="github:u/r")), True)
+    check_in("the warning text", D.GIT_HOST_WARNING, D.msg_not_registry(other("github:u/r")))
+    check("a non-git ask carries no warning", "git host" in D.msg_not_registry(other("file:../x")), False)
+
+
 def run_emit(decisions, log_failed=False):
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer):
@@ -223,7 +246,7 @@ def test_session_id():
 
 def main():
     for fn in (test_clean, test_format_age, test_spellings, test_local_copy_advice, test_decide_intent,
-               test_emit, test_logging, test_session_id):
+               test_git_source, test_emit, test_logging, test_session_id):
         fn()
     print("\ndecide-dependency unit: {} passed, {} failed".format(PASSED, FAILED))
     return 1 if FAILED else 0

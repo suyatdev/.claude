@@ -87,6 +87,8 @@ def validate_name(ecosystem, name):
     validate_ecosystem(ecosystem)
     if not isinstance(name, str) or not _NAME_RE.fullmatch(name):
         raise ValidationError("invalid package name {}".format(_show(name)))
+    if name.startswith("-"):  # would read as an option to `brew info` and the vetter
+        raise ValidationError("package name {} starts with '-'".format(_show(name)))
     if name == "." or ".." in name:
         raise ValidationError("package name {} has a dot segment".format(_show(name)))
     if name.startswith("/") or name.endswith("/") or "//" in name:

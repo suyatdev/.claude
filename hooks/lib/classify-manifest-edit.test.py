@@ -237,6 +237,36 @@ def test_intent_contract_fields():
          "via_package_option"]))
 
 
+def test_package_json_alias_to_non_registry_source():
+    # Card "Not from a registry": such a value is `source: other` wherever it sits, including
+    # after `npm:` in an alias. The item names the value as written (the whole `npm:...` string).
+    for target in ["user/repo", "user/repo#v1.2.3", "github:user/repo", "gitlab:user/repo",
+                   "bitbucket:user/repo", "gist:abc", "git+https://h/x.git", "git+ssh://git@h/x.git",
+                   "git://h/x.git", "git@h:x/y.git", "https://h/x.tgz", "file:../x", "link:../x",
+                   "workspace:*", "./local", "../local", "/abs/local", "pkg.tgz"]:
+        value = "npm:" + target
+        check("alias to a non-registry source: {!r}".format(value),
+              deps(write(PJ, pkg(dependencies={"foo": value}))), [("foo", value, False, "other")])
+    check("the alias prefix is case-insensitive here too",
+          deps(write(PJ, pkg(dependencies={"foo": "NPM:user/repo"}))), [("foo", "NPM:user/repo", False, "other")])
+    for version in ["user/repo", "github:user/repo", "file:../x"]:
+        value = "npm:bar@" + version
+        check("a non-registry source in the alias version position: {!r}".format(value),
+              deps(write(PJ, pkg(dependencies={"foo": value}))), [("foo", value, False, "other")])
+    check("an Edit adding such an alias asks",
+          deps(edit(PJ, '"a": "1.0.0"', '"a": "1.0.0", "foo": "npm:user/repo"',
+                    {PJ: pkg(dependencies={"a": "1.0.0"})})), [("foo", "npm:user/repo", False, "other")])
+    # Controls: ordinary aliases must still resolve to the real package (pinned or not).
+    for value, want in [("npm:bar@1.0.0", ("bar", "1.0.0", True, "registry")),
+                        ("npm:@s/bar@1.0.0", ("@s/bar", "1.0.0", True, "registry")),
+                        ("npm:bar@^1.0.0", ("bar", "^1.0.0", False, "registry")),
+                        ("npm:bar", ("bar", None, False, "registry")),
+                        ("npm:@s/bar", ("@s/bar", None, False, "registry")),
+                        ("npm:@s/bar@latest", ("@s/bar", "latest", False, "registry"))]:
+        check("ordinary alias still resolves: {!r}".format(value),
+              deps(write(PJ, pkg(dependencies={"foo": value}))), [want])
+
+
 def test_package_json_aliases():
     check("npm alias resolves to the real package",
           deps(write(PJ, pkg(dependencies={"foo": "npm:bar@1.0.0"}))), [("bar", "1.0.0", True, "registry")])
@@ -679,7 +709,8 @@ def main():
     for fn in (test_package_json_add_change_remove, test_package_json_sections,
                test_package_json_edit_application, test_package_json_values,
                test_package_json_non_registry_sources, test_package_json_shorthand_boundaries,
-               test_intent_contract_fields, test_package_json_aliases,
+               test_intent_contract_fields, test_package_json_alias_to_non_registry_source,
+               test_package_json_aliases,
                test_package_json_unreadable, test_requirements_specifiers,
                test_requirements_add_change_remove, test_requirements_ignored_and_asked,
                test_requirements_filenames, test_pyproject_project_dependencies, test_pyproject_diff,

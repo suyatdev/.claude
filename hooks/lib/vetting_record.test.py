@@ -115,6 +115,19 @@ for eco, bad in [("npm", "a/b"), ("npm", "@a/b/c"), ("npm", "@scope"), ("npm", "
     rejects("slash rule: {} refuses {!r}".format(eco, bad), vr.validate_name, eco, bad)
 rejects("validate_name checks the ecosystem too", vr.validate_name, "maven", "zod")
 
+# No leading "-": as an argv element it reads as an option to `brew info` and to the vetter. Every
+# ecosystem, because the vetter's own argv is shared; the first character is what matters.
+for eco in vr.ECOSYSTEMS:
+    for bad in ["-x", "--help", "-", "--", "-rf", "-a-b", "-golang.org/x/text"]:
+        rejects("leading dash: {} refuses {!r}".format(eco, bad), vr.validate_name, eco, bad)
+    for ok in ["a-", "a-b", "x--y"]:
+        check("a dash after the first character is fine: {} {!r}".format(eco, ok), vr.validate_name(eco, ok), ok)
+# A dash right after `@scope/` is NOT refused: the argument still starts with "@", so neither npm
+# nor the vetter can read it as an option (decision recorded in the task report).
+check("npm @scope/-x is accepted (argv starts with @)", vr.validate_name("npm", "@scope/-x"), "@scope/-x")
+check("homebrew tap/-x is accepted (argv starts with a letter)",
+      vr.validate_name("homebrew", "user/-x"), "user/-x")
+rejects("record_path refuses a leading-dash name", vr.record_path, "/nonexistent-store", "npm", "-x", "1.0.0")
 check("safe_name replaces / with __", vr.safe_name("golang.org/x/text"), "golang.org__x__text")
 check("safe_name keeps an npm scope's @", vr.safe_name("@types/node"), "@types__node")
 check("safe_name leaves a plain name alone", vr.safe_name("zod"), "zod")
@@ -256,6 +269,7 @@ BAD_RECORDS = [
     ("ecosystem unknown", make_record(ecosystem="maven")),
     ("name has ..", make_record(name="a..b")),
     ("name npm unscoped slash", make_record(name="a/b")),
+    ("name with a leading dash", make_record(name="-x")),
     ("version a range", make_record(version="^3.23.8")),
     ("version with path parts", make_record(version="2.32.3/../evil")),
     ("homebrew version with a slash", make_record("homebrew", "jq", "1.7/../x")),

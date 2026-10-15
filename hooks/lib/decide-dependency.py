@@ -18,8 +18,10 @@ import datetime
 import importlib.util
 import json
 import os
+import re
 import shlex
 import sys
+import urllib.parse
 
 LIB_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_LOG = "dependency-guard.log"
@@ -31,6 +33,12 @@ VERSION_OPERATORS = "^~<>=! "
 EVENT_PRE_TOOL_USE = "PreToolUse"
 MANIFEST_TOOLS = ("Edit", "Write", "NotebookEdit")
 LOG_BROKEN, LOG_CANNOT_READ, LOG_ALLOW_UNREADABLE = "broken", "cannot-read", "allow-unreadable"
+NPM_ALIAS_PREFIX = "npm:"
+GIT_PREFIXES = ("git+", "git://", "ssh://", "git@", "github:", "gitlab:", "bitbucket:", "gist:")
+GIT_HOSTS = ("github.com", "gitlab.com", "bitbucket.org")
+GIT_SHORTHAND_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*(?:#.*)?")
+ARCHIVE_SUFFIXES = (".tgz", ".tar.gz", ".tar", ".zip", ".whl")
+GIT_HOST_WARNING = "downloads from a git host, not vetted, and the code can change unless pinned to a commit"
 NO_VALUE = "-"
 SUBSTITUTE = "?"
 CANNOT_READ_TEXT = ("dependency-guard cannot read this command; it may install a package "
@@ -134,11 +142,51 @@ def msg_vet_first(ctx, intent):
                                                     dash=DASH, t=tail)
 
 
+def source_value(intent):
+    """What a `source: other` intent points at: a command carries it as `name`; a manifest carries the
+    key as `name` and the source as `version`."""
+    return intent["version"] or intent["name"]
+
+
+def _spellings(value):
+    """`value` and what is left after a leading `npm:` or a `name@` prefix (`foo@github:u/r`)."""
+    pending, seen = [value], []
+    while pending:
+        current = pending.pop()
+        if current in seen:
+            continue
+        seen.append(current)
+        if current.lower().startswith(NPM_ALIAS_PREFIX):
+            pending.append(current[len(NPM_ALIAS_PREFIX):])
+        at = current.find("@", 1)
+        if at != -1:
+            pending.append(current[at + 1:])
+    return seen
+
+
+def _is_git_spelling(ecosystem, value):
+    lowered = value.lower()
+    if lowered.startswith(GIT_PREFIXES):
+        return True
+    if lowered.startswith(("http://", "https://")):
+        parsed = urllib.parse.urlparse(lowered)
+        host = parsed.hostname or ""
+        return parsed.path.endswith(".git") or any(host == h or host.endswith("." + h) for h in GIT_HOSTS)
+    return (ecosystem == "npm" and GIT_SHORTHAND_RE.fullmatch(value) is not None
+            and not lowered.split("#", 1)[0].endswith(ARCHIVE_SUFFIXES))
+
+
+def is_git_source(intent):
+    """A git URL or git-host shorthand (card, "Not from a registry"). npm's bare `owner/repo` means
+    GitHub; for pip the same shape is a local directory, so it is not counted there."""
+    return any(_is_git_spelling(intent["ecosystem"], spelling) for spelling in _spellings(source_value(intent)))
+
+
 def msg_not_registry(intent):
-    """A command names the source as `name`; a manifest names the key as `name` and the source as `version`."""
     named = clean(intent["name"]) + (" ({})".format(clean(intent["version"])) if intent["version"] else "")
-    return ("dependency-guard: {} {} is not a registry package {} it cannot be vetted; check where it "
+    text = ("dependency-guard: {} {} is not a registry package {} it cannot be vetted; check where it "
             "comes from before approving").format(intent["ecosystem"], named, DASH)
+    return text + (" {} this source {}".format(DASH, GIT_HOST_WARNING) if is_git_source(intent) else "")
 
 
 def msg_requirements_file(intent):

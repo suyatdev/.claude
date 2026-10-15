@@ -241,7 +241,7 @@ a URL segment or file content:
 | Field | Rule | On failure |
 |---|---|---|
 | `ecosystem` | one of the six literals above | hook: treated as a guard failure (`ask`, "broken"); vetter: exit 2, usage message |
-| `name` | `^[A-Za-z0-9._@/-]{1,214}$`; not `.`/`..`; no `..` substring; no leading `-` (it would read as an option to `brew info` and the vetter); no leading or trailing `/`, no `//`. Slash count by ecosystem: `npm` ≤ 1 and only as `@scope/name`; `go` any (module paths, e.g. `golang.org/x/text`); `homebrew` ≤ 2 (`user/tap/formula`); `pypi`, `crates.io`, `rubygems` 0 | hook: `ask` naming the raw value (sanitised, below); vetter: exit 2 |
+| `name` | `^[A-Za-z0-9._@/-]{1,214}$`; not `.`/`..`; no `..` substring; no leading `-` (it would read as an option to `brew info` and the vetter); no leading or trailing `/`, no `//`. Slash count by ecosystem: `npm` ≤ 1 and only as `@scope/name`; `go` any (module paths, e.g. `golang.org/x/text`); `homebrew` ≤ 2 (`user/tap/formula`); `pypi`, `crates.io`, `rubygems` 0 | hook: checked after step 1, on registry intents only (`source: other` skips it, step 0a), `ask` naming the raw value (sanitised, below); vetter: exit 2 |
 | `version` | `is_exact_version(ecosystem, version)` (below). In the hook this **is** step 1: a value that fails it — absent, a range, a dist-tag, or anything malformed such as `2.32.3/../evil` — is unpinned and denied with `MSG_UNPINNED`, so no path is ever built from it. In the vetter it is required, except for `homebrew`, where it must be absent (D8) | hook: step 1 deny; vetter: exit 2 |
 | record path | after joining, `os.path.realpath` must start with the realpath of `hooks/state/vetting/` + `/` | treated as no record (hook); exit 2 (vetter) |
 
@@ -354,9 +354,13 @@ a git-host shorthand (`github:…`, `gitlab:…`, `bitbucket:…`, `gist:…`, o
 `user/repo`, which means GitHub), a tarball path, or a local path → **ask** with a general "not a registry package — cannot be vetted" warning naming the
 value. The same holds wherever such a value sits: after `name@` on an npm-family command line
 (`npm install foo@user/repo`), after `npm:` in an alias (`foo@npm:user/repo`, `"foo":
-"npm:user/repo"`), or as a pip argument containing `/` (pip reads it as a local directory) —
-both classifiers return `source: other` for every one of these forms. For a git URL or a
-git-host shorthand the warning adds: "downloads from a git host, not vetted, and the code can
+"npm:user/repo"`), or as a pip argument with a `/` in its name, before any version operator,
+extra or marker (pip reads it as a local directory; a `/` after the operator, as in
+`requests==2.32.3/../evil`, stays a malformed version, unpinned and denied at step 1) —
+both classifiers return `source: other` for every one of these forms. For a git URL (`git+…`,
+`git://`, `ssh://`, `git@host:`, or an `http(s)://` URL whose host is `github.com`,
+`gitlab.com`, `bitbucket.org` or a subdomain of one, or whose path ends in `.git`) or an npm
+git-host shorthand (a pip `owner/dir` is a local directory, not a shorthand) the warning adds: "downloads from a git host, not vetted, and the code can
 change unless pinned to a commit". `source: other` intents skip name validation: step 0a
 decides them before any name rule applies, so their ask and log line always say "not a
 registry package". No pin check and no record lookup apply: there is no registry version to pin or vet, and a
@@ -870,6 +874,21 @@ Scenario: a pinned -p does not pin the command word
   When Claude runs "npx -p cowsay@1.6.0 cowsay"
   Then the hook exits 2 with MSG_UNPINNED naming cowsay
 
+Scenario: a git-host value after name@ asks and says the code can change
+  When Claude runs "npm install foo@user/repo"
+  Then stdout is the ask object and its reason names "not a registry package"
+  And the reason says the code can change unless pinned to a commit
+
+Scenario: a local directory is not a registry package, and gets no git-host clause
+  When Claude runs "pip install sub/dir"
+  Then stdout is the ask object and its reason names "not a registry package" and "sub/dir"
+  And the reason does not mention a git host
+
+Scenario: a name starting with "-" is asked about, never passed to a tool
+  When Claude writes package.json adding "-x": "1.0.0"
+  Then stdout is the ask object and its reason names the raw value "-x"
+  And vet-dependency given "npm -x 1.0.0" exits 2 and writes nothing
+
 Scenario Outline: a versionless npx is refused in any shape
   When Claude runs "<command>"
   Then the hook exits 2 with MSG_UNPINNED
@@ -1040,7 +1059,7 @@ Scenario: vetter cannot learn a Homebrew version
       `EXEMPT_VALUE_RE` citing `secret_approval.py:261` with `fullmatch` (that module's constant is
       private, and its `$` matches before a trailing newline); `env VET_EXEMPT=x npm i …` gives
       null — not the segment's own prefix assignment, as in `classify-pr-command.py`. `uv add -r`
-      also yields `requirements-file` (same code path; card silent). The test file is 888 lines,
+      also yields `requirements-file` (same code path; card silent). The test file was 888 lines (957 after the 2026-10-14 source-other follow-up),
       over the 800 maximum: Mark chose 2026-10-14 to keep it whole, because a split-out case file
       has no `.test` sibling, so the commit guard's pass receipt would not cover it.
       Re-entry compliance round 2 PASS on blob 5b599570 (b2cf25a).
