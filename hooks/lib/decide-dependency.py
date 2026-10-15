@@ -43,6 +43,7 @@ SUBSTITUTE = "?"
 CANNOT_READ_TEXT = ("dependency-guard cannot read this command; it may install a package "
                     "— check it before approving")
 DASH = "—"
+EVERYTHING = "everything"
 
 # What one intent (or manifest warning) decided. `kind` is what the hook does; `log_decision` is
 # the word written to the log, which is `kind` except for the cannot-read ask.
@@ -201,6 +202,19 @@ def msg_requirements_file(intent):
                                                                        clean(intent["name"]), DASH)
 
 
+def msg_update(intent):
+    """`<form> <name>`: the tool plus the matched table words, then the package or `everything` (an
+    update intent with no package argument is named after its tool)."""
+    name = EVERYTHING if intent["name"] == intent["tool"] else clean(intent["name"])
+    return ("dependency-guard: {} {}: an update or upgrade the guard does not vet {} check what it will "
+            "change before approving").format(clean(intent["update_form"]), name, DASH)
+
+
+def msg_indirect(intent):
+    return ("dependency-guard: xargs {}: the packages come from input the guard cannot read {} check it "
+            "before approving").format(clean(intent["name"]), DASH)
+
+
 def msg_invalid_name(intent):
     return ('dependency-guard: {} "{}" is not a valid package name {} it cannot be vetted; check it '
             "before approving").format(intent["ecosystem"], clean(intent["name"]), DASH)
@@ -266,7 +280,11 @@ def decide_intent(ctx, intent):
         return decision("ask", msg_not_registry(intent), intent)
     if intent["source"] == "requirements-file":
         return decision("ask", msg_requirements_file(intent), intent)
-    if eco != "homebrew" and not intent["pinned"]:
+    if intent["source"] == "update":  # no record to read and no path built: VET_EXEMPT changes nothing
+        return decision("ask", msg_update(intent), intent)
+    if intent["source"] == "indirect":
+        return decision("ask", msg_indirect(intent), intent)
+    if eco !="homebrew" and not intent["pinned"]:
         return decision("deny", msg_unpinned(ctx, intent), intent)
     try:
         vr.validate_name(eco, name)

@@ -171,6 +171,92 @@ def test_decide_intent():
         check_in("homebrew vetter line has no version", "run: /hooks/bin/vet-dependency homebrew wget  ", d.text)
 
 
+def test_update_and_indirect():
+    """Step 0a (card, "Updates, upgrades and indirect installs"): ask, whatever the record or the
+    exemption, and before the unpinned deny that a version-less intent would otherwise hit."""
+    UPDATE_TEXT = "an update or upgrade the guard does not vet"
+    INDIRECT_TEXT = "the packages come from input the guard cannot read"
+    with tempfile.TemporaryDirectory() as store:
+        ctx = D.Context(LIBS, store, NOW, VETTER)
+
+        def update(**over):
+            base = dict(name="zod", version=None, pinned=False, source="update", update_form="npm update")
+            base.update(over)
+            return D.decide_intent(ctx, intent(**base))
+
+        d = update()
+        check("an update is an ask, not the unpinned deny", d.kind, "ask")
+        check_in("update ask carries the card's wording", "npm update zod: " + UPDATE_TEXT + " " + D.DASH
+                 + " check what it will change before approving", d.text)
+        d = update(name="npm", update_form="npm audit fix")
+        check_in("no package named: the ask says everything", "npm audit fix everything: " + UPDATE_TEXT, d.text)
+        check("the log decision of an update ask is ask", d.log_decision, "ask")
+        check("the log carries the ecosystem and the name", (d.ecosystem, d.name, d.version), ("npm", "npm", "-"))
+        d = update(ecosystem="homebrew", tool="brew", name="jq", update_form="brew upgrade")
+        check_in("homebrew update asks too", "brew upgrade jq:", d.text)
+        check_in("a form with flags is printed as given", "uv lock --upgrade everything:",
+                 update(ecosystem="pypi", tool="uv", name="uv", update_form="uv lock --upgrade").text)
+        d = update(exempt="offline")
+        check("VET_EXEMPT changes nothing: still an ask", d.kind, "ask")
+        check("VET_EXEMPT changes nothing: same text", d.text, update().text)
+        write_record(store)
+        check("a fresh record for the same name changes nothing", update().text, d.text)
+        d = update(name="bad name")
+        check_in("an update is not name-validated: it names what was typed", "bad name", d.text)
+        check("an update is not name-validated: ask", d.kind, "ask")
+
+        def indirect(**over):
+            base = dict(name="npm", version=None, pinned=False, tool="npm", source="indirect")
+            base.update(over)
+            return D.decide_intent(ctx, intent(**base))
+
+        d = indirect()
+        check("an xargs install is an ask", d.kind, "ask")
+        check_in("indirect ask carries the card's wording", "xargs npm: " + INDIRECT_TEXT + " " + D.DASH
+                 + " check it before approving", d.text)
+        check("VET_EXEMPT changes nothing for xargs", indirect(exempt="x").text, d.text)
+        check("an indirect intent is not an update ask", UPDATE_TEXT in d.text, False)
+        check("an update intent is not an indirect ask", INDIRECT_TEXT in update().text, False)
+        d = indirect(name="pip", tool="pip", ecosystem="pypi")
+        check_in("the indirect ask names the tool as written", "xargs pip:", d.text)
+        for word in LIBS.install.INSTALL_TOOL_WORDS:
+            got, _ = D.decide_command(ctx, "xargs " + word)
+            check("xargs {} is an ask with the xargs warning, never a guard failure".format(word),
+                  [(x.kind, "xargs {}: ".format(word) in x.text) for x in got], [("ask", True)])
+        got, _ = D.decide_command(ctx, "npm update zod")
+        check("an update log entry: decision, ecosystem, name, version", (got[0].log_decision, got[0].ecosystem,
+              got[0].name, got[0].version), ("ask", "npm", "zod", "-"))
+        with tempfile.TemporaryDirectory() as state:
+            check("it is appended", D.append_log(state, NOW, "sess", got), True)
+            with open(os.path.join(state, D.STATE_LOG)) as handle:
+                fields = handle.read().rstrip("\n").split("\t")
+            check("seven fields", len(fields), 7)
+            check("the line carries ask, ecosystem, name, - and the clause", fields[2:], [
+                "ask", "npm", "zod", "-", got[0].text])
+
+
+def test_update_decisions_end_to_end():
+    """decide_command on whole commands: the strongest decision wins across the intents of a segment."""
+    with tempfile.TemporaryDirectory() as store:
+        ctx = D.Context(LIBS, store, NOW, VETTER)
+
+        def kinds(command):
+            decisions, _ = D.decide_command(ctx, command)
+            return sorted(d.kind for d in decisions)
+
+        check("npm update -> one ask", kinds("npm update"), ["ask"])
+        check("yarn global add left-pad@1.3.0, no record -> deny", kinds("yarn global add left-pad@1.3.0"), ["deny"])
+        check("go get -u m@v1.2.3, no record -> the install denies beside the update ask",
+              kinds("go get -u example.com/m@v1.2.3"), ["ask", "deny"])
+        rc, out = run_emit(D.decide_command(ctx, "go get -u example.com/m@v1.2.3")[0])
+        check("the strongest wins: exit 2", rc, 2)
+        check_in("the deny line is MSG_VET_FIRST", "has no vetting report from the last 7 days", out)
+        check("the update ask is not in the deny output", "an update or upgrade" in out, False)
+        check("xargs npm i -> one ask", kinds("xargs npm i"), ["ask"])
+        check("an unpinned install beside an update still denies", kinds("npm update zod && npm i left-pad"),
+              ["ask", "deny"])
+
+
 def test_git_source():
     def other(name, version=None, eco="npm"):
         return intent(ecosystem=eco, name=name, version=version, pinned=False, source="other")
@@ -249,7 +335,7 @@ def test_session_id():
 
 def main():
     for fn in (test_clean, test_format_age, test_spellings, test_local_copy_advice, test_decide_intent,
-               test_git_source, test_emit, test_logging, test_session_id):
+               test_update_and_indirect, test_update_decisions_end_to_end, test_git_source, test_emit, test_logging, test_session_id):
         fn()
     print("\ndecide-dependency unit: {} passed, {} failed".format(PASSED, FAILED))
     return 1 if FAILED else 0

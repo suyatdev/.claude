@@ -7,8 +7,9 @@ branch: feat/dependency-vetting-guard
 # Dependency vetting guard — scan before anything is installed, then ask
 
 > **Now (2026-10-15): phase implementation — Tasks 0–9 done (code exists, suites green,
-> registered in this branch's `settings.json`, live only after merge); Task 10 is next.** See the
-> frontmatter and Tasks.
+> registered in this branch's `settings.json`, live only after merge); Task 10's ADR 0048 is
+> written, Task 10a (updates/upgrades/xargs ask) is implemented, then Task 10's judge and PR.**
+> See the frontmatter and Tasks.
 >
 > **2026-10-13: phase implementation — gate confirmed.** The history below is the planning
 > record and its "Next:" steps are all done; its "No code exists" is no longer true.
@@ -226,7 +227,8 @@ ecosystem: npm | pypi | crates.io | go | rubygems | homebrew
 name: zod                 # as the registry spells it; npm scope kept (@scope/name)
 version: "3.23.8"         # null when not given
 pinned: true              # is_exact_version(ecosystem, version) — the one definition, below; false for null
-tool: npm                 # argv[0] after wrapper stripping
+tool: npm                 # argv[0] after wrapper stripping, read with program() (lowercased basename); for xargs, the first tool word after it
+update_form: npm update   # update intents ONLY (source: update): the <form> in the ask text; absent on every other intent
 runner: null              # the RUNNERS member that matched, as written (e.g. "pnpm dlx"), or null; fills <runner> in MSG_RUNNER_INSTALLER
 form: add | run           # run = the command form is in RUNNERS (below) — exactly that set; the ask reason says "runs from registry" for run
 source: registry | other | requirements-file | update | indirect  # other = workspace:, file:, link:, a git/http(s)/tarball URL, a git-host shorthand, a local path (./x, ../x, /x); requirements-file = the <file> of `pip -r <file>` (name = the file as written); update / indirect = the "Updates, upgrades and indirect installs" paragraph under Install forms
@@ -324,8 +326,8 @@ one of them silently. A subcommand that changes installed versions but is **not*
 a Known gap (listed there), not covered by this promise. A segment in one of the forms yields one
 intent per package argument, or, with none, one intent whose `name` is the tool as written (it
 updates everything). Each has `source: update` (`source: indirect` for `xargs`), `version: null`,
-`pinned: false`, `form: add`, `tool` = the tool word as written (for `xargs`, the first tool word
-after it), and `ecosystem` from this map, which covers **every** `INSTALL_TOOL_WORDS` member so
+`pinned: false`, `form: add`, `tool` = the tool word read with `program()` (for `xargs`, the first
+tool word after it), and `ecosystem` from this map, looked up by that lowercased `tool`, which covers **every** `INSTALL_TOOL_WORDS` member so
 that an `xargs` intent always has one (a unit test asserts the map's keys equal
 `INSTALL_TOOL_WORDS`): npm, npx, pnpm, pn, pnpx, pnx, yarn, yarnpkg, corepack, bun, bunx → `npm`;
 pip, pip3, python, python3, uv, uvx, poetry, pipx → `pypi`; cargo → `crates.io`; go → `go`; gem
@@ -335,8 +337,10 @@ for installs; the value of uv's `-P <pkg>` / `--upgrade-package <pkg>` (and `=` 
 cargo's `-p <pkg>` / `--package <pkg>` is the package. Each intent is asked at step 0a with:
 - update: `<form> <name>: an update or upgrade the guard does not vet — check what it will change
   before approving`, where `<form>` is the tool as written followed by the words of the matched
-  table entry (`npm update`, `uv lock --upgrade`, `go get -u`, `npm audit fix`), and `<name>` is
-  `everything` when no package is named;
+  table entry, subcommand and flag as typed (`npm up`, `uv lock -P`, `go get -u=patch`, `npm audit
+  fix`), carried in the intent's `update_form`; `<name>` is the package argument as written
+  (`zod@4.0.0` stays `zod@4.0.0`), and the decider writes `everything` whenever `name` equals
+  `tool`, so `npm update npm` and `bun upgrade` also read "everything" (wording only — both ask);
 - indirect: `xargs <tool>: the packages come from input the guard cannot read — check it before
   approving`.
 
@@ -346,6 +350,12 @@ the log only after the sanitising every field gets (Log, under Hook decisions). 
 usual one log line per intent, with decision `ask`, the intent's `ecosystem` and `name`, `-` in
 the `version` field (the value already written for every null version, `NO_VALUE` in
 `decide-dependency.py`), and the ask clause as `reason`.
+
+An `xargs` segment yields exactly **one** indirect intent, however many words follow. An update
+segment carrying `--help` or `-h` anywhere yields **no** update intent (a help call changes
+nothing) — the one exception to "every form in the table asks"; this widens the existing
+help-only rule under "Not installs" for update forms only. For `uv run`, only options before the
+command uv runs are uv's own, so `uv run pytest --upgrade` yields nothing.
 
 These intents are added to the intents the same segment already yields and replace none of them:
 `go get -u m@v1.2.3` is both a pinned install intent (steps 1–3) and an update intent (step 0a), and
@@ -1050,7 +1060,8 @@ Scenario: an update beside a pinned install still reaches the strongest decision
   `find … -exec npm i` and GNU `parallel npm i ::: …` (neither is `xargs`).
   Extending the table is a deliberate edit, not drift.
 - An install inside a script file, a Makefile target, or a `package.json` `scripts` entry.
-- `bash -c "…"`, `sh -c`, `eval "…"` (quoted), backticks — the lexer keeps the body as one token
+- `bash -c "…"`, `sh -c`, `eval "…"` (quoted), backticks — including under `xargs` (`xargs sh -c
+  'npm i {}'`) — the lexer keeps the body as one token
   (`hooks/lib/shell_segments.py:63-69`).
 - Variable indirection (`P=zod; npm i $P@1`).
 - A command substitution inside double quotes or backticks in an ordinary command — e.g.

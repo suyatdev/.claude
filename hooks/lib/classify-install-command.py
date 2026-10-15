@@ -28,6 +28,7 @@ __all__ = ["classify", "is_unreadable", "mentions_install_tool", "is_exact_versi
 ECO_NPM, ECO_PYPI, ECO_CRATES, ECO_GO, ECO_GEMS, ECO_BREW = (
     "npm", "pypi", "crates.io", "go", "rubygems", "homebrew")
 REGISTRY, OTHER, REQUIREMENTS_FILE = "registry", "other", "requirements-file"
+UPDATE, INDIRECT = "update", "indirect"
 
 # The plain-word allowlist for a VET_EXEMPT value. A local copy of the one at
 # hooks/lib/secret_approval.py:261 (_EXEMPT_VALUE_ALLOWED_RE), not an import: that name is private to
@@ -48,6 +49,32 @@ INSTALL_TOOL_WORDS = ("npm", "npx", "pnpm", "pn", "pnpx", "pnx", "yarn", "yarnpk
 _TOOL_WORD_RE = re.compile(
     r"(?<![A-Za-z0-9_.-])(?:{})(?![A-Za-z0-9_.-])".format("|".join(re.escape(w) for w in INSTALL_TOOL_WORDS)),
     re.IGNORECASE)
+
+# Each INSTALL_TOOL_WORDS member's ecosystem (the card's install-forms table). Every update or
+# indirect intent needs one, because the decider validates it before anything else.
+TOOL_ECOSYSTEM = {
+    "npm": ECO_NPM, "npx": ECO_NPM, "pnpm": ECO_NPM, "pn": ECO_NPM, "pnpx": ECO_NPM, "pnx": ECO_NPM,
+    "yarn": ECO_NPM, "yarnpkg": ECO_NPM, "corepack": ECO_NPM, "bun": ECO_NPM, "bunx": ECO_NPM,
+    "pip": ECO_PYPI, "pip3": ECO_PYPI, "python": ECO_PYPI, "python3": ECO_PYPI, "uv": ECO_PYPI, "uvx": ECO_PYPI,
+    "poetry": ECO_PYPI, "pipx": ECO_PYPI, "cargo": ECO_CRATES, "go": ECO_GO, "gem": ECO_GEMS, "brew": ECO_BREW,
+}
+HELP_FLAGS = frozenset(["--help", "-h"])
+# manager -> the subcommand words that update (card, "Updates, upgrades and indirect installs")
+NODE_UPDATE_WORDS = {
+    "npm": frozenset(["update", "u", "up", "upgrade", "udpate"]),
+    "pnpm": frozenset(["update", "up", "upgrade"]),
+    "pn": frozenset(["update", "up", "upgrade"]),
+    "yarn": frozenset(["upgrade", "up", "upgrade-interactive"]),
+    "yarnpkg": frozenset(["upgrade", "up", "upgrade-interactive"]),
+    "bun": frozenset(["update", "upgrade"]),
+}
+YARN_PROGRAMS = frozenset(["yarn", "yarnpkg"])
+PNPM_PROGRAMS = frozenset(["pnpm", "pn"])
+UV_UPGRADE_FLAGS = frozenset(["-U", "--upgrade"])
+UV_UPGRADE_PACKAGE_FLAGS = frozenset(["-P", "--upgrade-package"])
+UV_UPGRADE_GROUP_FLAG = "--upgrade-group"
+UV_UPGRADING_SUBCOMMANDS = frozenset(["lock", "sync", "add", "run"])
+PIPX_UPDATE_WORDS = frozenset(["upgrade", "upgrade-all", "reinstall", "reinstall-all"])
 
 NPM_INSTALL_WORDS = frozenset(["install", "add", "i", "in", "ins", "inst", "insta", "instal", "isnt", "isnta",
                                "isntal", "isntall", "install-test", "it"])
@@ -83,7 +110,8 @@ PIP_VALUE_FLAGS = frozenset([
     "--index-strategy", "--resolution", "--directory", "--project", "--config-file"])
 PYPI_ADD_VALUE_FLAGS = PIP_VALUE_FLAGS | frozenset([
     "--group", "-G", "--optional", "--extra", "-E", "--extras", "-p", "--source", "--index", "--default-index",
-    "--package", "--rev", "--tag", "--branch", "--git", "--path", "--requirements"])
+    "--package", "--rev", "--tag", "--branch", "--git", "--path", "--requirements", "-P", "--upgrade-package",
+    "--upgrade-group"])
 PYPI_RUNNER_VALUE_FLAGS = PYPI_ADD_VALUE_FLAGS | frozenset([
     "--from", "--with", "-w", "--with-requirements", "--with-editable", "--spec", "--pip-args", "--suffix"])
 CARGO_VALUE_FLAGS = frozenset([
@@ -253,6 +281,35 @@ def _brew_parser(spec):
 
 
 # --------------------------------------------------------------------------------------- intents
+def _update_intent(prog, name, update_form):
+    """An update or upgrade: no version the guard can vet. update_form is the tool plus the words of
+    the matched table entry, the <form> of the ask text."""
+    return {"ecosystem": TOOL_ECOSYSTEM[prog], "name": name, "version": None, "pinned": False, "tool": prog,
+            "runner": None, "form": "add", "source": UPDATE, "exempt": None, "via_package_option": False,
+            "update_form": update_form}
+
+
+def _update_intents(prog, form_words, names):
+    """One intent per package, or one named after the tool when there are none (it updates everything)."""
+    form = " ".join([prog] + list(form_words))
+    return [_update_intent(prog, name, form) for name in (names or [prog])]
+
+
+def _plain_update(prog, form_words, rest, value_flags, extra_names=None):
+    """An update form whose packages are the positionals (plus extra_names(items), when given). A help
+    invocation updates nothing."""
+    items, _ = _scan(rest, value_flags)
+    if any(flag in HELP_FLAGS for flag, _value in items):
+        return []
+    names = _positionals(items) + (extra_names(items) if extra_names else [])
+    return _update_intents(prog, form_words, names)
+
+
+def _indirect_intent(tool):
+    return {"ecosystem": TOOL_ECOSYSTEM[tool], "name": tool, "version": None, "pinned": False, "tool": tool,
+            "runner": None, "form": "add", "source": INDIRECT, "exempt": None, "via_package_option": False}
+
+
 def _runner_name(prog, sub=None):
     name = prog if sub is None else "{} {}".format(prog, sub)
     if name not in RUNNERS:
@@ -295,12 +352,32 @@ def _runner_intents(prog, runner, args, ecosystem):
 def _node_manager(prog, args):
     install_words, run_words = NODE_MANAGERS[prog]
     sub, rest = _subcommand(args, NODE_VALUE_FLAGS)
+    words = [sub]
+    if sub == "global" and prog in YARN_PROGRAMS:  # `yarn global add` is `add`, `yarn global upgrade` an update
+        sub, rest = _subcommand(rest, NODE_VALUE_FLAGS)
+        words = ["global", sub]
     if sub in run_words:
         return _runner_intents(prog, _runner_name(prog, sub), rest, ECO_NPM)
+    if sub in NODE_UPDATE_WORDS[prog]:
+        return _plain_update(prog, words, rest, NODE_VALUE_FLAGS)
+    if sub == "audit":
+        return _audit_fix(prog, rest)
     if sub not in install_words:
         return []
     items, _ = _scan(rest, NODE_VALUE_FLAGS)
     return _intents(ECO_NPM, _positionals(items), _parse_npm, prog)
+
+
+def _audit_fix(prog, rest):
+    """npm `audit fix` (any options) and pnpm/pn `audit --fix` rewrite installed versions."""
+    if prog == "npm":
+        fix, fix_rest = _subcommand(rest, NODE_VALUE_FLAGS)
+        return _plain_update(prog, ["audit", "fix"], fix_rest, NODE_VALUE_FLAGS) if fix == "fix" else []
+    if prog in PNPM_PROGRAMS:
+        items, _ = _scan(rest, NODE_VALUE_FLAGS)
+        if any(flag == "--fix" for flag, _value in items):
+            return _plain_update(prog, ["audit", "--fix"], rest, NODE_VALUE_FLAGS)
+    return []
 
 
 def _pip_install(prog, args):
@@ -352,14 +429,32 @@ def _python(prog, args):
     return []
 
 
+def _uv_upgrades(prog, sub, rest):
+    """`uv lock|sync|add|run` carrying an upgrade flag. For `run` only the options before the command
+    are uv's own. The -P/--upgrade-package value is the package; an --upgrade-group value is not."""
+    items, _ = _scan(rest, PYPI_RUNNER_VALUE_FLAGS, first_only=sub == "run")
+    if any(flag in HELP_FLAGS for flag, _value in items):
+        return []
+    triggers = UV_UPGRADE_FLAGS | UV_UPGRADE_PACKAGE_FLAGS | {UV_UPGRADE_GROUP_FLAG}
+    matched = [flag for flag, _value in items if flag in triggers]
+    if not matched:
+        return []
+    packages = [value for flag, value in items if flag in UV_UPGRADE_PACKAGE_FLAGS and value]
+    return _update_intents(prog, [sub, matched[0]], packages)
+
+
 def _uv(prog, args):
     sub, rest = _subcommand(args, PYPI_RUNNER_VALUE_FLAGS)
     if sub == "pip":
         return _pip(prog, rest)
     if sub == "add":
-        return _pypi_add(prog, rest)
+        return _pypi_add(prog, rest) + _uv_upgrades(prog, sub, rest)
+    if sub in UV_UPGRADING_SUBCOMMANDS:
+        return _uv_upgrades(prog, sub, rest)
     if sub == "tool":
         tool_sub, tool_rest = _subcommand(rest, PYPI_RUNNER_VALUE_FLAGS)
+        if tool_sub == "upgrade":
+            return _plain_update(prog, ["tool", "upgrade"], tool_rest, PYPI_RUNNER_VALUE_FLAGS)
         if tool_sub == "run":
             return _runner_intents(prog, _runner_name(prog, "tool run"), tool_rest, ECO_PYPI)
         if tool_sub == "install":
@@ -369,6 +464,8 @@ def _uv(prog, args):
 
 def _poetry(prog, args):
     sub, rest = _subcommand(args, PYPI_ADD_VALUE_FLAGS)
+    if sub == "update":
+        return _plain_update(prog, [sub], rest, PYPI_ADD_VALUE_FLAGS)
     return _pypi_add(prog, rest, allow_at=True) if sub == "add" else []
 
 
@@ -376,13 +473,21 @@ def _pipx(prog, args):
     sub, rest = _subcommand(args, PYPI_RUNNER_VALUE_FLAGS)
     if sub == "run":
         return _runner_intents(prog, _runner_name(prog, "run"), rest, ECO_PYPI)
+    if sub in PIPX_UPDATE_WORDS:
+        return _plain_update(prog, [sub], rest, PYPI_RUNNER_VALUE_FLAGS)
     return _pypi_add(prog, rest) if sub == "install" else []
+
+
+def _cargo_package_values(items):
+    return [value for flag, value in items if flag in ("-p", "--package") and value]
 
 
 def _cargo(prog, args):
     while args and args[0].startswith("+"):  # `cargo +nightly ...` toolchain selector
         args = args[1:]
     sub, rest = _subcommand(args, CARGO_VALUE_FLAGS)
+    if sub == "update":
+        return _plain_update(prog, [sub], rest, CARGO_VALUE_FLAGS, _cargo_package_values)
     if sub not in ("add", "install"):
         return []
     items, _ = _scan(rest, CARGO_VALUE_FLAGS)
@@ -401,11 +506,21 @@ def _go(prog, args):
     if sub not in ("get", "install"):
         return []
     items, _ = _scan(rest, GO_VALUE_FLAGS)
-    return _intents(ECO_GO, _positionals(items), _go_parser, prog)
+    found = _intents(ECO_GO, _positionals(items), _go_parser, prog)
+    upgrade = [flag for flag, _value in items if _is_go_upgrade_flag(flag)]
+    if sub == "get" and upgrade and not any(flag in HELP_FLAGS for flag, _value in items):
+        found += _update_intents(prog, ["get", upgrade[0]], _positionals(items))
+    return found
+
+
+def _is_go_upgrade_flag(flag):
+    return bool(flag) and (flag in ("-u", "--u") or flag.startswith(("-u=", "--u=")))
 
 
 def _gem(prog, args):
     sub, rest = _subcommand(args, GEM_VALUE_FLAGS)
+    if sub == "update":
+        return _plain_update(prog, [sub], rest, GEM_VALUE_FLAGS)
     if sub != "install":
         return []
     if "--" in rest:  # build options follow
@@ -418,6 +533,8 @@ def _gem(prog, args):
 
 def _brew(prog, args):
     sub, rest = _subcommand(args, frozenset())
+    if sub == "upgrade":
+        return _plain_update(prog, [sub], rest, frozenset())
     if sub not in ("install", "reinstall"):
         return []
     items, _ = _scan(rest, frozenset())
@@ -478,12 +595,24 @@ def _strip_wrappers(argv):
     return argv
 
 
+def _xargs(args):
+    """An xargs segment naming an install tool word anywhere after it (card: options are not parsed, so
+    an xargs that merely mentions one also asks -- accepted). <tool> is the first such word."""
+    for word in args:
+        tool = program(word)
+        if tool in INSTALL_TOOL_WORDS:
+            return [_indirect_intent(tool)]
+    return []
+
+
 def _classify_argv(argv):
     argv = _strip_wrappers(argv)
     if not argv:
         return []
     prog, args = program(argv[0]), argv[1:]
     family = _family(prog)
+    if prog == "xargs":
+        return _xargs(args)
     if prog in NODE_MANAGERS:
         return _node_manager(prog, args)
     if prog in WHOLE_PROGRAM_RUNNERS:

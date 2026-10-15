@@ -367,6 +367,60 @@ lacks "Scenario: a local directory gets no git-host clause" "$(ask_reason)" "git
 run "$(write_payload "$PROJ/package.json" '{"name":"app","dependencies":{"-x":"1.0.0"}}')"
 check_ask "Scenario: a Write of package.json adding \"-x\" asks, naming the raw value" "not a valid package name" "-x"
 
+# ---- updates, upgrades and indirect installs (card, Mark 2026-10-15): asked about, never allowed silently
+new_state
+UPDATE_NOTE="an update or upgrade the guard does not vet"
+for c in 'npm update zod@4.0.0' 'npm upgrade zod' 'npm update' 'npm up zod' 'npm u zod' 'npm udpate zod' \
+         'pnpm up zod' 'pnpm update -g' 'pnpm upgrade zod' 'pn up zod' 'yarn upgrade zod' 'yarn up zod' \
+         'yarn upgrade-interactive' 'yarn global upgrade' 'yarnpkg upgrade zod' 'bun update zod' 'bun upgrade' \
+         'uv tool upgrade ruff' 'uv lock --upgrade' 'uv sync -U' 'uv lock --upgrade-package requests' \
+         'poetry update' 'pipx upgrade ruff' 'pipx upgrade-all' 'pipx reinstall ruff' 'pipx reinstall-all' \
+         'cargo update' 'go get -u ./...' 'go get -u=patch' 'gem update rails' 'brew upgrade jq' \
+         'uv lock -P requests' 'uv add -U' 'uv run --upgrade pytest' 'uv sync --upgrade-group dev' 'npm audit fix --force' 'npm audit fix' \
+         'pnpm audit --fix' 'pn audit --fix' 'sudo npm update' 'cd app && brew upgrade' 'corepack pnpm update zod'; do
+  ask_cmd "an update is asked about: $c" "$c" "$UPDATE_NOTE" "check what it will change before approving"
+done
+ask_cmd "an update naming no package says everything" "npm update" "npm update everything: $UPDATE_NOTE"
+ask_cmd "the form is the tool plus the matched words" "uv lock --upgrade" "uv lock --upgrade everything: $UPDATE_NOTE"
+ask_cmd "npm audit fix names its form" "npm audit fix --force" "npm audit fix everything: $UPDATE_NOTE"
+ask_cmd "go get -u names its form" "go get -u ./..." "go get -u ./...: $UPDATE_NOTE"
+ask_cmd "an update naming a package names it" "brew upgrade jq" "brew upgrade jq: $UPDATE_NOTE"
+ask_cmd "VET_EXEMPT changes nothing for an update" "VET_EXEMPT=offline npm update zod" "$UPDATE_NOTE"
+lacks "VET_EXEMPT is not echoed for an update" "$(ask_reason)" "VET_EXEMPT" "$UPDATE_NOTE"
+for c in 'uv lock' 'uv sync' 'uv run pytest' 'brew update' 'npm update --help' 'brew upgrade -h' 'npm audit' 'pnpm audit'; do
+  allow_cmd "not an update, or help only: $c" "$c"
+done
+before="$(log_count)"; run "$(bash_payload "npm update zod")"
+[ $(( $(log_count) - before )) -eq 1 ] && say_ok "an update ask appends exactly one log line" || say_bad "an update ask appends exactly one log line" "gained $(( $(log_count) - before ))"
+case "$(tail -n 1 "$STATE/dependency-guard.log")" in
+  *"${TAB}ask${TAB}npm${TAB}zod${TAB}-${TAB}"*"npm update zod: $UPDATE_NOTE"*) say_ok "the update log line carries ask, ecosystem, name, no version, the reason" ;;
+  *) say_bad "the update log line carries ask, ecosystem, name, no version, the reason" "$(tail -n 1 "$STATE/dependency-guard.log")" ;; esac
+ask_cmd "an install run through xargs is asked about" "xargs npm i" "xargs npm: the packages come from input the guard cannot read" "check it before approving"
+for c in 'xargs npm i' 'xargs -n 1 npm i x' 'xargs -I{} npm i {}' 'xargs sudo npm i' 'sudo xargs npm i'; do
+  ask_cmd "an xargs install is asked about: $c" "$c" "xargs npm: the packages come from input the guard cannot read" "check it before approving"
+done
+ask_cmd "xargs pip install is asked about, not a guard failure" "xargs pip install" "xargs pip: the packages come from input the guard cannot read"
+ask_cmd "xargs corepack pnpm add x names the first tool word" "xargs corepack pnpm add x" "xargs corepack: the packages come from input the guard cannot read"
+ask_cmd "xargs with options and a pipe is asked about" "find . -name package.json | xargs -n1 -I{} pip install {}" "xargs pip: the packages come from input the guard cannot read"
+ask_cmd "VET_EXEMPT changes nothing for xargs" "VET_EXEMPT=x xargs brew install" "xargs brew: the packages come from input the guard cannot read"
+allow_cmd "xargs of something that is not an install tool is untouched" "xargs rm -f"
+new_state
+deny_cmd "yarn global add takes the normal install path (MSG_VET_FIRST)" "yarn global add left-pad@1.3.0" \
+  "has no vetting report from the last 7 days" "vet-dependency npm left-pad 1.3.0"
+deny_cmd "yarn global add without a version is the unpinned deny" "yarn global add left-pad" "npm left-pad has no exact version" "left-pad@<exact-version>"
+mkrec npm left-pad 1.3.0 24 true
+ask_cmd "a vetted yarn global add reaches Mark like pnpm add -g" "yarn global add left-pad@1.3.0" "npm left-pad@1.3.0" "vetted 1 day ago"
+new_state
+deny_cmd "an update beside a pinned install still reaches the strongest decision" "go get -u example.com/m@v1.2.3" \
+  "has no vetting report from the last 7 days" "vet-dependency go example.com/m v1.2.3"
+run "$(bash_payload "go get -u example.com/m@v1.2.3")"
+lacks "the deny output holds the deny only, not the update ask" "$ERR" "$UPDATE_NOTE" "has no vetting report"
+[ "$(printf '%s\n' "$ERR" | wc -l | tr -d ' ')" -eq 1 ] && say_ok "one denied package gives one stderr line" || say_bad "one denied package gives one stderr line" "$ERR"
+deny_cmd "VET_EXEMPT does not turn an update's deny into anything but the unpinned deny" "VET_EXEMPT=x go get -u example.com/m" "example.com/m has no exact version"
+new_state
+mkrec go example.com/m v1.2.3 24 true
+ask_cmd "with a record the go -u command asks, update clause included" "go get -u example.com/m@v1.2.3" "go example.com/m@v1.2.3" "$UPDATE_NOTE"
+
 # ---- log forging
 new_state
 before="$(log_count)"

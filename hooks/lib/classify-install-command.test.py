@@ -84,6 +84,17 @@ def reqfile(name, tool):
     return _intent("pypi", name, None, tool, False, source="requirements-file")
 
 
+def upd(eco, name, tool, update_form):
+    """An update or upgrade intent (card, "Updates, upgrades and indirect installs"). update_form is the
+    tool plus the words of the matched table entry: the <form> of the ask text."""
+    return dict(_intent(eco, name, None, tool, False, source="update"), update_form=update_form)
+
+
+def indirect(eco, tool):
+    """`xargs <tool> ...`: name and tool are both the first install tool word after xargs."""
+    return _intent(eco, tool, None, tool, False, source="indirect")
+
+
 def exempt(intents, value):
     """The same intents, each carrying the segment's VET_EXEMPT value."""
     return [dict(i, exempt=value) for i in intents]
@@ -276,7 +287,8 @@ add_cases("go row", [
      [gomod("golang.org/x/tools/cmd/goimports", "v0.20.0", True)], "go install"),
     ("go get example.com/m@latest", [gomod("example.com/m", "latest", False)], "@latest is not exact"),
     ("go get example.com/m", [gomod("example.com/m", None, False)], "no version"),
-    ("go get -u example.com/m@v1.0.0", [gomod("example.com/m", "v1.0.0", True)], "boolean flag"),
+    ("go get -u example.com/m@v1.0.0", [gomod("example.com/m", "v1.0.0", True), upd("go", "example.com/m@v1.0.0", "go", "go get -u")],
+     "-u: the pinned install intent AND an update intent (card, Updates paragraph)"),
     ("go install -tags foo example.com/m@v1.0.0", [gomod("example.com/m", "v1.0.0", True)], "valued flag"),
     ("go get ./...", [other("go", "./...", "go")], "local path"),
 ])
@@ -315,7 +327,7 @@ none_of("not an install", [
     "uv pip install -e .", "uv add", "poetry add",
     "cargo build", "cargo install", "cargo add", "go build ./...", "go mod download", "go version", "go get",
     "gem install", "brew install", "brew update",
-    "npm run build", "npm update", "npm uninstall zod", "pip uninstall requests", "pip list", "pip freeze",
+    "npm run build", "npm uninstall zod", "pip uninstall requests", "pip list", "pip freeze",
     "git status", "ls -la", "echo hello",
 ], "reinstalls a lockfile/manifest, or runs something that is not an install form")
 
@@ -335,6 +347,216 @@ add_cases("help is not exempt after a package", [
     ("uvx ruff --version", [pypi("ruff", None, False, "uvx", "uvx")], "--version after a uvx package"),
     ("gem install rails --version 7.1.3", [gem("rails", "7.1.3", True)], "--version inside an install is its version"),
 ])
+
+# ---------------------------------------------------------------------------------------------
+# Updates, upgrades and indirect installs (card, Mark 2026-10-15): one update intent per package
+# argument, or one named after the tool when there are none; an xargs segment naming an install
+# tool word is indirect. `upd`'s last argument is the <form> of the ask text: the tool plus the
+# words of the matched table entry.
+# ---------------------------------------------------------------------------------------------
+add_cases("update forms: npm", [("npm {} zod".format(w), [upd("npm", "zod", "npm", "npm " + w)], "alias {!r}".format(w))
+                                for w in ["update", "u", "up", "upgrade", "udpate"]])
+add_cases("update forms: node managers", [
+    ("npm update zod@4.0.0", [upd("npm", "zod@4.0.0", "npm", "npm update")], "the package as written"),
+    ("npm update", [upd("npm", "npm", "npm", "npm update")], "no package: named after the tool (updates everything)"),
+    ("npm update -g", [upd("npm", "npm", "npm", "npm update")], "a boolean flag is not a package"),
+    ("npm update zod left-pad", [upd("npm", "zod", "npm", "npm update"), upd("npm", "left-pad", "npm", "npm update")],
+     "one intent per package"),
+    ("npm update --registry https://r.example.com zod", [upd("npm", "zod", "npm", "npm update")],
+     "a valued flag's value is not a package"),
+    ("npm --prefix app update zod", [upd("npm", "zod", "npm", "npm update")], "a valued flag before the subcommand"),
+    ("npm audit fix", [upd("npm", "npm", "npm", "npm audit fix")], "audit fix"),
+    ("npm audit fix --force", [upd("npm", "npm", "npm", "npm audit fix")], "audit fix with --force"),
+    ("npm audit fix --dry-run --omit dev", [upd("npm", "npm", "npm", "npm audit fix")], "audit fix with options"),
+    ("npm audit", [], "a plain audit changes nothing"),
+    ("npm audit --json", [], "a plain audit with an option"),
+    ("pnpm update zod", [upd("npm", "zod", "pnpm", "pnpm update")], "pnpm update"),
+    ("pnpm up zod", [upd("npm", "zod", "pnpm", "pnpm up")], "pnpm up"),
+    ("pnpm upgrade zod", [upd("npm", "zod", "pnpm", "pnpm upgrade")], "pnpm upgrade"),
+    ("pnpm update -g", [upd("npm", "pnpm", "pnpm", "pnpm update")], "a flag, no package: named after the tool"),
+    ("pnpm update -g zod", [upd("npm", "zod", "pnpm", "pnpm update")], "-g with a package"),
+    ("pnpm audit --fix", [upd("npm", "pnpm", "pnpm", "pnpm audit --fix")], "pnpm audit --fix"),
+    ("pn audit --fix", [upd("npm", "pn", "pn", "pn audit --fix")], "pn audit --fix"),
+    ("pnpm audit", [], "a plain pnpm audit changes nothing"),
+    ("pn up zod", [upd("npm", "zod", "pn", "pn up")], "pn is pnpm"),
+    ("yarn upgrade zod", [upd("npm", "zod", "yarn", "yarn upgrade")], "yarn upgrade"),
+    ("yarn up zod", [upd("npm", "zod", "yarn", "yarn up")], "yarn up"),
+    ("yarn upgrade-interactive", [upd("npm", "yarn", "yarn", "yarn upgrade-interactive")], "yarn upgrade-interactive"),
+    ("yarn global upgrade", [upd("npm", "yarn", "yarn", "yarn global upgrade")], "yarn global upgrade"),
+    ("yarn global upgrade zod", [upd("npm", "zod", "yarn", "yarn global upgrade")], "yarn global upgrade, a package"),
+    ("yarnpkg upgrade zod", [upd("npm", "zod", "yarnpkg", "yarnpkg upgrade")], "yarnpkg is yarn"),
+    ("yarnpkg global upgrade", [upd("npm", "yarnpkg", "yarnpkg", "yarnpkg global upgrade")], "yarnpkg global upgrade"),
+    ("bun update zod", [upd("npm", "zod", "bun", "bun update")], "bun update"),
+    ("bun update", [upd("npm", "bun", "bun", "bun update")], "bun update, no package"),
+    ("bun upgrade", [upd("npm", "bun", "bun", "bun upgrade")], "bun upgrade replaces bun itself: named after the tool"),
+])
+add_cases("update forms: python", [
+    ("uv tool upgrade ruff", [upd("pypi", "ruff", "uv", "uv tool upgrade")], "uv tool upgrade"),
+    ("uv tool upgrade --all", [upd("pypi", "uv", "uv", "uv tool upgrade")], "--all names no package"),
+    ("uv lock --upgrade", [upd("pypi", "uv", "uv", "uv lock --upgrade")], "lock --upgrade"),
+    ("uv lock -U", [upd("pypi", "uv", "uv", "uv lock -U")], "lock -U"),
+    ("uv sync --upgrade", [upd("pypi", "uv", "uv", "uv sync --upgrade")], "sync --upgrade"),
+    ("uv sync -U", [upd("pypi", "uv", "uv", "uv sync -U")], "sync -U"),
+    ("uv add -U", [upd("pypi", "uv", "uv", "uv add -U")], "add -U"),
+    ("uv run --upgrade pytest", [upd("pypi", "uv", "uv", "uv run --upgrade")], "run --upgrade"),
+    ("uv run pytest --upgrade", [], "after the command the flag is the command's own"),
+    ("uv lock --upgrade-package requests", [upd("pypi", "requests", "uv", "uv lock --upgrade-package")],
+     "--upgrade-package names the package"),
+    ("uv lock --upgrade-package=requests", [upd("pypi", "requests", "uv", "uv lock --upgrade-package")],
+     "--upgrade-package= names the package"),
+    ("uv lock -P requests", [upd("pypi", "requests", "uv", "uv lock -P")], "-P names the package"),
+    ("uv run -P requests pytest", [upd("pypi", "requests", "uv", "uv run -P")], "run -P; pytest is not a package"),
+    ("uv add -P requests flask", [pypi("flask", None, False, "uv"), upd("pypi", "requests", "uv", "uv add -P")],
+     "add: flask is an install, requests is the upgrade target"),
+    ("uv sync --upgrade-package requests --upgrade-package urllib3",
+     [upd("pypi", "requests", "uv", "uv sync --upgrade-package"), upd("pypi", "urllib3", "uv", "uv sync --upgrade-package")],
+     "one intent per --upgrade-package"),
+    ("uv lock --upgrade-group dev", [upd("pypi", "uv", "uv", "uv lock --upgrade-group")],
+     "a group value is not a package"),
+    ("uv sync --upgrade-group=dev", [upd("pypi", "uv", "uv", "uv sync --upgrade-group")], "= form, not a package"),
+    ("uv add -U requests", [pypi("requests", None, False, "uv"), upd("pypi", "uv", "uv", "uv add -U")], "add -U with a package"),
+    ("uv add --upgrade requests", [pypi("requests", None, False, "uv"), upd("pypi", "uv", "uv", "uv add --upgrade")],
+     "add --upgrade"),
+    ("uv add --upgrade-package=x requests", [pypi("requests", None, False, "uv"), upd("pypi", "x", "uv", "uv add --upgrade-package")],
+     "add --upgrade-package="),
+    ("uv add --upgrade-group g requests", [pypi("requests", None, False, "uv"), upd("pypi", "uv", "uv", "uv add --upgrade-group")],
+     "add --upgrade-group g: g is not a package"),
+    ("uv run -U pytest", [upd("pypi", "uv", "uv", "uv run -U")], "run -U"),
+    ("uv run --upgrade-group g pytest", [upd("pypi", "uv", "uv", "uv run --upgrade-group")], "run --upgrade-group g"),
+    ("uv run --upgrade-package x pytest", [upd("pypi", "x", "uv", "uv run --upgrade-package")], "run --upgrade-package x"),
+    ("uv run --upgrade-package=x pytest", [upd("pypi", "x", "uv", "uv run --upgrade-package")], "run --upgrade-package=x"),
+    ("uv sync --upgrade-package=x", [upd("pypi", "x", "uv", "uv sync --upgrade-package")], "sync --upgrade-package=x"),
+    ("uv sync -P x", [upd("pypi", "x", "uv", "uv sync -P")], "sync -P x"),
+    ("uv sync --upgrade-group g", [upd("pypi", "uv", "uv", "uv sync --upgrade-group")], "sync --upgrade-group g"),
+    ("uv lock --upgrade-group=g", [upd("pypi", "uv", "uv", "uv lock --upgrade-group")], "lock --upgrade-group= : everything"),
+    ("uv lock --upgrade-group g", [upd("pypi", "uv", "uv", "uv lock --upgrade-group")], "lock --upgrade-group g"),
+    ("uv lock --upgrade", [upd("pypi", "uv", "uv", "uv lock --upgrade")], "lock --upgrade"),
+    ("uv lock", [], "plain lock is a lockfile operation, allowed"),
+    ("uv sync", [], "plain sync is allowed"),
+    ("uv run pytest", [], "plain run is allowed"),
+    ("uv sync --frozen", [], "a flag that is not an upgrade"),
+    ("uv lock --check", [], "a flag that is not an upgrade"),
+    ("poetry update", [upd("pypi", "poetry", "poetry", "poetry update")], "poetry update"),
+    ("poetry update requests", [upd("pypi", "requests", "poetry", "poetry update")], "poetry update with a package"),
+    ("pipx upgrade ruff", [upd("pypi", "ruff", "pipx", "pipx upgrade")], "pipx upgrade"),
+    ("pipx upgrade-all", [upd("pypi", "pipx", "pipx", "pipx upgrade-all")], "pipx upgrade-all"),
+    ("pipx reinstall ruff", [upd("pypi", "ruff", "pipx", "pipx reinstall")], "pipx reinstall"),
+    ("pipx reinstall-all", [upd("pypi", "pipx", "pipx", "pipx reinstall-all")], "pipx reinstall-all"),
+])
+add_cases("update forms: cargo, go, gem, brew", [
+    ("cargo update", [upd("crates.io", "cargo", "cargo", "cargo update")], "cargo update"),
+    ("cargo update serde", [upd("crates.io", "serde", "cargo", "cargo update")], "cargo update with a package"),
+    ("cargo update --package serde", [upd("crates.io", "serde", "cargo", "cargo update")], "--package names the package"),
+    ("cargo update --package=serde", [upd("crates.io", "serde", "cargo", "cargo update")], "--package= names the package"),
+    ("cargo update -p serde", [upd("crates.io", "serde", "cargo", "cargo update")], "-p names the package"),
+    ("cargo +nightly update", [upd("crates.io", "cargo", "cargo", "cargo update")], "toolchain selector"),
+    ("go get -u", [upd("go", "go", "go", "go get -u")], "-u with no module: named after the tool"),
+    ("go get -u ./...", [other("go", "./...", "go"), upd("go", "./...", "go", "go get -u")], "-u over a path"),
+    ("go get -u=patch example.com/m",
+     [gomod("example.com/m", None, False), upd("go", "example.com/m", "go", "go get -u=patch")], "-u=patch"),
+    ("go get -u example.com/m@v1.2.3",
+     [gomod("example.com/m", "v1.2.3", True), upd("go", "example.com/m@v1.2.3", "go", "go get -u")],
+     "both: a pinned install intent and an update intent"),
+    ("go get example.com/m@v1.2.3", [gomod("example.com/m", "v1.2.3", True)], "without -u, unchanged"),
+    ("go install -u example.com/m@v1.2.3", [gomod("example.com/m", "v1.2.3", True)], "only `go get` carries -u"),
+    ("gem update rails", [upd("rubygems", "rails", "gem", "gem update")], "gem update"),
+    ("gem update", [upd("rubygems", "gem", "gem", "gem update")], "gem update, no package"),
+    ("brew upgrade jq", [upd("homebrew", "jq", "brew", "brew upgrade")], "brew upgrade"),
+    ("brew upgrade", [upd("homebrew", "brew", "brew", "brew upgrade")], "brew upgrade, no package"),
+    ("brew upgrade --cask firefox", [upd("homebrew", "firefox", "brew", "brew upgrade")], "a flag"),
+    ("brew update", [], "brew update refreshes the index, it upgrades nothing"),
+])
+add_cases("update forms: wrappers and chains", [
+    ("sudo npm update zod", [upd("npm", "zod", "npm", "npm update")], "sudo"),
+    ("env FOO=1 timeout 5 npm update", [upd("npm", "npm", "npm", "npm update")], "env and timeout"),
+    ("time npm update zod", [upd("npm", "zod", "npm", "npm update")], "a shell_segments wrapper"),
+    ("cd app && brew upgrade jq", [upd("homebrew", "jq", "brew", "brew upgrade")], "a chained segment"),
+    ("corepack pnpm update zod", [upd("npm", "zod", "pnpm", "pnpm update")], "through corepack"),
+    ("/usr/local/bin/NPM update zod", [upd("npm", "zod", "npm", "npm update")], "path and case"),
+    ("npm update zod && pip install requests==2.32.3",
+     [upd("npm", "zod", "npm", "npm update"), pypi("requests", "2.32.3", True)], "each segment on its own"),
+    ("VET_EXEMPT=x npm update zod", exempt([upd("npm", "zod", "npm", "npm update")], "x"),
+     "reported like any intent; the decider ignores it"),
+])
+none_of("update forms: help only", ["npm update --help", "npm update -h", "pnpm up --help", "brew upgrade --help",
+                                     "cargo update -h", "gem update --help", "uv tool upgrade --help",
+                                     "go get -u --help", "bun upgrade --help", "npm audit fix --help",
+                                     "pnpm audit --fix --help"],
+        "a help invocation updates nothing")
+add_cases("indirect: xargs", [
+    ("xargs npm i", [indirect("npm", "npm")], "the card's scenario"),
+    ("xargs -n 1 npm i x", [indirect("npm", "npm")], "options are not parsed: -n 1 does not hide npm"),
+    ("xargs -I{} npm i {}", [indirect("npm", "npm")], "-I{}"),
+    ("xargs sudo npm i", [indirect("npm", "npm")], "a wrapper after xargs"),
+    ("find . -name x | xargs npm i", [indirect("npm", "npm")], "after a pipe"),
+    ("xargs -n1 pip install", [indirect("pypi", "pip")], "an attached option value"),
+    ("xargs -I % brew install %", [indirect("homebrew", "brew")], "-I with a separate value"),
+    ("xargs -0 -t cargo add", [indirect("crates.io", "cargo")], "boolean options"),
+    ("xargs --max-args 2 gem install", [indirect("rubygems", "gem")], "a long option with a separate value"),
+    ("xargs -- go get", [indirect("go", "go")], "-- ends the options"),
+    ("xargs npm --version", [indirect("npm", "npm")], "whatever the subcommand"),
+    ("xargs pnpm", [indirect("npm", "pnpm")], "whatever the subcommand, even none"),
+    ("sudo xargs npm i", [indirect("npm", "npm")], "behind a wrapper"),
+    ("xargs /usr/bin/NPM i", [indirect("npm", "npm")], "path and case folded by program()"),
+    ("xargs uvx ruff", [indirect("pypi", "uvx")], "a runner word"),
+    ("xargs pip3 install x", [indirect("pypi", "pip3")], "pip3 is in INSTALL_TOOL_WORDS"),
+    ("xargs echo npm", [indirect("npm", "npm")], "any later word counts (accepted over-ask)"),
+    ("xargs npm pip", [indirect("npm", "npm")], "<tool> is the first such word"),
+    ("xargs pip install", [indirect("pypi", "pip")], "the card's pip scenario"),
+    ("xargs corepack pnpm add x", [indirect("npm", "corepack")], "corepack is the first tool word"),
+    ("xargs python3 -m pip install x", [indirect("pypi", "python3")], "python3"),
+    ("xargs echo", [], "not an install tool"),
+    ("xargs", [], "no command"),
+    ("xargs -n1", [], "options only"),
+    ("xargs rm -f", [], "not an install tool"),
+    ("echo npm", [], "no xargs, no intent"),
+])
+
+
+add_check("ecosystem map: its keys are exactly INSTALL_TOOL_WORDS", lambda: (
+    set(_MOD.TOOL_ECOSYSTEM) == set(_MOD.INSTALL_TOOL_WORDS),
+    "map-only {} words-only {}".format(sorted(set(_MOD.TOOL_ECOSYSTEM) - set(_MOD.INSTALL_TOOL_WORDS)),
+                                        sorted(set(_MOD.INSTALL_TOOL_WORDS) - set(_MOD.TOOL_ECOSYSTEM)))))
+_EXPECTED_ECOSYSTEM = {"npm": "npm", "npx": "npm", "pnpm": "npm", "pn": "npm", "pnpx": "npm", "pnx": "npm",
+                       "yarn": "npm", "yarnpkg": "npm", "corepack": "npm", "bun": "npm", "bunx": "npm",
+                       "pip": "pypi", "pip3": "pypi", "python": "pypi", "python3": "pypi", "uv": "pypi",
+                       "uvx": "pypi", "poetry": "pypi", "pipx": "pypi", "cargo": "crates.io", "go": "go",
+                       "gem": "rubygems", "brew": "homebrew"}
+add_check("ecosystem map: every value is the card's", lambda: (
+    dict(_MOD.TOOL_ECOSYSTEM) == _EXPECTED_ECOSYSTEM, "got {!r}".format(dict(_MOD.TOOL_ECOSYSTEM))))
+
+
+def _every_tool_word_yields_an_indirect_intent():
+    """The decider validates the ecosystem before anything else: an indirect intent for a tool word
+    with no ecosystem would be a guard failure, not an ask."""
+    bad = []
+    for word in _MOD.INSTALL_TOOL_WORDS:
+        got = classify("xargs {}".format(word))
+        if (len(got) != 1 or got[0]["source"] != "indirect" or got[0]["name"] != word or got[0]["tool"] != word
+                or got[0]["ecosystem"] != _EXPECTED_ECOSYSTEM[word]):
+            bad.append(word)
+    return not bad, "no indirect intent for: {}".format(bad)
+
+
+add_check("indirect: every INSTALL_TOOL_WORDS member yields an indirect intent",
+          _every_tool_word_yields_an_indirect_intent)
+add_cases("yarn global add", [
+    ("yarn global add left-pad@1.3.0", [npm("left-pad", "1.3.0", True, "yarn")], "read as add: a pinned npm intent"),
+    ("yarnpkg global add left-pad@1.3.0", [npm("left-pad", "1.3.0", True, "yarnpkg")], "yarnpkg too"),
+    ("yarn global add left-pad", [npm("left-pad", None, False, "yarn")], "unpinned"),
+    ("yarn global add", [], "no package"),
+    ("yarn global list", [], "not an install"),
+    ("yarn global remove left-pad", [], "not an install"),
+])
+_UPDATE_KEYS = ["ecosystem", "name", "version", "pinned", "tool", "runner", "form", "source", "exempt",
+                "via_package_option", "update_form"]
+add_check("shape: an update intent carries the 10 contract keys plus update_form; an indirect one the 10 only", lambda: (
+    all(sorted(i) == sorted(_UPDATE_KEYS) for i in classify("npm update"))
+    and all(sorted(i) == sorted(_UPDATE_KEYS[:-1]) for i in classify("xargs npm i")),
+    "update_form is on update intents only"))
+add_check("shape: update_form of `go get -u m` update intent", lambda: (
+    [i["update_form"] for i in classify("go get -u m") if i["source"] == "update"] == ["go get -u"], "got {!r}".format(
+        classify("go get -u m"))))
 
 # ---------------------------------------------------------------------------------------------
 # Wrappers, chaining, spelling of the tool name
