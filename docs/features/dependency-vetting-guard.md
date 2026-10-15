@@ -355,7 +355,8 @@ a git-host shorthand (`github:…`, `gitlab:…`, `bitbucket:…`, `gist:…`, o
 shorthand has exactly one shape, `NPM_GIT_SHORTHAND_RE` in `vetting_record.py`, used by both
 classifiers and by the git-host warning check: owner `[A-Za-z0-9][A-Za-z0-9-]*` (a GitHub
 account name — letters, digits and hyphens, no dots), `/`, repo `[A-Za-z0-9._-]+`, then an
-optional `#<ref>`; the whole value must match. So `foo@1.2.3/evil` is not a shorthand (`1.2.3`
+optional `#` followed by any ref text, possibly empty (`user/repo#` counts); the whole value must
+match. So `foo@1.2.3/evil` is not a shorthand (`1.2.3`
 cannot be an account name): it is a malformed version, unpinned, denied at step 1, on the
 command line and in `package.json` alike. Values of that kind → **ask** with a general "not a registry package — cannot be vetted" warning naming the
 value. The same holds wherever such a value sits: after `name@` on an npm-family command line
@@ -885,6 +886,15 @@ Scenario: a git-host value after name@ asks and says the code can change
   Then stdout is the ask object and its reason names "not a registry package"
   And the reason says the code can change unless pinned to a commit
 
+Scenario: a dot-named GitHub repo is a shorthand and is asked about
+  When Claude runs "npm install user/.github"
+  Then stdout is the ask object and its reason names "not a registry package"
+  And the reason says the code can change unless pinned to a commit
+
+Scenario: a version with a slash is not a shorthand
+  When Claude runs "npm install foo@1.2.3/evil"
+  Then the hook exits 2 with MSG_UNPINNED naming foo
+
 Scenario: a local directory is not a registry package, and gets no git-host clause
   When Claude runs "pip install sub/dir"
   Then stdout is the ask object and its reason names "not a registry package" and "sub/dir"
@@ -1088,9 +1098,12 @@ Scenario: vetter cannot learn a Homebrew version
       `NPM_GIT_SHORTHAND_RE`; Mark chose 2026-10-14 that `user/.github` is a shorthand and is
       asked about, not refused. `@scope/name` values remain registry values.)
       All three modules moved onto `NPM_GIT_SHORTHAND_RE` 2026-10-14 (vetting_record 716/0,
-      install 987/0, manifest 388/0, decide 117/0); a bare `#` ref counts. A bare
-      `npm install user.name/repo`, `a/b/c` or `user/repo@1.0.0` is now an unpinned registry
-      intent (deny) — not a shorthand — where the old looser install rule had asked.
+      install 987/0, manifest 388/0, decide 117/0). Measured with the hook at a5545bf (main
+      session, isolated state dir): `npm install user.name/repo` and `npm install
+      foo@1.2.3/evil` → exit 2, MSG_UNPINNED (not a shorthand); `npm install user/repo@1.0.0` →
+      ask, "not a valid package name" (pinned, then the name row); `npm install user/.github` →
+      ask, not a registry package, with the git-host clause. The old looser install rule had
+      asked about the first one.
 - [ ] 5. `dependency-guard.sh` + `dependency-guard.test.sh`: every Scenario above that concerns
       the hook, using real `PreToolUse` payloads with `hook_event_name`, and the broken-guard
       paths (python3 off `PATH`, a lib missing).
