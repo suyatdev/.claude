@@ -319,14 +319,28 @@ installed here, so it was not run.)
 implementation-stage observability judge measured eleven such commands (`npm update`, `brew
 upgrade`, `yarn global add`, `xargs npm i`, …) allowed with no output and no log line. They change
 which version is installed, but name no version the guard can vet, or name one the tool need not
-honour, so v1 does not vet them: it **asks**, and never allows them silently. A segment in one of
-the forms below yields one intent per package argument, or, with none, one intent whose `name` is
-the tool as written (it updates everything). Each has `source: update` (`source: indirect` for
-`xargs`), `version: null`, `pinned: false`, `form: add`, and is asked at step 0a with:
-- update: `<tool> <subcommand> <name>: an update or upgrade the guard does not vet — check what it
-  will change before approving` (`<name>` is `everything` when no package is named);
+honour, so v1 does not vet them: it **asks** about every form in the table below and never allows
+one of them silently. A subcommand that changes installed versions but is **not** in the table is
+a Known gap (listed there), not covered by this promise. A segment in one of the forms yields one
+intent per package argument, or, with none, one intent whose `name` is the tool as written (it
+updates everything). Each has `source: update` (`source: indirect` for `xargs`), `version: null`,
+`pinned: false`, `form: add`, and `ecosystem` taken from the tool's row in the install-forms table
+(npm, pnpm, pn, yarn, yarnpkg, bun → `npm`; uv, poetry, pipx → `pypi`; cargo → `crates.io`; go →
+`go`; gem → `rubygems`; brew → `homebrew`). A package argument is a word that is neither an option
+nor an option's value, as for installs; for `uv`, the value of `--upgrade-package <pkg>` /
+`--upgrade-package=<pkg>` is the package. Each intent is asked at step 0a with:
+- update: `<form> <name>: an update or upgrade the guard does not vet — check what it will change
+  before approving`, where `<form>` is the tool as written followed by the words of the matched
+  table entry (`npm update`, `uv lock --upgrade`, `go get -u`, `npm audit fix`), and `<name>` is
+  `everything` when no package is named;
 - indirect: `xargs <tool>: the packages come from input the guard cannot read — check it before
   approving`.
+
+Like `source: other`, these intents skip name validation (step 0a decides them before any name
+rule applies, and they build no path and look up no record); the name appears in the ask text and
+the log only after the sanitising every field gets (Log, under Hook decisions). Each writes the
+usual one log line per intent, with decision `ask`, the intent's `ecosystem` and `name`, the
+`version` field written as for any null version, and the ask clause as `reason`.
 
 These intents are added to the intents the same segment already yields and replace none of them:
 `go get -u m@v1.2.3` is both a pinned install intent (steps 1–3) and an update intent (step 0a), and
@@ -334,18 +348,18 @@ the strongest decision wins. `VET_EXEMPT` changes nothing here, because there is
 
 | Tool | Update forms | Where the spelling comes from |
 |---|---|---|
-| npm | `update` and its aliases `u`, `up`, `upgrade`, `udpate` | `npm help update`, npm 12.0.1 |
-| pnpm, pn | `update`, `up`, `upgrade`, with or without `-g` | `pnpm update --help`, pnpm 10.34.5 |
+| npm | `update` and its aliases `u`, `up`, `upgrade`, `udpate`; `audit fix`, with any options (`--force` included) | `npm help update`, `npm help audit`, npm 12.0.1 |
+| pnpm, pn | `update`, `up`, `upgrade`, with or without `-g`; `audit --fix` | `pnpm update --help`, `pnpm audit --help`, pnpm 10.34.5 |
 | yarn, yarnpkg | `upgrade`, `up`, `upgrade-interactive`, `global upgrade` | yarn documentation; not installed here, not run |
 | bun | `update`; `upgrade` (replaces bun itself) | bun documentation; not installed here, not run |
-| uv | `tool upgrade`; `lock` or `sync` carrying `-U`, `--upgrade` or `--upgrade-package` | `uv tool --help`, `uv lock --help`, uv 0.11.28 |
+| uv | `tool upgrade`; `lock`, `sync`, `add` or `run` carrying `-U`, `--upgrade`, `-P <pkg>`, `--upgrade-package <pkg>` or `--upgrade-group <group>` (`=` forms too; the `-P`/`--upgrade-package` value is the package, a `--upgrade-group` value is not) | `uv tool --help`, `uv lock --help`, `uv run --help`, `uv add --help`, uv 0.11.28 |
 | poetry | `update` | poetry documentation; not installed here, not run |
 | pipx | `upgrade`, `upgrade-all`, `reinstall`, `reinstall-all` | pipx documentation; not installed here, not run |
 | cargo | `update` | cargo documentation; not installed here, not run |
 | go | `get` carrying `-u` or `-u=patch` | `go help get` |
 | gem | `update` | `gem help update` |
 | brew | `upgrade` | `brew help upgrade` |
-| `xargs` | `xargs [options] <tool> …` where `<tool>` is in `INSTALL_TOOL_WORDS` → `source: indirect`, whatever the subcommand | — |
+| `xargs` | an `xargs` segment in which any later word, read with `program()`, is in `INSTALL_TOOL_WORDS` → `source: indirect`, whatever the subcommand; `<tool>` is the first such word. xargs options are **not** parsed, so `xargs -n 1 npm i` and `xargs -I{} npm i {}` both match (an `xargs` that installs nothing but names a tool word also asks — accepted) | — |
 
 `yarn global add` / `yarnpkg global add` is **not** in this table: it is read as `add`, so it takes
 the normal install path (steps 1–3) like `pnpm add -g`.
@@ -991,13 +1005,22 @@ Scenario Outline: an update or upgrade is asked about, never allowed silently (M
     | yarn up zod             |
     | bun update zod          |
     | uv lock --upgrade       |
+    | uv lock -P requests     |
+    | npm audit fix --force   |
+    | pnpm audit --fix        |
     | gem update rails        |
     | brew upgrade jq         |
     | go get -u ./...         |
 
-Scenario: an install run through xargs is asked about
-  When Claude runs "xargs npm i"
+Scenario Outline: an install run through xargs is asked about, whatever its options or wrappers
+  When Claude runs "<command>"
   Then the hook prints an ask whose reason contains "the packages come from input the guard cannot read"
+  Examples:
+    | command               |
+    | xargs npm i           |
+    | xargs -n 1 npm i x    |
+    | xargs -I{} npm i {}   |
+    | xargs sudo npm i      |
 
 Scenario: yarn global add takes the normal install path
   Given no vetting record exists for npm left-pad 1.3.0
@@ -1012,6 +1035,11 @@ Scenario: an update beside a pinned install still reaches the strongest decision
 
 ## Known gaps — disclosed, not fixed in v1
 
+- A subcommand that changes installed versions but is not in the update-forms table (Install forms,
+  "Updates, upgrades and indirect installs") is allowed silently. Measured or named by the
+  2026-10-15 judges: `uv self update`, `pnpm self-update`, `go mod tidy`, `uv pip sync`, Ruby's
+  `bundle` (not a recognised tool at all), and `find … -exec npm i` (`find` is not `xargs`).
+  Extending the table is a deliberate edit, not drift.
 - An install inside a script file, a Makefile target, or a `package.json` `scripts` entry.
 - `bash -c "…"`, `sh -c`, `eval "…"` (quoted), backticks — the lexer keeps the body as one token
   (`hooks/lib/shell_segments.py:63-69`).
@@ -1245,7 +1273,8 @@ Scenario: an update beside a pinned install still reaches the strongest decision
       `secret-command-guard.sh`; left as is (not this card's).
 - [ ] 10. ADR under `docs/decisions/` for the guard (a new enforcement hook, as ADR 0039 was for
       secret-command-guard): D1–D8, D9 (adopted, then dropped after round 7, and why), the
-      cannot-read rule, `MSG_RUNNER_INSTALLER`, and the speed-bump boundary. Take the
+      cannot-read rule, `MSG_RUNNER_INSTALLER`, the speed-bump boundary, and (2026-10-15) the
+      update/upgrade/xargs ask. Task 10a runs between the ADR and the judge + PR steps. Take the
       next free number from `origin/main` at write time, not local `main`. Then the observability
       judge on the implementation; PR.
 - [ ] 10a. Updates, upgrades and indirect installs → ask (Mark, 2026-10-15, after the
