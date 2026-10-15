@@ -6,8 +6,9 @@ branch: feat/dependency-vetting-guard
 
 # Dependency vetting guard — scan before anything is installed, then ask
 
-> **Now (2026-10-15): phase implementation — Tasks 0–7 done (code exists, suites green, not yet
-> registered in `settings.json`); Task 8 is next.** See the frontmatter and Tasks.
+> **Now (2026-10-15): phase implementation — Tasks 0–9 done (code exists, suites green,
+> registered in this branch's `settings.json`, live only after merge); Task 10 is next.** See the
+> frontmatter and Tasks.
 >
 > **2026-10-13: phase implementation — gate confirmed.** The history below is the planning
 > record and its "Next:" steps are all done; its "No code exists" is no longer true.
@@ -1155,12 +1156,24 @@ Scenario: vetter cannot learn a Homebrew version
       sentence (⚠️ would make every non-npm package permanently yellow); ⛔ = any `stop`, ⚠️ =
       any `caution`. Mark also chose to add a `vetting-dependencies` line to the CLAUDE.md
       Skills Catalog.
-- [ ] 8. Vet osv-scanner 2.6.0 with the new flow; show Mark the report; install only on approval,
+- [x] 8. Vet osv-scanner 2.6.0 with the new flow; show Mark the report; install only on approval,
       from the release asset named in Toolchain after its SHA-256 matches `osv-scanner_SHA256SUMS`.
-- [ ] 9. Register in `settings.json` (`PreToolUse` `Bash` group after `secret-command-guard`, and the
+      Done 2026-10-15. Vetted as the Go module `github.com/google/osv-scanner/v2` `v2.6.0`
+      (proxy.golang.org `@v/v2.6.0.info`: published 2026-09-14, tag commit `e840a6e8`):
+      0 stop / 0 caution, `direct_vulns` ok (0 advisories), the other 7 checks `not_run` (go in v1).
+      Mark approved the install after reading that. `osv-scanner_darwin_arm64` matched its line in
+      `osv-scanner_SHA256SUMS` (`shasum -a 256 -c`: OK, `98c460dc…56b4`); installed `0755` to
+      `~/.local/bin/osv-scanner`; `--version` prints 2.6.0, commit `e840a6e8…`, matching the tag.
+      Before the install `VET_LIVE_SMOKE=1` gave 103/0/0 with zod `INCOMPLETE: transitive_vulns:
+      osv-scanner not on PATH`; after it, 103/0/0 with no INCOMPLETE line.
+- [x] 9. Register in `settings.json` (`PreToolUse` `Bash` group after `secret-command-guard`, and the
       `Edit|Write|NotebookEdit` group) and `hooks/README.md`. `hooks/verify-hook-wiring.sh` keeps
       no list of its own — it compares live wiring with the committed `settings.json` — so the
       check is that it prints nothing at the next session start after merge.
+      Done 2026-10-15: last entry in both groups (after `secret-command-guard.sh` and
+      `scan-secrets.sh`); JSON parses; README section added. The after-merge check is Task 11's.
+      The README's "registered today" list was already missing `worktree-guard.sh` and
+      `secret-command-guard.sh`; left as is (not this card's).
 - [ ] 10. ADR under `docs/decisions/` for the guard (a new enforcement hook, as ADR 0039 was for
       secret-command-guard): D1–D8, D9 (adopted, then dropped after round 7, and why), the
       cannot-read rule, `MSG_RUNNER_INSTALLER`, and the speed-bump boundary. Take the
