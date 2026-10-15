@@ -1300,13 +1300,17 @@ Scenario: an update beside a pinned install still reaches the strongest decision
       `scan-secrets.sh`); JSON parses; README section added. The after-merge check is Task 11's.
       The README's "registered today" list was already missing `worktree-guard.sh` and
       `secret-command-guard.sh`; left as is (not this card's).
-- [ ] 10. ADR under `docs/decisions/` for the guard (a new enforcement hook, as ADR 0039 was for
+- [x] 10. ADR under `docs/decisions/` for the guard (a new enforcement hook, as ADR 0039 was for
       secret-command-guard): D1–D8, D9 (adopted, then dropped after round 7, and why), the
       cannot-read rule, `MSG_RUNNER_INSTALLER`, the speed-bump boundary, and (2026-10-15) the
       update/upgrade/xargs ask. Task 10a runs between the ADR and the judge + PR steps. Take the
       next free number from `origin/main` at write time, not local `main`. Then the observability
       judge on the implementation; PR.
-- [ ] 10a. Updates, upgrades and indirect installs → ask (Mark, 2026-10-15, after the
+      Done 2026-10-15: ADR 0048 (0f2e172); observability judge implementation r1 medium (11 silent
+      update forms → Task 10a), r2 low, r3 low at 4d3eab7; compliance re-entry 4 round 2 PASS at
+      blob a751836e; draft PR #109 opened at 4d3eab7. Two r3 follow-ups are listed in the PR body
+      (`npm -h update` wording; `yarn workspace <name> upgrade` missing from Known gaps).
+- [x] 10a. Updates, upgrades and indirect installs → ask (Mark, 2026-10-15, after the
       implementation-stage observability judge measured 11 allowed silently): classifier yields
       `source: update` / `source: indirect` intents and reads `yarn global add` as `add`; decider
       asks at step 0a; tests first for every row of the update-forms table **and every flag and
@@ -1314,6 +1318,7 @@ Scenario: an update beside a pinned install still reaches the strongest decision
       --upgrade-package=x`, `uv lock -P x`), the new scenarios, the ecosystem map's coverage of
       `INSTALL_TOOL_WORDS`, and the log fields of one update ask. Then compliance judge on the
       spec change and observability judge round 2.
+      Done 2026-10-15 (7c6d5f0, 4d3eab7): classifier 987→1137, decider 117→170, guard 223→310.
 - [ ] 11. After merge: compare primary blobs to the merge commit; one live install attempt
       end-to-end; record under `## Verification`.
       Before the primary pulls the merge, run `git status` there: on 2026-10-09 it held an
