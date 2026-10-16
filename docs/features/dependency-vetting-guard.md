@@ -1319,7 +1319,7 @@ Scenario: an update beside a pinned install still reaches the strongest decision
       `INSTALL_TOOL_WORDS`, and the log fields of one update ask. Then compliance judge on the
       spec change and observability judge round 2.
       Done 2026-10-15 (7c6d5f0, 4d3eab7): classifier 987→1137, decider 117→170, guard 223→310.
-- [ ] 11. After merge: compare primary blobs to the merge commit; one live install attempt
+- [x] 11. After merge: compare primary blobs to the merge commit; one live install attempt
       end-to-end; record under `## Verification`.
       Before the primary pulls the merge, run `git status` there: on 2026-10-09 it held an
       uncommitted `settings.json` (and `rules/core-conduct.md`) of unknown owner. Ask Mark how to
@@ -1351,4 +1351,42 @@ Scenario: an update beside a pinned install still reaches the strongest decision
   two on-disk assertions also fail against a non-executable copy passed through
   `DEPENDENCY_GUARD_HOOK`. `verify-hook-wiring.sh` checks the mode at session start, so the next
   session would have flagged it; this one would not.
-- **Live install attempt:** not yet run. It needs the guard able to start in the primary.
+- **Live install attempt:** this was first blocked by the defect above. It ran after the fix
+  merged as #110 (`6ebffbc`) and Mark pulled, which left the primary HEAD at `6ebffbc` and the
+  hook at `-rwxr-xr-x`. All of it was in a scratch dir, through the session's own Bash tool, so
+  the registered hook decided each step, as shown in
+  `hooks/state/dependency-guard.log`:
+  1. `npm install --dry-run left-pad` → `deny`, no exact version.
+  2. `npm install --dry-run left-pad@1.3.0` → `deny`, no vetting report from the last 7 days,
+     naming the vetter command.
+  3. `hooks/bin/vet-dependency npm left-pad 1.3.0` → rc 0, `1 stop (deprecated) / 0 caution`,
+     complete. The report was relayed to Mark as ⛔, with `String.prototype.padStart()` as the
+     alternative.
+  4. Same dry run retried → `ask`. In **auto** mode, Mark saw the prompt and approved it. Because
+     it was a dry run, nothing was installed: the scratch dir holds no `node_modules`.
+- **Finding, cause unproven: two bypass-mode asks completed with no yes from Mark on record.**
+  Two earlier retries ran in `bypassPermissions` mode, and both logged `ask` (01:21:02Z,
+  02:34:05Z). Both commands then ran. For retry 1, Mark says he saw no prompt but "was on a
+  different window". For retry 2 he again reported no prompt, in answer to a question that told
+  him the command "finished instantly". That claim was false.
+  The session transcript records each tool call's start and end. npm itself took about 0.3 s
+  every time:
+
+  | Retry | Mode | Start → end |
+  | --- | --- | --- |
+  | 1 | bypass | 9 min 48 s (01:21:01Z → 01:30:50Z) |
+  | 2 | bypass | 30 s |
+  | 3 | auto, Mark approved | 13 s |
+
+  So something held both bypass runs for longer than the approved run took. What resolved them
+  is not known. Two suspects, neither tested:
+  - bypass mode answering the ask itself;
+  - the third-party `~/.orca/agent-hooks/claude-hook.sh` that `settings.json` registers on every
+    tool, including `PermissionRequest` with matcher `*`, the event that answers a prompt.
+
+  The two denies (01:20:31Z, 01:20:37Z) were measured in bypass mode and held. Sources: the
+  permission mode and timings are from the session transcript, and the decisions are from
+  `dependency-guard.log`, which records no mode or prompt. Step 3's evidence is the report file.
+  This is not yet in Known gaps: adding it is a spec edit, raised with Mark. Before writing a
+  follow-up card, separate the two suspects: run one bypass-mode dry run with Mark watching,
+  then one with the orca hook disabled.
