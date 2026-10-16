@@ -4,11 +4,13 @@ model_tier: low
 branch: none
 ---
 
-# Dependency guard: yarn workspace forms, and who answered the two unexplained asks
+# Dependency guard: yarn workspace forms get the same decision as plain yarn
 
 Planned 2026-10-16 on `docs/guard-followups`, cut from `origin/main` @ `f83e490` (PR #111 merge).
-Follow-ups (1) and (4) of `docs/features/dependency-vetting-guard.md` (the parent card, phase
-`review`). Code is written by a Sonnet implementer; judges run on Opus. Nothing here is built
+Follow-up (4) of `docs/features/dependency-vetting-guard.md` (the parent card, phase `review`).
+Its former Part B (who answered two unexplained asks) moved to
+`docs/features/permission-ask-answerer.md` on 2026-10-16, at Mark's direction, so this fix is not
+held up by an experiment that needs him at the keyboard. Code is written by a Sonnet implementer; judges run on Opus. Nothing here is built
 until Mark types `gate confirmed`.
 
 ## Why
@@ -22,14 +24,6 @@ Known-gaps row (`docs/features/dependency-vetting-guard.md:1067`) names only `ad
 Cause: `_node_manager` (`hooks/lib/classify-install-command.py:352`) reads `workspace` or
 `workspaces` as the subcommand and returns no intent. Only `global` is unwrapped
 (`classify-install-command.py:356`).
-
-**Part B — two asks resolved with no recorded yes.** The parent card's Verification
-(`dependency-vetting-guard.md:1367-1392`) records two `ask` decisions in `bypassPermissions` mode
-that went through without a yes from Mark on record, and names two untested suspects: bypass mode
-answering the ask itself, and `~/.orca/agent-hooks/claude-hook.sh` on `PermissionRequest`.
-A read-only survey on 2026-10-16 found evidence against both (below) and two suspects the card does
-not name. The cause is still unknown, so the parent card's wording ("cause unproven") stays true;
-this card settles it by experiment.
 
 ## Evidence — measured 2026-10-16 (re-measure in Task 0)
 
@@ -53,20 +47,9 @@ denied, `npm update` asked):
 pnpm, npm and bun workspace forms are already denied or asked. Three ALLOW pins hold the gap in
 place: `hooks/dependency-guard.test.sh:400-403`.
 
-Part B (read-only):
-- The Orca hook posts the payload to the Orca app, discards the reply (`>/dev/null`), prints
-  nothing and always exits 0, so it cannot return a decision. The session's own hook summary
-  timed it at 17 ms.
-- Both unexplained asks waited before running: 9 min 48 s and 30 s (npm itself took ~250 ms).
-  cmux logged "Claude needs your permission" about 6 s after each ask, so a prompt was shown.
-- Not yet considered by the parent card: cmux registers its own `PermissionRequest` hook ("cmux
-  hooks feed"), and the session had a claude.ai remote-control link, which can answer a prompt
-  from another device. Mark answering without noticing is also possible.
-
 ## Scope
 
-In: Part A classifier change and its tests; the parent card's yarn Known-gaps row; Part B's
-experiment and its recorded result.
+In: Part A classifier change and its tests; the parent card's yarn Known-gaps row.
 Out: any other Known-gaps row; changing how Claude Code, cmux or Orca handle prompts.
 
 ## Requirements — Part A
@@ -113,42 +96,6 @@ silently, as today.
 R8. The three ALLOW pins at `hooks/dependency-guard.test.sh:400-403` are replaced by deny/ask
 assertions, and the parent card's Known-gaps row for yarn workspaces is removed, with a one-line
 note under the parent card's Verification pointing to this card.
-
-## Requirements — Part B
-
-R9. Run the experiment below with Mark present. In every run, Mark keeps his hands off the
-keyboard, mouse and phone for the whole **watch window: 12 minutes** (longer than the longest
-observed hold, 9 min 48 s). Record per run, before it starts: `claude --version` (2.1.301 when
-planned), the cmux version (0.64.22 when planned), mode, terminal, the live hook list (the output
-of `/hooks` in that session) and whether remote control is connected. Record when it ends: whether
-a prompt appeared, how long the command waited, and which R10 outcome it was. Any Known-gaps row
-this produces names those versions.
-
-Experiment (no real install happens): a throwaway settings file passed with `--settings`, in a
-`mktemp -d` directory, registering a PreToolUse hook that returns `ask` only for
-`echo ASKTEST-<nonce>`. Every run is in bypass mode. Each run removes exactly one more suspect than
-the one before, in this fixed order:
-
-| Run | Setup | Suspect removed |
-|---|---|---|
-| 1 | cmux, remote control connected, user settings loaded (Orca hook present) — the original setup | none |
-| 2 | as run 1, remote control disconnected | the claude.ai remote link |
-| 3 | as run 2, in plain Terminal.app instead of cmux | cmux's own permission hook |
-| 4 | as run 3, started with `--setting-sources` set to exclude `user` (flag present in 2.1.301's `--help`), so the Orca hook in `~/.claude/settings.json` does not load; `/hooks` must confirm it is absent | the Orca hook |
-
-R10. Each run ends in exactly one outcome:
-
-| Outcome in a run | Consequence |
-|---|---|
-| A. No prompt appears; the command runs at once | Bypass mode itself skips the ask. Stop. Known-gaps row in the parent card naming the mode and versions. |
-| B. A prompt appears and is still pending when the window ends | Mark answers **no**. If this is run 1: stop — nothing automatic answers in the original setup, so later runs (which only remove suspects) cannot either; record "not reproduced; who answered on 2026-10-16 is still unknown". If this is run 2, 3 or 4: the suspect that run removed is the answerer — stop and add a Known-gaps row naming it and the versions. |
-| C. A prompt appears and the command runs inside the window, hands off | Something automatic answered. Go to the next run. If this is run 4: every named suspect is removed and the ask is still answered automatically — record "answered automatically by an unidentified component; all four named suspects excluded", add a Known-gaps row saying exactly that with the versions and run 4's `/hooks` list, and stop. |
-
-Never record "Mark answered" for any run: nothing here can prove it. When the experiment ends in
-"not reproduced", there is no Known-gaps row and the parent card's "cause unproven" wording stays.
-Passing `--settings` or `--setting-sources` may change which hooks load; that is why every run
-records `/hooks`, and a run whose `/hooks` list does not match its row in the table above is
-invalid and is repeated, not counted.
 
 ## Scenarios — Part A
 
@@ -215,8 +162,7 @@ Scenario: other spellings are covered
   the classifier's own suite: green, and the pre-existing assertion count unchanged apart from the
   three replaced pins.
 - [ ] 3. Parent card: remove the yarn Known-gaps row, add the pointer line (R8).
-- [ ] 4. Part B experiment with Mark (R9), then record (R10).
-- [ ] 5. Verification section; observability judge (implementation stage); PR.
+- [ ] 4. Verification section; observability judge (implementation stage); PR.
 
 ## Gotchas
 
