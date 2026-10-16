@@ -45,7 +45,7 @@ denied, `npm update` asked):
 | `yarn workspace web dlx x` | allow, silent | `yarn dlx x` → deny |
 | `yarn workspace web global add lodash` | allow, silent | `yarn global add lodash` → deny |
 | `yarn workspaces foreach [-A\|--all\|-pt] add\|up\|upgrade\|dlx …` | allow, silent | deny / ask as above |
-| `yarn workspaces run add lodash`, `… run upgrade` (yarn 1) | allow, silent | see R4 |
+| `yarn workspaces run add lodash`, `… run upgrade` (yarn 1) | allow, silent (correct: runs a script, R4) | `yarn run add` → allow |
 | `yarnpkg …`, `corepack yarn …`, `VAR=1 yarn …`, `cd x && yarn …` spellings of the above | allow, silent | — |
 | `yarn workspace web remove lodash`, `… run build`, `workspaces foreach run build`, `workspaces info` | allow (correct) | — |
 | `yarn --cwd web add lodash` | deny (already handled) | — |
@@ -88,19 +88,21 @@ A value-taking option missing from the list would make its value look like the s
 misreads toward a false ask/deny only when the value happens to be a subcommand word, and toward a
 silent allow otherwise — which is why the list must come from the pinned source, not memory.
 
-R3. **`--since`'s optional value.** `--since` may or may not take a value. If the word after it is
-a yarn subcommand the classifier knows (install, update, runner or `global` words), read it as
-the subcommand; otherwise read it as the value. Rule behind it: when a word could be either an
-option value or the subcommand, prefer the reading that gets checked.
+R3. **`--since`.** In yarn 4.18.1, `--since` takes a value only joined to it (`--since=main`), never
+the next word (read from `@yarnpkg/cli-dist@4.18.1` by the round-2 design judge, 2026-10-16;
+Task 0 re-reads it). So `--since` and `--since=<ref>` are each one standalone flag (R2), and the
+word after a bare `--since` is the start of `<rest>`: `foreach --since main up` runs a script
+named `main` and is allowed, while `foreach --since=main up` asks like `yarn up`.
 
-R4. `yarn workspaces run <rest…>` (yarn 1) gets the decision of `yarn <rest…>`. Whether yarn 1
-runs `<rest>` as a yarn command or as a package script is **unverified**; Task 0 settles it from
-the source of `yarn@1.22.22` (the yarn 1 version the parent card's toolchain row pins). Either way R4 stands, because reading it as a yarn command can only add a check
-(the cost is a false deny on a script literally named `add`, which is acceptable).
+R4. `yarn workspaces run <x…>` (yarn 1) is **not** a wrapper: yarn 1.22.22 runs it as
+`yarn run <x…>` in each workspace (`lib/cli.js:88569` in the `yarn@1.22.22` tarball, read
+2026-10-16), which runs a package script, never an install. It keeps the decision of
+`yarn run <x…>`, which is allow. (By contrast `yarn workspace <name> <rest…>` runs `yarn <rest…>`,
+`lib/cli.js:88349`, which is why R1 holds.)
 
 R5. The update-form words recorded in the log and shown in the ask keep the wrapper, following the
-`global` precedent (`words = ["global", sub]`): `workspace up`, `workspaces foreach up`,
-`workspaces run upgrade`. The workspace *name* is never part of the form.
+`global` precedent (`words = ["global", sub]`): `workspace up`, `workspaces foreach up`.
+The workspace *name* is never part of the form.
 
 R6. Unchanged: anything that is not an install, update or runner form inside the wrapper
 (`remove`, `run build`, `info`, a bare `yarn workspace web`) stays allowed silently.
@@ -116,30 +118,37 @@ note under the parent card's Verification pointing to this card.
 
 R9. Run the experiment below with Mark present. In every run, Mark keeps his hands off the
 keyboard, mouse and phone for the whole **watch window: 12 minutes** (longer than the longest
-observed hold, 9 min 48 s). Record per run, before it starts: mode, terminal, the live hook list
-(the output of `/hooks` in that session) and whether remote control is connected. Record when it
-ends: whether a prompt appeared, how long the command waited, and how it ended (see R10's table).
-
-R10. Each run ends in exactly one outcome, and each outcome has one consequence:
-
-| Outcome in a run | What it shows | Consequence |
-|---|---|---|
-| No prompt appears; the command runs at once | the mode itself skips the ask | stop; Known-gaps row in the parent card naming the mode |
-| A prompt appears and the command runs inside the window with hands off | something automatic answered | go on to the next run to narrow it down; when a run without that suspect stays pending, name the suspect in a Known-gaps row |
-| A prompt appears and is still pending when the window ends | nothing automatic answered in this setup | Mark answers **no**; go on to the next run |
-
-Stopping: stop as soon as one suspect is named (the first two rows), or after run 4. If all four
-runs end pending, record "not reproduced: no automatic answer in any setup; who answered on
-2026-10-16 is still unknown" — **not** "Mark answered", which nothing here can prove. No Known-gaps
-row in that case; the parent card's "cause unproven" wording stays.
+observed hold, 9 min 48 s). Record per run, before it starts: `claude --version` (2.1.301 when
+planned), the cmux version (0.64.22 when planned), mode, terminal, the live hook list (the output
+of `/hooks` in that session) and whether remote control is connected. Record when it ends: whether
+a prompt appeared, how long the command waited, and which R10 outcome it was. Any Known-gaps row
+this produces names those versions.
 
 Experiment (no real install happens): a throwaway settings file passed with `--settings`, in a
 `mktemp -d` directory, registering a PreToolUse hook that returns `ask` only for
-`echo ASKTEST-<nonce>`. Runs, in order: (1) bypass mode in cmux, remote control connected — the
-original setup; (2) bypass mode in cmux, remote control disconnected; (3) bypass mode in plain
-Terminal.app (no cmux hook), remote control disconnected; (4) default mode in cmux, remote control
-connected, as the control. Passing `--settings` may change which hooks load; that is why every run
-records `/hooks`.
+`echo ASKTEST-<nonce>`. Every run is in bypass mode. Each run removes exactly one more suspect than
+the one before, in this fixed order:
+
+| Run | Setup | Suspect removed |
+|---|---|---|
+| 1 | cmux, remote control connected, user settings loaded (Orca hook present) — the original setup | none |
+| 2 | as run 1, remote control disconnected | the claude.ai remote link |
+| 3 | as run 2, in plain Terminal.app instead of cmux | cmux's own permission hook |
+| 4 | as run 3, started with `--setting-sources` set to exclude `user` (flag present in 2.1.301's `--help`), so the Orca hook in `~/.claude/settings.json` does not load; `/hooks` must confirm it is absent | the Orca hook |
+
+R10. Each run ends in exactly one outcome:
+
+| Outcome in a run | Consequence |
+|---|---|
+| A. No prompt appears; the command runs at once | Bypass mode itself skips the ask. Stop. Known-gaps row in the parent card naming the mode and versions. |
+| B. A prompt appears and is still pending when the window ends | Mark answers **no**. If this is run 1: stop — nothing automatic answers in the original setup, so later runs (which only remove suspects) cannot either; record "not reproduced; who answered on 2026-10-16 is still unknown". If this is run 2, 3 or 4: the suspect that run removed is the answerer — stop and add a Known-gaps row naming it and the versions. |
+| C. A prompt appears and the command runs inside the window, hands off | Something automatic answered. Go to the next run. If this is run 4: every named suspect is removed and the ask is still answered automatically — record "answered automatically by an unidentified component; all four named suspects excluded", add a Known-gaps row saying exactly that with the versions and run 4's `/hooks` list, and stop. |
+
+Never record "Mark answered" for any run: nothing here can prove it. When the experiment ends in
+"not reproduced", there is no Known-gaps row and the parent card's "cause unproven" wording stays.
+Passing `--settings` or `--setting-sources` may change which hooks load; that is why every run
+records `/hooks`, and a run whose `/hooks` list does not match its row in the table above is
+invalid and is repeated, not counted.
 
 ## Scenarios — Part A
 
@@ -161,13 +170,21 @@ Scenario: a value-taking foreach option is skipped
   When Claude runs "yarn workspaces foreach --include web add lodash"
   Then the guard denies like "yarn add lodash"
 
-Scenario: --since followed by a subcommand
+Scenario: a bare --since is a flag on its own
   When Claude runs "yarn workspaces foreach --since add lodash"
   Then the guard denies like "yarn add lodash"
 
-Scenario: --since followed by a ref
-  When Claude runs "yarn workspaces foreach --since main up"
+Scenario: --since=ref is one word
+  When Claude runs "yarn workspaces foreach --since=main up"
   Then the guard asks like "yarn up"
+
+Scenario: the word after a bare --since is the command, even if it looks like a ref
+  When Claude runs "yarn workspaces foreach --since main up"
+  Then the guard allows it silently, like "yarn main up" (yarn runs a script named main)
+
+Scenario: yarn 1's workspaces run is a script run, not a wrapper
+  When Claude runs "yarn workspaces run add lodash"
+  Then the guard allows it silently, like "yarn run add lodash"
 
 Scenario: a script run inside a workspace is still allowed
   When Claude runs "yarn workspace web run build"
@@ -186,8 +203,8 @@ Scenario: other spellings are covered
 
 - [ ] 0. Re-measure on the branch base: re-run every probe in the Evidence table, both columns.
   Read the `workspaces foreach` option definitions in `@yarnpkg/cli-dist@4.18.1` and correct R2's
-  list if it differs (R2). Read `yarn@1.22.22`'s `workspaces run` source to settle R4's question.
-  Record both answers with the file and version read. A different result is a finding, not an
+  list and R3 if they differ. Re-read `yarn@1.22.22`'s `lib/cli.js:88349` and `:88569` to confirm
+  R1 and R4. Record each answer with the file and version read. A different result is a finding, not an
   error. Reading package source is offline-safe only if fetched as a tarball into a `mktemp -d`
   directory and never installed or executed.
 - [ ] 1. Tests first: replace the three pins (R8) and add one assertion per Evidence-table row and

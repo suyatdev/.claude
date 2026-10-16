@@ -57,7 +57,8 @@ adding CI; any other hook's behaviour.
 R1. A new suite `hooks/registered-hooks-executable.test.sh` reads `settings.json` **from the git
 index** (`git show :settings.json`), not the working tree, and reads modes **from the index**
 (`git ls-files -s`), not the filesystem. JSON parsing and word splitting use the system `python3`
-run as `python3 -I` (Task 0 records its version); no new dependency.
+run as `python3 -I`; no new dependency. Versions when planned (2026-10-16): Python 3.9.6, git
+2.50.1 (Apple Git-155); Task 0 re-records them.
 
 R1a. **Which repo is checked.** The check is one function, `check_repo <repo-root>`, that runs
 every git command as `git -C <repo-root> …`. The suite calls it once for each fixture repo (R6),
@@ -72,16 +73,22 @@ is checked once and its failure message names every event it is registered on. E
 must exist in the index and have mode `100755`.
 
 R3. A command whose first word (after assignments) is an interpreter (`bash`, `sh`, `zsh`,
-`python3`, `python`, `node`) is *skipped*, since it does not need the bit. Any other command (e.g.
-the inline Orca one-liner) is *skipped*. The suite prints every skipped command with its reason
-on its own line, so a check that silently stops covering something is visible in the output.
+`python3`, `python`, `node`) **and** that passes the script as a file argument is *skipped*, since
+it does not need the bit. An interpreter given `-c` (e.g. `bash -c "…"`) is not an interpreter
+skip: it is an *other* command, so R4's `.claude/` rule applies to it. Any other command (e.g. the
+inline Orca one-liner) is *skipped*. A hook entry with no `command` field (a non-command hook type)
+is *skipped* with reason "no command", never a crash. The suite prints every skipped entry with
+its reason on its own line, so a check that silently stops covering something is visible.
 
 R4. **Fail closed.** The suite fails, with a message naming the cause, when: `settings.json` is
 missing from the index; it is not valid JSON; a command cannot be split (unbalanced quotes);
 parsing finds zero checked scripts ("found no registered hook scripts — the parser is broken, not
-the repo clean"); or a *skipped* non-interpreter command contains `.claude/` anywhere — a likely
+the repo clean"); a *skipped* non-interpreter command contains `.claude/` anywhere — a likely
 repo path in a shape R2 does not read, which must be taught to the parser or explained, never
-silently skipped.
+silently skipped; the target is not a git repository; or `mktemp -d` fails. Fixture directories
+are removed on exit (`trap`). Known limit, accepted: a parser regression that loses some but not
+all scripts (say 23 → 20) still passes; the printed counts and Task 4's hand check are the only
+guard against it.
 
 R5. The suite covers every hook event key in `settings.json` `hooks` plus `statusLine`, without a
 hard-coded list of event names. It prints the number of entries read, of checked scripts
@@ -92,7 +99,9 @@ the suite proves it can both fail and pass. Each case builds its own repo and se
 (no case may inherit state from another). Cases: a `100644` registered script fails; the same
 script at `100755` passes; `100644` in the index but executable on disk fails; an
 interpreter-invoked `100644` script passes; a registered path missing from the index fails; a
-non-path command is skipped and listed; a `VAR=1 $HOME/.claude/x.sh` command is checked; the
+non-path command registered beside one valid `100755` script passes and is listed as skipped; a
+`bash -c "$HOME/.claude/x.sh"` command fails under R4; an entry with no `command` field is listed
+as skipped; a `VAR=1 $HOME/.claude/x.sh` command is checked; the
 `~/.claude/` and `${HOME}/.claude/` forms are checked; one script on two events is checked once and
 both events are named; invalid JSON fails; missing `settings.json` fails; zero checked scripts
 fails; a skipped command containing `.claude/` fails.
@@ -178,7 +187,8 @@ Scenario: the real repo after the fix
   different count is a finding, not an error.
 - [ ] 1. Write `hooks/registered-hooks-executable.test.sh` (R1–R7a). Run it against this repo
   before Task 2: it must fail, naming exactly `hooks/handoff/handoff-keep-guard.sh`, and every
-  fixture case must behave as R6 says. Commit the failing suite on its own.
+  fixture case must behave as R6 says. Commit the failing suite on its own, staging this card's
+  Task 1 note in the same commit so `doc-guard` sees documentation staged.
 - [ ] 2. Fix the mode (R7): run `hooks/handoff/handoff-keep-guard.test.sh` in this worktree first
   (the repo's test-marker gate will likely refuse a commit staging that file otherwise — not yet
   tried), then `chmod +x hooks/handoff/handoff-keep-guard.sh`, `git add -- <path>`, commit.
