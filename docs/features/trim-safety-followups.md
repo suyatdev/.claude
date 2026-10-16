@@ -372,7 +372,7 @@ with `TEST_EXEMPT` per the table above.
 - [x] Task 2 — B RED: add the three review-claims scenarios to `hooks/phase-guard.test.sh`,
   next to the existing `B5` supersede assertion; run, confirm the first fails and the other two
   pass **as written** (the falsifier must be the allow, not a typo).
-- [ ] Task 3 — B GREEN: the one-line step-7 change in `hooks/phase-guard.sh`; suite green;
+- [x] Task 3 — B GREEN: the one-line step-7 change in `hooks/phase-guard.sh`; suite green;
   the decision-table row in `docs/features/phase-guard-hook.md`, marked "added by
   trim-safety-followups".
 - [ ] Task 4 — C RED (writer): in `hooks/lib/write-test-marker.test.py`, a runner with a
@@ -507,3 +507,48 @@ same upstream growth the `158` caveat above is about. The old figure is left as 
 was true when measured. A RED commit is red by design — so this commit
 carries `TEST_EXEMPT` for exactly the reason the marker-gate table names for RED commits. Task 3
 is where this pair earns a real receipt, from a session rooted in this worktree.
+
+### Task 3 — B GREEN: `review` claims its branch, suite green, receipt real — PASS
+
+Measured 2026-10-16 in `~/.worktrees/.claude/trim-safety-followups`, from a session rooted here —
+so unlike task 1 this pair was checked by the gate itself, not only by hand.
+
+| Check | Result |
+|---|---|
+| `bash hooks/phase-guard.test.sh` | **159 passed, 0 failed** (rc 0) |
+| the four B5a–B5c assertions | all `ok` |
+| delta from the RED run | 158/1 → 159/0 — one assertion flipped, nothing else moved |
+
+The change is the condition on `hooks/phase-guard.sh` step 7's claim collector: a card claims its
+`branch:` when its phase is `implementation` **or** `review`. The deny message, step 8, step 9 and
+the frontmatter contract are untouched, as the spec requires.
+
+**Receipt: real, and the gate's own check passed.** `hooks/lib/write-test-marker.py` ran at rc 0
+and wrote `hooks/state/test-markers/hooks%2Fphase-guard.sh` naming
+`subject.blob 2242afba367c39ad90db0721227f030ba3c296c1` and
+`test.blob 2ec7bb1483bcff8f3abf10b2c5c16b7cba99fbac`. Both equal `git hash-object` of the bytes in
+this commit. The comparison discriminates: the pre-change subject blob was
+`a247a308a7c4683ab201e960fe96265bfb937a08`, so a receipt written before the edit would have
+mismatched rather than quietly agreed. No `TEST_EXEMPT` was needed or used.
+
+**Two doc statements changed, not one — a deviation from the card, stated rather than absorbed.**
+The card asked for the decision-table row in `docs/features/phase-guard-hook.md`. That file states
+the same rule a second time, in step 9's prose — the sentence wraps across `:269-270`, with the
+phase words on `:270`, so cite the pair and not one line. The change falsifies it, so it is now
+corrected alongside the row (now at `:57`), and both carry a pointer to the other so they move
+together next time. See
+[[feedback_single_source_the_statement_that_keeps_drifting]].
+
+**And one live rule file.** `rules/gates.md`'s Phase-gate stub said the hook denies "while an
+un-superseded `planning` feature file exists and no `implementation` file records the current
+branch". That is an always-loaded instruction every session reads, so leaving it would ship a rule
+that contradicts the code; the clause now reads `implementation` **or `review`**, marked as added
+by this card. It is inert until merge — hooks and rules load from the primary checkout
+([[reference_hooks_load_scripts_from_primary_checkout]]).
+
+**Deliberately left alone:** `docs/features/phase-guard-root-markdown.md:29` and
+`docs/features/readme-roadmap-upkeep.md:12` each describe the old implementation-only rule in
+passing. Both belong to other, closed cards and were true when written, so they are history rather
+than live instruction. Recorded here so a later reader finds them on purpose rather than by
+surprise. `docs/features/phase-guard-hook.md:1434` likewise narrates the old step-9 grep and stays
+as written.
