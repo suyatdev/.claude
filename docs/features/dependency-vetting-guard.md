@@ -1319,7 +1319,7 @@ Scenario: an update beside a pinned install still reaches the strongest decision
       `INSTALL_TOOL_WORDS`, and the log fields of one update ask. Then compliance judge on the
       spec change and observability judge round 2.
       Done 2026-10-15 (7c6d5f0, 4d3eab7): classifier 987→1137, decider 117→170, guard 223→310.
-- [ ] 11. After merge: compare primary blobs to the merge commit; one live install attempt
+- [x] 11. After merge: compare primary blobs to the merge commit; one live install attempt
       end-to-end; record under `## Verification`.
       Before the primary pulls the merge, run `git status` there: on 2026-10-09 it held an
       uncommitted `settings.json` (and `rules/core-conduct.md`) of unknown owner. Ask Mark how to
@@ -1351,4 +1351,21 @@ Scenario: an update beside a pinned install still reaches the strongest decision
   two on-disk assertions also fail against a non-executable copy passed through
   `DEPENDENCY_GUARD_HOOK`. `verify-hook-wiring.sh` checks the mode at session start, so the next
   session would have flagged it; this one would not.
-- **Live install attempt:** not yet run. It needs the guard able to start in the primary.
+- **Live install attempt:** this was first blocked by the defect above. It ran after the fix
+  merged as #110 (`6ebffbc`) and Mark pulled, which left the primary HEAD at `6ebffbc` and the
+  hook at `-rwxr-xr-x`. All of it was in a scratch dir, through the session's own Bash tool, so
+  the registered hook decided each step, as shown in
+  `hooks/state/dependency-guard.log`:
+  1. `npm install --dry-run left-pad` → `deny`, no exact version.
+  2. `npm install --dry-run left-pad@1.3.0` → `deny`, no vetting report from the last 7 days,
+     naming the vetter command.
+  3. `hooks/bin/vet-dependency npm left-pad 1.3.0` → rc 0, `1 stop (deprecated) / 0 caution`,
+     complete. The report was relayed to Mark as ⛔, with `String.prototype.padStart()` as the
+     alternative.
+  4. Same dry run retried → `ask`. In **auto** mode, Mark saw the prompt and approved it. Because
+     it was a dry run, nothing was installed: the scratch dir holds no `node_modules`.
+- **Finding: bypass mode skips the ask.** Two earlier retries ran in `bypassPermissions` mode, and
+  both logged `ask` (01:21:02Z, 02:34:05Z). The command ran at once each time, and Mark saw no
+  prompt. So in bypass mode the human's yes, which is the guard's only real control, is approved
+  on his behalf. The two denies still hold in that mode. This is not yet in Known gaps: it is a
+  spec edit, raised with Mark for a follow-up card.
