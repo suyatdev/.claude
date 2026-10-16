@@ -369,7 +369,7 @@ with `TEST_EXEMPT` per the table above.
 
 - [x] Task 1 — A: rewrite the header line in `hooks/handoff/handoff-keep-guard.sh` to
   `~/.local/bin/claude`, keep the version; record `grep -c '/Users/'` = 0 in Verification.
-- [ ] Task 2 — B RED: add the three review-claims scenarios to `hooks/phase-guard.test.sh`,
+- [x] Task 2 — B RED: add the three review-claims scenarios to `hooks/phase-guard.test.sh`,
   next to the existing `B5` supersede assertion; run, confirm the first fails and the other two
   pass **as written** (the falsifier must be the allow, not a typo).
 - [ ] Task 3 — B GREEN: the one-line step-7 change in `hooks/phase-guard.sh`; suite green;
@@ -474,3 +474,36 @@ tasks 1 and 3 carry real receipts is met in substance, and what is absent is the
 not adversarially re-checked by the gate itself. Re-run the gate on these bytes from a session
 rooted in this worktree if that independent check is wanted — and prefer to root task 3 here,
 since it is the other receipt-bearing task.
+
+### Task 2 — B RED: the suite fails in exactly one place, for the rule and not a typo — PASS
+
+Measured 2026-10-16 in `~/.worktrees/.claude/trim-safety-followups`.
+
+| Check | Result |
+|---|---|
+| `bash hooks/phase-guard.test.sh` | 158 passed, **1 failed** (rc 1) |
+| the only `FAIL` line (`grep -c '^FAIL'` = 1) | `B5a a review card unlocks the branch it names (want exit 0, got 2)` |
+| `B5b` deny, and its `err_has` on `docs/features/a\.md.*phase: planning` | both pass |
+| `B5c` deny — a `review` card with no `branch:` key claims nothing | pass |
+
+The split the card demands holds: the first scenario is red, the other two are green **as
+written**. Because exactly one `FAIL` line exists and it is B5a, no pre-existing assertion broke.
+
+⚠️ **Do not read `158` as a figure about this change.** The marker-gate table above recorded
+`147 passed, 0 failed` on 2026-09-21; the suite has grown upstream since, and that growth was not
+re-measured here. The claims this row makes are the failure *count* (1) and its *identity*.
+
+**The falsifier is the rule, not the fixture.** A throwaway probe built the same fixture shape
+twice and changed only the second card's phase word — `implementation` → rc 0, allow, empty
+stderr; `review` → rc 2, denying with *"a feature file is still at…"*. Same repo layout, same
+payload, one word apart, so B5a's red is step 7 refusing a `review` claim rather than a typo in
+the `review_claim_repo` helper. The probe is deliberately **not** committed: once item B lands it
+duplicates what B5a and the existing `B2 claimed branch -> allow` case assert between them.
+
+**No receipt, by construction, and that is the card's own rule.** `hooks/phase-guard.test.sh`
+calls the writer only at rc 0 — at `:1273` today, **not** the `:1240` the marker-gate table
+recorded on 2026-09-21; the suite is now 1275 lines and that citation has drifted, which is the
+same upstream growth the `158` caveat above is about. The old figure is left as written, since it
+was true when measured. A RED commit is red by design — so this commit
+carries `TEST_EXEMPT` for exactly the reason the marker-gate table names for RED commits. Task 3
+is where this pair earns a real receipt, from a session rooted in this worktree.
