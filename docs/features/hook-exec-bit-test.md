@@ -1,7 +1,7 @@
 ---
 phase: implementation
 model_tier: low
-branch: feat/hook-exec-bit-test  # to be cut from origin/main in a new worktree after the /clear
+branch: feat/hook-exec-bit-test  # to be cut from docs/guard-followups (7a1e8b3) in a new worktree after the /clear
 ---
 
 Gate opened 2026-10-16 on the literal user phrase `gate confirmed`; Mark then chose "Quick fixes
