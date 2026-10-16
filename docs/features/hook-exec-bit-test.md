@@ -1,8 +1,12 @@
 ---
-phase: planning
+phase: implementation
 model_tier: low
-branch: none
+branch: feat/hook-exec-bit-test  # to be cut from origin/main in a new worktree after the /clear
 ---
+
+Gate opened 2026-10-16 on the literal user phrase `gate confirmed`; Mark then chose "Quick fixes
+only" — this card's gate only. The yarn card's gate is NOT open. Mark asked to clear the session
+before any implementation; branch and task 0 start in the next session.
 
 # Registered hooks must be executable in git, and the vetting skill's stale status lines
 
