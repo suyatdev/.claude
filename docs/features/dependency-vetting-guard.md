@@ -1327,4 +1327,28 @@ Scenario: an update beside a pinned install still reaches the strongest decision
 
 ## Verification
 
-(empty until implementation)
+**Task 11, after merge (2026-10-15).** #109 merged as `281a1c5`; `git merge-base --is-ancestor
+102b3b0 origin/main` → 0.
+
+- **Primary before the pull:** at `54129e2`. Its two uncommitted files were both Mark's own:
+  `settings.json` held `/model` churn (`model`, a moved `permissions` block, an `effortLevel` entry);
+  `rules/core-conduct.md` held his uncommitted 2026-10-07 "ask before compressing" rule, a file
+  the merge does not touch. A three-way trial merge of `settings.json` (`git merge-file`) was
+  clean, valid JSON, and carried both `dependency-guard.sh` registrations. Mark ran
+  `git -C ~/.claude pull --ff-only --autostash` himself, because this session's worktree guard refuses
+  git against the primary.
+- **Primary after the pull:** HEAD `281a1c5`. 27 of the merge's 28 changed paths are byte-equal to
+  the merge commit. `settings.json` equals the trial merge, which is the merge plus Mark's churn.
+  The core-conduct edit survived.
+- **Defect found: the guard could not start.** `hooks/dependency-guard.sh` was merged as mode
+  `100644`. `settings.json` runs it as a bare command, so a direct run gave `permission denied`, rc
+  126. The suite never noticed, because `run_with` calls `bash "$1"`, which ignores the mode bit.
+  Every other registered hook is `100755`, apart from `hooks/handoff/handoff-keep-guard.sh`. That
+  file is `100644` in git but executable in the primary's working tree. It belongs to another card
+  and was left alone.
+  Fix: mode `100755`, plus three suite assertions: executable on disk, `100755` in git, and runs
+  with no `bash` prefix. Red first: 310 passed, 3 failed. Green after: 313 passed, 0 failed. The
+  two on-disk assertions also fail against a non-executable copy passed through
+  `DEPENDENCY_GUARD_HOOK`. `verify-hook-wiring.sh` checks the mode at session start, so the next
+  session would have flagged it; this one would not.
+- **Live install attempt:** not yet run. It needs the guard able to start in the primary.

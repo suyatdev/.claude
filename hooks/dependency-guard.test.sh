@@ -505,6 +505,15 @@ OUT="$(cd "$PROJ" && printf '%s' "$(bash_payload "npm install zod@3.23.8")" | en
 check_deny "with no override the state dir is <hooks>/state (deny still works)" "has no vetting report"
 [ -f "$d/state/dependency-guard.log" ] && say_ok "the default log lives at <hooks>/state/dependency-guard.log" || say_bad "the default log lives at <hooks>/state/dependency-guard.log" "no log in $d/state"
 
+# ---- executable bit: settings.json runs the script as a bare command, and run_with's `bash "$1"` is blind to the mode bit
+[ -x "$HOOK" ] && say_ok "the hook is executable on disk" || say_bad "the hook is executable on disk" "not +x: $HOOK"
+git_mode="$(git -C "$HERE/.." ls-files -s -- hooks/dependency-guard.sh 2>/dev/null)"
+if [ -z "$git_mode" ]; then printf 'note — hooks/dependency-guard.sh is not tracked here (a copy?); skipping the git mode assertion\n'
+else case "$git_mode" in 100755*) say_ok "git records the hook as executable (100755)" ;; *) say_bad "git records the hook as executable (100755)" "got: $git_mode" ;; esac; fi
+new_state
+OUT="$(cd "$PROJ" && printf '%s' "$(bash_payload "git status")" | HOME="$FAKE_HOME" DEPENDENCY_GUARD_STATE_DIR="$STATE" "$HOOK" 2>"$TMP/err.out")"; RC=$?; ERR="$(cat "$TMP/err.out")"
+if [ "$RC" -ne 126 ] && [ "$RC" -ne 127 ]; then say_ok "the hook runs directly with no bash prefix (rc=$RC)"; else say_bad "the hook runs directly with no bash prefix" "rc=$RC err=[$ERR]"; fi
+
 # ---- the real state was never touched
 real_log_after="$(stat -f '%m %z' "$REAL_LOG" 2>&1 || stat -c '%Y %s' "$REAL_LOG" 2>&1)"
 [ "$real_log_before" = "$real_log_after" ] && say_ok "the real hooks/state log was not touched" || say_bad "the real hooks/state log was not touched" "before [$real_log_before] after [$real_log_after]"
