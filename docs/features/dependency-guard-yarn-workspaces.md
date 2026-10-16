@@ -19,7 +19,7 @@ forms pass with no output at all. The worst is `yarn workspace <name> dlx <pkg>`
 and runs a package in one step, while plain `yarn dlx <pkg>` is denied. The parent card's
 Known-gaps row (`docs/features/dependency-vetting-guard.md:1067`) names only `add|up`.
 
-Cause: `_node_manager` (`hooks/lib/classify-install-command.py:353`) reads `workspace` or
+Cause: `_node_manager` (`hooks/lib/classify-install-command.py:352`) reads `workspace` or
 `workspaces` as the subcommand and returns no intent. Only `global` is unwrapped
 (`classify-install-command.py:356`).
 
@@ -81,6 +81,12 @@ Options before `<rest>`: the flags that take a value — `--from`, `--include`, 
 `-j`/`--jobs` — consume the next word; every other word starting with `-` is a flag on its own
 (this covers `-A`, `--all`, `-R`, `-W`, `-v`, `-p`, `-i`, `-t`, combined short flags like `-pt`,
 and `--since`). The first word left is the start of `<rest>`.
+**Version pin:** this option list is written from memory of yarn 4 and is checked in Task 0 against
+the `workspaces foreach` command definition shipped in `@yarnpkg/cli-dist@4.18.1` (current on npm,
+2026-10-16). If the shipped list differs, Task 0 corrects this paragraph before Task 1 starts.
+A value-taking option missing from the list would make its value look like the subcommand; that
+misreads toward a false ask/deny only when the value happens to be a subcommand word, and toward a
+silent allow otherwise — which is why the list must come from the pinned source, not memory.
 
 R3. **`--since`'s optional value.** `--since` may or may not take a value. If the word after it is
 a yarn subcommand the classifier knows (install, update, runner or `global` words), read it as
@@ -89,7 +95,7 @@ option value or the subcommand, prefer the reading that gets checked.
 
 R4. `yarn workspaces run <rest…>` (yarn 1) gets the decision of `yarn <rest…>`. Whether yarn 1
 runs `<rest>` as a yarn command or as a package script is **unverified**; Task 0 settles it from
-yarn 1's source. Either way R4 stands, because reading it as a yarn command can only add a check
+the source of `yarn@1.22.22` (the yarn 1 version the parent card's toolchain row pins). Either way R4 stands, because reading it as a yarn command can only add a check
 (the cost is a false deny on a script literally named `add`, which is acceptable).
 
 R5. The update-form words recorded in the log and shown in the ask keep the wrapper, following the
@@ -108,19 +114,32 @@ note under the parent card's Verification pointing to this card.
 
 ## Requirements — Part B
 
-R9. Run the experiment below once, with Mark present and hands off the keyboard and phone for
-each 60-second window. Record per run: mode, terminal, whether a prompt appeared, the wait, and
-who or what answered.
+R9. Run the experiment below with Mark present. In every run, Mark keeps his hands off the
+keyboard, mouse and phone for the whole **watch window: 12 minutes** (longer than the longest
+observed hold, 9 min 48 s). Record per run, before it starts: mode, terminal, the live hook list
+(the output of `/hooks` in that session) and whether remote control is connected. Record when it
+ends: whether a prompt appeared, how long the command waited, and how it ended (see R10's table).
 
-R10. Write the result into this card's Verification. If anything other than a human answered an
-ask, add a Known-gaps row to the parent card naming it. If a human (Mark) answered, record that
-and close the question; no Known-gaps row.
+R10. Each run ends in exactly one outcome, and each outcome has one consequence:
+
+| Outcome in a run | What it shows | Consequence |
+|---|---|---|
+| No prompt appears; the command runs at once | the mode itself skips the ask | stop; Known-gaps row in the parent card naming the mode |
+| A prompt appears and the command runs inside the window with hands off | something automatic answered | go on to the next run to narrow it down; when a run without that suspect stays pending, name the suspect in a Known-gaps row |
+| A prompt appears and is still pending when the window ends | nothing automatic answered in this setup | Mark answers **no**; go on to the next run |
+
+Stopping: stop as soon as one suspect is named (the first two rows), or after run 4. If all four
+runs end pending, record "not reproduced: no automatic answer in any setup; who answered on
+2026-10-16 is still unknown" — **not** "Mark answered", which nothing here can prove. No Known-gaps
+row in that case; the parent card's "cause unproven" wording stays.
 
 Experiment (no real install happens): a throwaway settings file passed with `--settings`, in a
 `mktemp -d` directory, registering a PreToolUse hook that returns `ask` only for
-`echo ASKTEST-<nonce>`. Runs: (1) default mode in cmux; (2) bypass mode in cmux; (3) bypass mode
-in plain Terminal.app (no cmux hook); (4) bypass mode in cmux with remote control disconnected.
-Stop after the first run that answers the question; do not run all four by default.
+`echo ASKTEST-<nonce>`. Runs, in order: (1) bypass mode in cmux, remote control connected — the
+original setup; (2) bypass mode in cmux, remote control disconnected; (3) bypass mode in plain
+Terminal.app (no cmux hook), remote control disconnected; (4) default mode in cmux, remote control
+connected, as the control. Passing `--settings` may change which hooks load; that is why every run
+records `/hooks`.
 
 ## Scenarios — Part A
 
@@ -154,6 +173,10 @@ Scenario: a script run inside a workspace is still allowed
   When Claude runs "yarn workspace web run build"
   Then the guard allows it silently
 
+Scenario: a wrapper with nothing after it is allowed
+  When Claude runs "yarn workspace web" or "yarn workspaces foreach -A"
+  Then the guard allows it silently
+
 Scenario: other spellings are covered
   When Claude runs "corepack yarn workspace web add lodash" or "yarnpkg workspace web add lodash"
   Then the guard denies like "yarn add lodash"
@@ -162,12 +185,16 @@ Scenario: other spellings are covered
 ## Tasks
 
 - [ ] 0. Re-measure on the branch base: re-run every probe in the Evidence table, both columns.
-  Read yarn 1's `workspaces run` source to settle R4's question and record the
-  answer with a link to the file and version read. A different result is a finding, not an error.
+  Read the `workspaces foreach` option definitions in `@yarnpkg/cli-dist@4.18.1` and correct R2's
+  list if it differs (R2). Read `yarn@1.22.22`'s `workspaces run` source to settle R4's question.
+  Record both answers with the file and version read. A different result is a finding, not an
+  error. Reading package source is offline-safe only if fetched as a tarball into a `mktemp -d`
+  directory and never installed or executed.
 - [ ] 1. Tests first: replace the three pins (R8) and add one assertion per Evidence-table row and
   per scenario, using the suite's `deny_cmd`/`ask_cmd`/`allow_cmd`. Run: the new assertions must
   fail and nothing else may. Commit the red suite on its own.
-- [ ] 2. Classifier change in `_node_manager` (R1–R7). Re-run the full dependency-guard suite and
+- [ ] 2. Classifier change in `_node_manager` (R1–R7), as one small helper in the same file
+  (`hooks/lib/classify-install-command.py`, 656 lines today; it must stay under the 800-line cap). Re-run the full dependency-guard suite and
   the classifier's own suite: green, and the pre-existing assertion count unchanged apart from the
   three replaced pins.
 - [ ] 3. Parent card: remove the yarn Known-gaps row, add the pointer line (R8).

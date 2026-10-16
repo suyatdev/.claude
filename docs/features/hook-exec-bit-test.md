@@ -18,7 +18,7 @@ A hook script that git stores as `100644` (not executable) cannot be started by 
 set `100755`. Nothing in the repo catches it in general:
 
 - `hooks/verify-hook-wiring.sh` (SessionStart) checks the exec bit **on the filesystem**
-  (`hooks/verify-hook-wiring.sh:151`). A local `chmod +x` makes it pass while git still stores
+  (`hooks/verify-hook-wiring.sh:149`). A local `chmod +x` makes it pass while git still stores
   `100644`, so a fresh clone or pull loses the bit with no warning. That is exactly how the second
   case below hid.
 - `hooks/dependency-guard.test.sh` checks the git mode, but only for its own hook.
@@ -56,32 +56,55 @@ adding CI; any other hook's behaviour.
 
 R1. A new suite `hooks/registered-hooks-executable.test.sh` reads `settings.json` **from the git
 index** (`git show :settings.json`), not the working tree, and reads modes **from the index**
-(`git ls-files -s`), not the filesystem.
+(`git ls-files -s`), not the filesystem. JSON parsing and word splitting use the system `python3`
+run as `python3 -I` (Task 0 records its version); no new dependency.
 
-R2. A registered command is *checked* when its first word is a path under `$HOME/.claude/` or
-`~/.claude/` (after any leading `VAR=value` assignments). The path maps to the repo-relative path
-after that prefix. Each checked path must exist in the index and have mode `100755`.
+R1a. **Which repo is checked.** The check is one function, `check_repo <repo-root>`, that runs
+every git command as `git -C <repo-root> …`. The suite calls it once for each fixture repo (R6),
+then once for the real repo: the root of the repository that contains the suite file itself
+(`git -C "$(dirname "$0")" rev-parse --show-toplevel`), never the caller's current directory.
 
-R3. A command whose first word is an interpreter (`bash`, `sh`, `zsh`, `python3`, `python`,
-`node`) is *skipped*, since it does not need the bit. Any other command (e.g. the inline Orca
-one-liner) is *skipped*. The suite prints every skipped command on its own line, so a check that
-silently stops covering something is visible in the output.
+R2. **Which commands are checked.** Each registered command is split into words shell-style
+(`shlex.split`, POSIX mode). Leading `NAME=value` words are dropped. The command is *checked* when
+the next word starts with `$HOME/.claude/`, `${HOME}/.claude/` or `~/.claude/`; the repo-relative
+path is what follows that prefix. Paths are de-duplicated: a script registered on several events
+is checked once and its failure message names every event it is registered on. Each checked path
+must exist in the index and have mode `100755`.
 
-R4. Fail closed: if parsing finds zero checked commands, the suite fails ("found no registered
-hook scripts — the parser is broken, not the repo clean"). It also fails if `settings.json` is
-not valid JSON.
+R3. A command whose first word (after assignments) is an interpreter (`bash`, `sh`, `zsh`,
+`python3`, `python`, `node`) is *skipped*, since it does not need the bit. Any other command (e.g.
+the inline Orca one-liner) is *skipped*. The suite prints every skipped command with its reason
+on its own line, so a check that silently stops covering something is visible in the output.
+
+R4. **Fail closed.** The suite fails, with a message naming the cause, when: `settings.json` is
+missing from the index; it is not valid JSON; a command cannot be split (unbalanced quotes);
+parsing finds zero checked scripts ("found no registered hook scripts — the parser is broken, not
+the repo clean"); or a *skipped* non-interpreter command contains `.claude/` anywhere — a likely
+repo path in a shape R2 does not read, which must be taught to the parser or explained, never
+silently skipped.
 
 R5. The suite covers every hook event key in `settings.json` `hooks` plus `statusLine`, without a
-hard-coded list of event names.
+hard-coded list of event names. It prints the number of entries read, of checked scripts
+(distinct), and of skipped commands.
 
-R6. Fixture cases run against a throwaway git repo built in `mktemp -d` (never a fixed path), so
-the suite proves it can both fail and pass: a `100644` registered script fails; the same script at
-`100755` passes; an interpreter-invoked `100644` script passes; a registered path missing from the
-index fails; a non-path command is skipped and listed. The fixture repo must not pre-create the
-state under test (each case sets its own mode).
+R6. Fixture cases run against throwaway git repos built in `mktemp -d` (never a fixed path), so
+the suite proves it can both fail and pass. Each case builds its own repo and sets its own modes
+(no case may inherit state from another). Cases: a `100644` registered script fails; the same
+script at `100755` passes; `100644` in the index but executable on disk fails; an
+interpreter-invoked `100644` script passes; a registered path missing from the index fails; a
+non-path command is skipped and listed; a `VAR=1 $HOME/.claude/x.sh` command is checked; the
+`~/.claude/` and `${HOME}/.claude/` forms are checked; one script on two events is checked once and
+both events are named; invalid JSON fails; missing `settings.json` fails; zero checked scripts
+fails; a skipped command containing `.claude/` fails.
 
-R7. `hooks/handoff/handoff-keep-guard.sh` is set to `100755` in git
-(`git update-index --chmod=+x`), with no content change.
+R7. `hooks/handoff/handoff-keep-guard.sh` is stored as `100755` in git, with no content change.
+How (Task 2): `chmod +x` on disk first, then `git add -- <path>`. `git update-index --chmod=+x`
+alone is **not** enough: it changes only the index, and the house habit `git commit -- <path>`
+re-stages the file from disk, putting `100644` back (reproduced by the design judge in a scratch
+repo, 2026-10-16).
+
+R7a. The suite is run by hand, like every other suite here: there is no CI, and nothing runs it
+when a hook is added. The PR and the card say so; adding a runner is out of scope.
 
 R8. `skills/vetting-dependencies/SKILL.md` line 10 states that `dependency-guard.sh` is registered
 in `settings.json` and runs from the primary checkout once merged, without naming card task
@@ -119,22 +142,48 @@ Scenario: the parser finds nothing
   When the suite runs
   Then it fails with "found no registered hook scripts"
 
+Scenario: an assignment prefix and the other path spellings are still checked
+  Given settings.json registers "VAR=1 $HOME/.claude/hooks/a.sh", "~/.claude/hooks/b.sh"
+    and "${HOME}/.claude/hooks/c.sh", each 100644 in the index
+  When the suite runs
+  Then it fails and names a.sh, b.sh and c.sh
+
+Scenario: one script on two events
+  Given "$HOME/.claude/hooks/x.sh" is registered on PreToolUse and on Stop, 100644 in the index
+  When the suite runs
+  Then it reports hooks/x.sh once, naming both PreToolUse and Stop
+
+Scenario: broken or missing settings
+  Given settings.json in the index is not valid JSON, or is absent from the index
+  When the suite runs
+  Then it fails and says which
+
+Scenario: a path the parser cannot read is not skipped silently
+  Given settings.json registers "exec \"$HOME/.claude/hooks/x.sh\""
+  When the suite runs
+  Then it fails, naming the command as an unread .claude/ path
+
 Scenario: the real repo after the fix
   Given handoff-keep-guard.sh is 100755 in the index
   When the suite runs against this repo
-  Then it passes, and its checked count equals the distinct-script count from Task 0
+  Then it passes and prints its counts
+  And (checked by hand in Task 4, not asserted by the suite) the distinct checked count equals
+    Task 0's distinct-script count
 ```
 
 ## Tasks
 
 - [ ] 0. Re-measure on the branch base: the 37/14/27/23/1 counts above, by listing rows (not
-  `grep -c`). Record the numbers and the base SHA here. A different count is a finding, not an
-  error.
-- [ ] 1. Write `hooks/registered-hooks-executable.test.sh` (R1–R6). Run it against this repo
-  before Task 2: it must fail, naming exactly `hooks/handoff/handoff-keep-guard.sh`. Commit the
-  failing suite on its own.
-- [ ] 2. `git update-index --chmod=+x hooks/handoff/handoff-keep-guard.sh` (R7). Re-run: green.
-  Confirm `git diff --cached --stat` shows a mode change and no content change.
+  `grep -c`), and the `python3 --version` used. Record the numbers and the base SHA here. A
+  different count is a finding, not an error.
+- [ ] 1. Write `hooks/registered-hooks-executable.test.sh` (R1–R7a). Run it against this repo
+  before Task 2: it must fail, naming exactly `hooks/handoff/handoff-keep-guard.sh`, and every
+  fixture case must behave as R6 says. Commit the failing suite on its own.
+- [ ] 2. Fix the mode (R7): run `hooks/handoff/handoff-keep-guard.test.sh` in this worktree first
+  (the repo's test-marker gate will likely refuse a commit staging that file otherwise — not yet
+  tried), then `chmod +x hooks/handoff/handoff-keep-guard.sh`, `git add -- <path>`, commit.
+  **After** the commit: `git ls-tree HEAD hooks/handoff/handoff-keep-guard.sh` shows `100755`,
+  `git show --stat HEAD` shows a mode change and no content change, and the new suite is green.
 - [ ] 3. Edit the two lines in `skills/vetting-dependencies/SKILL.md` (R8). Diff must touch
   exactly lines 10 and 51.
 - [ ] 4. Verification section; observability judge (implementation stage); PR.
