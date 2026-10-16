@@ -1364,8 +1364,29 @@ Scenario: an update beside a pinned install still reaches the strongest decision
      alternative.
   4. Same dry run retried → `ask`. In **auto** mode, Mark saw the prompt and approved it. Because
      it was a dry run, nothing was installed: the scratch dir holds no `node_modules`.
-- **Finding: bypass mode skips the ask.** Two earlier retries ran in `bypassPermissions` mode, and
-  both logged `ask` (01:21:02Z, 02:34:05Z). The command ran at once each time, and Mark saw no
-  prompt. So in bypass mode the human's yes, which is the guard's only real control, is approved
-  on his behalf. The two denies still hold in that mode. This is not yet in Known gaps: it is a
-  spec edit, raised with Mark for a follow-up card.
+- **Finding, cause unproven: two bypass-mode asks completed with no yes from Mark on record.**
+  Two earlier retries ran in `bypassPermissions` mode, and both logged `ask` (01:21:02Z,
+  02:34:05Z). Both commands then ran. For retry 1, Mark says he saw no prompt but "was on a
+  different window". For retry 2 he again reported no prompt, in answer to a question that told
+  him the command "finished instantly". That claim was false.
+  The session transcript records each tool call's start and end. npm itself took about 0.3 s
+  every time:
+
+  | Retry | Mode | Start → end |
+  | --- | --- | --- |
+  | 1 | bypass | 9 min 48 s (01:21:01Z → 01:30:50Z) |
+  | 2 | bypass | 30 s |
+  | 3 | auto, Mark approved | 13 s |
+
+  So something held both bypass runs for longer than the approved run took. What resolved them
+  is not known. Two suspects, neither tested:
+  - bypass mode answering the ask itself;
+  - the third-party `~/.orca/agent-hooks/claude-hook.sh` that `settings.json` registers on every
+    tool, including `PermissionRequest` with matcher `*`, the event that answers a prompt.
+
+  The two denies (01:20:31Z, 01:20:37Z) were measured in bypass mode and held. Sources: the
+  permission mode and timings are from the session transcript, and the decisions are from
+  `dependency-guard.log`, which records no mode or prompt. Step 3's evidence is the report file.
+  This is not yet in Known gaps: adding it is a spec edit, raised with Mark. Before writing a
+  follow-up card, separate the two suspects: run one bypass-mode dry run with Mark watching,
+  then one with the orca hook disabled.
