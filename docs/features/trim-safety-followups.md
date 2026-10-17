@@ -432,7 +432,7 @@ with `TEST_EXEMPT` per the table above.
   wrong folder *of the same size* passes, and it exercises the writer's derivation only — the
   decider's is covered by task 6's fixtures. Recorded, not fixed: a stronger oracle would have
   to restate the folder contents, which is the duplication the shared constant exists to avoid.
-- [ ] Task 10 — re-run every suite this card touched so their receipts are fresh, then run the
+- [x] Task 10 — re-run every suite this card touched so their receipts are fresh, then run the
   observability judge; retire memory `reference_review_phase_card_blocks_source_edits` (it
   documents the workaround B removes) — a `~/.claude/projects/…/memory/` edit, outside git.
 
@@ -974,3 +974,60 @@ derivation only, the decider's being covered by task 6's fixtures.
 
 ⚠️ **The current writer-suite figure is 86/2.** The marker-gate table's `70 passed, 2 failed` is a
 2026-09-21 measurement and correct as history — do not read it as current.
+
+### Task 10 — every suite re-run, every receipt checked against HEAD, and the memory NOT retired
+
+Measured 2026-10-17 in `~/.worktrees/.claude/trim-safety-followups`, in-session.
+
+**The five suites this card touched:**
+
+| Suite | Result | Receipt |
+|---|---|---|
+| `bash hooks/phase-guard.test.sh` | **159 passed, 0 failed** | yes — written at rc 0 |
+| `bash hooks/handoff/handoff-keep-guard.test.sh` | **61/61 passed** | yes |
+| `python3 hooks/lib/decide-commit-gate.test.py` | **28 passed, 0 failed** | yes |
+| `bash hooks/test-marker-guard.test.sh` | **249 passed, 0 failed** | **never** — the suite does not call the writer on itself, by its own design |
+| `python3 hooks/lib/write-test-marker.test.py` | **86 passed, 2 failed** | **no** — rc 1 from the two inherited `wired` false positives |
+
+So two pairs still have no receipt, each for the reason the marker-gate table gave in advance, and
+neither is this card's defect: `test-marker-guard.sh` structurally cannot have one, and
+`write-test-marker.py` cannot until another card fixes the `wired` body-grep that cannot see a
+receipt written through `tl_finish`.
+
+**The four real parts-bearing suites were run too, though this card did not touch them** — they are
+the only pairs where the new feature has anything to do on real data, and without them task 10's
+receipts would all have `parts=0` and demonstrate nothing:
+
+`live-handoff` 69/69, `handoff-archive` 79/79, `pre-compact-handoff` 77/77,
+`slim-session-start` 97/97 — all rc 0.
+
+**The feature now demonstrably works on the real repository.** `live-handoff.sh`'s receipt names its
+four parts with blobs, ordered by path, beside the subject and test:
+
+```json
+"parts": [
+  { "blob": "de04b7eb…", "path": "hooks/handoff/live-handoff.test.d/10-snapshot-and-keep-envelope.sh" },
+  { "blob": "c9e5f781…", "path": "hooks/handoff/live-handoff.test.d/20-library-failure-and-suppression.sh" },
+  { "blob": "847d39b8…", "path": "hooks/handoff/live-handoff.test.d/30-session-identity-and-strike-survival.sh" },
+  { "blob": "7c3636c6…", "path": "hooks/handoff/live-handoff.test.d/40-preexisting-and-task-bug-wording.sh" }
+]
+```
+
+**Every blob in every receipt was checked against `HEAD`, not against the working tree** — 7 receipts,
+26 blob comparisons, **0 mismatches**. The four parts folders carry 5, 4, 5 and 4 entries, matching
+both the runners' declared counts and `git ls-files`.
+
+⚠️ **The checker was falsified before its 0 was recorded.** A check that cannot fail reports zero
+either way ([[feedback_confirm_the_check_can_fail]]). One receipt's subject blob was overwritten with
+forty zeroes: the checker reported `STALE subject`, 1 mismatch, exit 1. Re-running that suite
+regenerated the receipt and it returned to 0 mismatches, exit 0.
+
+⚠️ **The memory `reference_review_phase_card_blocks_source_edits` was NOT retired, and the card's
+instruction to retire it here is premature by exactly one merge.** It documents the workaround item B
+removes — but hooks load from the primary checkout, never from a branch
+([[reference_hooks_load_scripts_from_primary_checkout]]), and the live copy still carries the old
+rule: measured today, `/Users/marksuyat/.claude/hooks/phase-guard.sh:409` still reads
+`if [ "$file_phase" = "implementation" ] && [ -n "$file_branch" ]`. Deleting the memory now would
+remove a workaround that is still required. The file was **annotated instead** — appended, nothing
+removed — with what landed, why it is not yet in effect, and the single grep that settles when it may
+go. Retiring it is a post-merge step.
