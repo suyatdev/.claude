@@ -382,7 +382,7 @@ with `TEST_EXEMPT` per the table above.
   **line 43 of** `hooks/handoff/lib/test-parts.sh` — the `for part in "$parts_dir"/…` loop that
   actually runs. The same glob also sits in a comment at `:25`; a test taking the first match
   would stay green while the real loop drifted, so the assertion anchors on the `for` line.
-- [ ] Task 5 — C GREEN (writer): `PARTS_GLOB`, `parts_folder_for`, `is_part` beside
+- [x] Task 5 — C GREEN (writer): `PARTS_GLOB`, `parts_folder_for`, `is_part` beside
   `PAIR_SUFFIXES`; **split `build_marker(root, test_rel)` — enumerates the folder and returns
   the receipt dict, touching nothing on disk — from `write_marker`, which becomes the thin
   caller that persists what `build_marker` returns.** Task 9b depends on that split existing:
@@ -598,3 +598,62 @@ read the comment and stayed green while the real loop drifted.
 
 **No receipt, by construction.** A RED commit cannot have one — the writer runs only at rc 0 — so
 this commit carries `TEST_EXEMPT`, the case the marker-gate table already names.
+
+### Task 5 — C GREEN (writer): the receipt names the parts, and the split task 9b needs — PASS
+
+Measured 2026-10-16 in `~/.worktrees/.claude/trim-safety-followups`. Written by a dispatched
+worker; every figure re-measured here.
+
+| Check | Result |
+|---|---|
+| `python3 hooks/lib/write-test-marker.test.py` **before** | 73 passed, 9 failed |
+| the same **after** | **80 passed, 2 failed** |
+| remaining failures | only `wired: panes/dispatch-pane-agent.test.sh` and `wired: panes/run-pane-agent.test.sh` |
+| `hooks/lib/write-test-marker.test.py` | untouched — `git diff --stat` on it is empty |
+| files changed | `hooks/lib/write-test-marker.py` only |
+
+The 2 pre-existing failures stayed 2 and stayed the same two. The card's requirement was exactly
+that they not grow to 3.
+
+**The split exists, and `build_marker` touches nothing on disk.** `build_marker(root, test_rel)`
+returns the receipt dict; `write_marker(test_path)` keeps its signature, its return value and its
+`None`-for-no-subject behaviour, and is now the thin caller that persists what `build_marker`
+returns. Every suite in the repo calls `write_marker`, so nothing else moves. Task 9b calls
+`build_marker` only — had it called the persisting half against the live checkout it would have
+stamped four genuine-looking receipts for suites that never ran.
+
+**The falsifiability check was re-run here, not accepted from the report.** Two of task 4's new
+assertions pass vacuously against a writer that emits no `parts` at all, so without a mutation
+nothing shows they discriminate. `marker["parts"] = []` was added unconditionally in
+`build_marker`, the suite re-run, and the implementation restored:
+
+| State | Suite | The two key-absence assertions |
+|---|---|---|
+| implementation | 80 passed, 2 failed | pass |
+| mutated | **78 passed, 4 failed** | both **red** — `want the key absent, got parts=[]` |
+| reverted | 80 passed, 2 failed | pass |
+
+`git hash-object` of the writer is `e2c02fc6af878bbd53b5506efc2a2c03b600df9a` both before the
+mutation and after the revert, so the measurement left nothing behind. The mutated run was red, so
+it wrote no receipt of its own.
+
+⚠️ **Recorded, not fixed — those two assertion messages do not name the runner.** Under the
+mutation they read `want the key absent, got parts=[]` with no path, although each fixture uses a
+distinct runner (`hooks/foo.test.sh` and `hooks/foo.test.py`). The assertion *names* distinguish
+them, so a reader can tell which failed; the detail line cannot. A green suite can never surface
+this, since the format string runs only on failure
+([[feedback_a_green_suite_cannot_validate_assert_messages]]). Left as task 4 committed it rather
+than edited after the fact, and noted here so it is a choice rather than an oversight.
+
+⚠️ **One latent fragility, and it fails closed.** The enumeration is
+`glob.glob(os.path.join(root, folder_rel, PARTS_GLOB))`, so a checkout path containing a glob
+metacharacter (`[`, `*`, `?`) would make the pattern misparse and find no parts. The consequence is
+a receipt claiming `parts: []` while the commit ships real parts — which the decider reads as a
+mismatch and **blocks** with `MSG_STALE_PART`. Loud and safe, not silent, which is why it is
+recorded rather than changed; `glob.glob(..., root_dir=…)` is the fix if it ever bites.
+
+**No receipt, exactly as the marker-gate table predicted for this task.** The suite still exits
+non-zero because of the two `wired` false positives it does not own, and the writer only runs at
+rc 0 — `hooks/state/test-markers/` holds no entry for `write-test-marker.py`, confirmed by listing
+it. So this commit carries `TEST_EXEMPT`. This is the one GREEN commit in the card that legitimately
+cannot have one.

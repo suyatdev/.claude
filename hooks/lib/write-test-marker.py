@@ -27,6 +27,8 @@ the derived subject path is repo-relative, so a git call made from any other cwd
 against *that* cwd (`panes/panes/adapters/...`) and reports a tracked subject as missing.
 """
 
+import fnmatch
+import glob
 import json
 import os
 import subprocess
@@ -34,7 +36,16 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 
-__all__ = ["write_marker", "derive_subject", "encode_key", "WriterError"]
+__all__ = [
+    "write_marker",
+    "build_marker",
+    "derive_subject",
+    "encode_key",
+    "parts_folder_for",
+    "is_part",
+    "PARTS_GLOB",
+    "WriterError",
+]
 
 SCHEMA_VERSION = 1
 STATE_MODE = 0o700
@@ -46,6 +57,12 @@ STORE_DIR = os.path.join(STATE_DIR, "test-markers")
 # Rows 1 and 2 of the step-1 classification table -- the only two forms that pair. Rows 3-5 are
 # the gate's direction or form no pair at all, and none of them is valid input here.
 PAIR_SUFFIXES = ((".test.sh", ".sh"), (".test.py", ".py"))
+
+# A bash runner `<stem>.test.sh` may source a folder `<stem>.test.d/` of parts. PARTS_GLOB is the
+# glob in the `for part in` loop of hooks/handoff/lib/test-parts.sh -- bash cannot share a
+# constant, so write-test-marker.test.py asserts the two strings are equal.
+PARTS_GLOB = "[0-9][0-9]-*.sh"
+PARTS_DIR_SUFFIX = ".test.d"
 
 
 class WriterError(Exception):
@@ -114,6 +131,26 @@ def derive_subject(test_rel):
     return None
 
 
+def parts_folder_for(test_rel):
+    """The parts folder (repo-relative, no trailing slash) of a runner, or None.
+
+    Only a `.test.sh` runner has one: nothing sources parts for a `.test.py` runner, so the
+    writer does not even look.
+    """
+    suffix = PAIR_SUFFIXES[0][0]
+    if not test_rel.endswith(suffix):
+        return None
+    return test_rel[: -len(suffix)] + PARTS_DIR_SUFFIX
+
+
+def is_part(path):
+    """True when `path` is `<something>.test.d/<name matching PARTS_GLOB>` (last two components)."""
+    folder, name = os.path.split(path)
+    return os.path.basename(folder).endswith(PARTS_DIR_SUFFIX) and fnmatch.fnmatchcase(
+        name, PARTS_GLOB
+    )
+
+
 def encode_key(subject_rel):
     """The store filename for a repo-relative subject path.
 
@@ -165,6 +202,44 @@ def _write_atomically(path, payload):
         raise
 
 
+def build_marker(root, test_rel):
+    """The receipt dict for a tracked test path with a tracked subject. Touches nothing on disk.
+
+    Split from write_marker so a caller can ask "what would the receipt say?" against a live
+    checkout without stamping a genuine-looking receipt for a suite that never ran. A failed
+    hash of any file -- subject, runner or part -- raises WriterError and yields no receipt: one
+    silently missing a part would read as "this suite has fewer parts than it does".
+    """
+    subject_rel = derive_subject(test_rel)
+    marker = {
+        "version": SCHEMA_VERSION,
+        "subject": {
+            "path": subject_rel,
+            "blob": _git(root, ["hash-object", "--", subject_rel]),
+        },
+        "test": {
+            "path": test_rel,
+            "blob": _git(root, ["hash-object", "--", test_rel]),
+        },
+        # informational only, and nothing may decide on it: freshness is decided by content
+        # hashes alone, because a timestamp rule would re-admit the staleness problem the blob
+        # key dissolves
+        "written_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+    folder_rel = parts_folder_for(test_rel)
+    if folder_rel is not None and os.path.isdir(os.path.join(root, folder_rel)):
+        part_rels = sorted(
+            os.path.relpath(found, root)
+            for found in glob.glob(os.path.join(root, folder_rel, PARTS_GLOB))
+        )
+        marker["parts"] = [
+            {"path": part_rel, "blob": _git(root, ["hash-object", "--", part_rel])}
+            for part_rel in part_rels
+        ]
+    return marker
+
+
 def write_marker(test_path):
     """Write the marker for `test_path`, returning its path, or None for a test with no subject.
 
@@ -188,22 +263,7 @@ def write_marker(test_path):
         )
         return None
 
-    marker = {
-        "version": SCHEMA_VERSION,
-        "subject": {
-            "path": subject_rel,
-            "blob": _git(root, ["hash-object", "--", subject_rel]),
-        },
-        "test": {
-            "path": test_rel,
-            "blob": _git(root, ["hash-object", "--", test_rel]),
-        },
-        # informational only, and nothing may decide on it: freshness is decided by content
-        # hashes alone, because a timestamp rule would re-admit the staleness problem the blob
-        # key dissolves
-        "written_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    }
-
+    marker = build_marker(root, test_rel)
     path = os.path.join(_ensure_store(root), encode_key(subject_rel))
     _write_atomically(path, json.dumps(marker, indent=2, sort_keys=True) + "\n")
     return path
