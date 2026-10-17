@@ -1,7 +1,7 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
-branch: feat/dependency-vetting-guard
+branch: none  # merged via PRs #109, #110, #111 (last: f83e490); Mark moved it to review 2026-10-16
 ---
 
 # Dependency vetting guard — scan before anything is installed, then ask
