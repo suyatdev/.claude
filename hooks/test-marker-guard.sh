@@ -184,6 +184,12 @@ case "$f2" in
   MSG_STALE_TEST)
     printf 'test-marker-guard: MSG_STALE_TEST -- %s would ship a test version that was never run.\n' "$f4" >&2
     ;;
+  # Says only what is known. Three of the shapes this door blocks did not "ship an unrun part" at
+  # all -- a deletion ships nothing, and a pre-card receipt never recorded parts that did run --
+  # so the wording is the disagreement itself. The runner for the remedy is the pair's second half.
+  MSG_STALE_PART)
+    printf 'test-marker-guard: MSG_STALE_PART -- %s: the receipt'"'"'s part list differs from what this commit ships (first difference: %s). Re-run: bash %s\n' "$f4" "$f3" "${f4#*|}" >&2
+    ;;
   *)
     f2=MSG_CLASSIFIER_BAD_OUTPUT
     f4=-

@@ -402,7 +402,7 @@ with `TEST_EXEMPT` per the table above.
 - [x] Task 7 — C GREEN (decider): `_classify_role` row 2a via the imported `is_part`, the
   per-form part enumeration, `MSG_BAD_MARKER` for a malformed `parts`, the set comparison,
   `MSG_STALE_PART`; suite green except the hook-level assertion.
-- [ ] Task 8 — C hook GREEN: `hooks/test-marker-guard.sh` prints `MSG_STALE_PART`; the task-6
+- [x] Task 8 — C hook GREEN: `hooks/test-marker-guard.sh` prints `MSG_STALE_PART`; the task-6
   hook-level assertion goes green. No change to `hooks/test-marker-guard.test.sh`.
 - [ ] Task 9 — C docs: row 2a, and every "eight" the door-table grep finds, in
   `docs/features/verification-marker-gate.md` (each marked as this card's amendment); ADR
@@ -787,3 +787,51 @@ weakening.
 **No receipt.** The suite is red by one assertion until task 8, and the self-call fires only at
 rc 0, so this commit carries `TEST_EXEMPT`. The card's marker-gate table names task 7 as a commit
 that lands while the decider suite is still red by construction.
+
+### Task 8 — C hook GREEN: the new door has a message, and item C's code is complete — PASS
+
+Measured 2026-10-17 in `~/.worktrees/.claude/trim-safety-followups`. Done in-session, not
+delegated: one `case` arm in `hooks/test-marker-guard.sh`.
+
+| Check | Result |
+|---|---|
+| `python3 hooks/lib/decide-commit-gate.test.py` | **28 passed, 0 failed** (rc 0) — fully green |
+| `bash hooks/test-marker-guard.test.sh` | **249 passed, 0 failed** — no regression, and the file is untouched |
+| files changed | `hooks/test-marker-guard.sh` only |
+
+**The suite's own assertion checks three things — rc 2, the door name, the pair — and stops there.**
+It never reads the first-difference path or the remedy, both of which the card specifies. A passing
+suite therefore says nothing about most of the sentence
+([[feedback_a_green_suite_cannot_validate_assert_messages]]). So the shipped message was measured
+directly, by driving the real hook through the **committed suite's own fixture builders** rather
+than a hand-made copy of them:
+
+```
+rc = 2
+test-marker-guard: MSG_STALE_PART -- tools/R.sh|tools/R.test.sh: the receipt's part list
+differs from what this commit ships (first difference: tools/R.test.d/20-b.sh).
+Re-run: bash tools/R.test.sh
+```
+
+That is the card's wording, with the pair in field 4, the first differing path from field 3, and a
+remedy derived from the pair's second half (`${f4#*|}`) — the decider puts the differing path in
+field 3, so unlike `MSG_NO_MARKER` the runner is not handed to the hook and has to be recovered.
+
+**The wording says only what is known, deliberately.** Three of the shapes this door blocks did not
+"ship an unrun part" at all — a deletion ships nothing, and a pre-card receipt never recorded parts
+that *did* run — so the message states the disagreement itself. The `*)` fallback still catches any
+door a future decider invents.
+
+**A side effect worth recording: the decider now has a real receipt, written by the feature acting
+on itself.** The green run's self-call produced
+`hooks/state/test-markers/hooks%2Flib%2Fdecide-commit-gate.py` naming subject
+`c700e0cf…` (the committed decider) and test `de2bc6ba…` — and **no `parts` key**, which is correct:
+a `.test.py` runner never has parts, so the writer did not look. The store now holds three
+receipts, for `handoff-keep-guard.sh`, `phase-guard.sh` and `decide-commit-gate.py`.
+
+**No receipt for this commit, and the reason is structural rather than incidental.**
+`hooks/test-marker-guard.test.sh` never runs the writer on itself — `grep -n write-test-marker`
+finds three lines, one assigning `$WRITER` and two `cp`-ing it into fixtures, and no execution — so
+the pair `test-marker-guard.sh`|`test-marker-guard.test.sh` can never have one. Verified rather
+than assumed, and the store listing confirms no entry exists. `TEST_EXEMPT` is set for exactly the
+reason the marker-gate table gives for task 8.
