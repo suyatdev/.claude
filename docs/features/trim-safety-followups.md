@@ -390,7 +390,7 @@ with `TEST_EXEMPT` per the table above.
   suites that never ran. Suite green apart
   from the two pre-existing `wired` failures named above (record the before/after counts —
   70/2 must stay 2, not grow).
-- [ ] Task 6 — C RED (decider): new sibling `hooks/lib/decide-commit-gate.test.py`, throwaway
+- [x] Task 6 — C RED (decider): new sibling `hooks/lib/decide-commit-gate.test.py`, throwaway
   repos in the `write-test-marker.test.py` pattern, one assertion per scenario above (the
   malformed-parts outline included), each of the three commit forms for the changed-part case,
   and one hook-level assertion that runs the real `hooks/test-marker-guard.sh` with a
@@ -657,3 +657,59 @@ non-zero because of the two `wired` false positives it does not own, and the wri
 rc 0 — `hooks/state/test-markers/` holds no entry for `write-test-marker.py`, confirmed by listing
 it. So this commit carries `TEST_EXEMPT`. This is the one GREEN commit in the card that legitimately
 cannot have one.
+
+### Task 6 — C RED (decider): 28 assertions, 17 red, and the harness proven able to speak — PASS
+
+Measured 2026-10-16 in `~/.worktrees/.claude/trim-safety-followups`. Written by a dispatched
+worker; counts re-measured here.
+
+| Check | Result |
+|---|---|
+| `python3 hooks/lib/decide-commit-gate.test.py` | **11 passed, 17 failed** (rc 1), 28 assertions |
+| `grep -c '^FAIL'` | 17 — 16 for the missing decider feature, 1 the hook-level case |
+| crashes, tracebacks, harness errors | **none** — every red reads `got ALLOW`, never an error |
+| `hooks/lib/decide-commit-gate.py`, `hooks/test-marker-guard.sh` | untouched |
+| files added | `hooks/lib/decide-commit-gate.test.py` only |
+
+**The 16 feature reds are one per gherkin scenario**, by name: the changed-part case in all three
+commit forms; the re-run-clears-it pair; a new part; the deleted-part `PLAIN` and `ALL` rows; a
+pre-card receipt for a runner that has parts; a part staged alone; and all seven malformed-`parts`
+outline rows. Every one fails `got ALLOW`, because today `_classify_role` reads a part's `.sh`
+basename as a *subject* whose sibling `20-b.test.sh` does not exist — so no pair forms and nothing
+is read.
+
+**The harness was shown able to produce both verdicts, not just the one the reds need.** Three
+control assertions run first and pass: the real writer's receipt names both parts; a stale subject
+yields `MSG_STALE_SUBJECT`; a fresh receipt yields ALLOW. Without those, 17 reds would be equally
+consistent with fixtures that simply never build.
+
+⚠️ **Red is proven here; *satisfiable* is not.** A suite demonstrated able to fail is not thereby
+demonstrated able to pass ([[feedback_falsifiable_is_not_satisfiable]]). The worker reports writing
+a throwaway minimal decider under `/tmp` (since deleted) against which all 28 passed, and the
+repo's decider was not touched. **That half was not reproduced in this session** — task 7 is what
+settles it, and its expected landing figure is **27 passed, 1 failed**.
+
+⚠️ **The hook-level assertion stays red through task 7 and goes green only in task 8.** The hook's
+fallback prints `MSG_CLASSIFIER_BAD_OUTPUT` for a door it does not recognise, so emitting
+`MSG_STALE_PART` from the decider is not enough. Its docstring says so; do not read it as a task-7
+regression.
+
+⚠️ **The gherkin's `detail R.test.d/20-b.sh` is shorthand — task 7 must emit the full
+repo-relative path.** The suite asserts `tools/R.test.d/20-b.sh`, matching the receipt's
+`parts[].path` form. For `MSG_BAD_MARKER` it asserts detail `-` with the pair in field 4, which is
+how the decider emits that door today.
+
+**One assertion beyond the card**, flagged by the worker rather than slipped in: *a part of a
+runner with no tracked subject → ALLOW*. The card's step-2 orphan rule implies it; no scenario
+states it.
+
+**The `wired` inventory interaction, measured rather than predicted.** That check enumerates
+`git ls-files`, so an untracked file is invisible to it and the writer suite read `80 passed,
+2 failed` while the new file sat untracked — a figure that said nothing. After `git add`, it reads
+**81 passed, 2 failed**: one assertion added, and it *passed*, so the new suite's writer self-call
+satisfies the check. The failures stayed the same two `wired` false positives. Had the self-call
+been wrong this would have been `80 passed, 3 failed`.
+
+**No receipt, by construction.** The suite is red, and its self-call fires only at rc 0 — which,
+per the point above, is not until task 8. So `TEST_EXEMPT`, exactly as the marker-gate table
+anticipates for a RED commit.
