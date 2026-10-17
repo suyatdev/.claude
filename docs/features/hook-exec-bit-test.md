@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 # branch: to be cut from docs/guard-followups (7a1e8b3) in a new worktree after the /clear
 branch: feat/hook-exec-bit-test
