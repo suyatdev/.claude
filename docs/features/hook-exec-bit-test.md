@@ -225,7 +225,9 @@ Scenario: the real repo after the fix
   - `git diff -U0` showed two hunks, `@@ -10 +10 @@` and `@@ -51 +51 @@`, and `--numstat` 2 added /
     2 removed. Line 10 now says the hook is registered and runs from the primary checkout once
     merged and pulled there (no task numbers); line 51 now says to check `osv-scanner --version`.
-- [ ] 4. Verification section; observability judge (implementation stage); PR.
+- [x] 4. Verification section; observability judge (implementation stage); PR.
+  - Judge at `549e18a`: risk=low, confidence=high (one concern: suite is hand-run, no CI). PR #112
+    opened as draft, then this verdict committed.
 
 ## Verification
 
