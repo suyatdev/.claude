@@ -220,8 +220,11 @@ Scenario: the real repo after the fix
   `git show --stat HEAD` shows a mode change and no content change, and the new suite is green.
   - Before the change, `hooks/handoff/handoff-keep-guard.test.sh` ran 61/61 passed (rc 0) in this
     worktree. Mode set with `chmod +x` then `git add -- <path>`, committed with an explicit pathspec.
-- [ ] 3. Edit the two lines in `skills/vetting-dependencies/SKILL.md` (R8). Diff must touch
+- [x] 3. Edit the two lines in `skills/vetting-dependencies/SKILL.md` (R8). Diff must touch
   exactly lines 10 and 51.
+  - `git diff -U0` showed two hunks, `@@ -10 +10 @@` and `@@ -51 +51 @@`, and `--numstat` 2 added /
+    2 removed. Line 10 now says the hook is registered and runs from the primary checkout once
+    merged and pulled there (no task numbers); line 51 now says to check `osv-scanner --version`.
 - [ ] 4. Verification section; observability judge (implementation stage); PR.
 
 ## Gotchas
