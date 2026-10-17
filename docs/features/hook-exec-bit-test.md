@@ -186,9 +186,16 @@ Scenario: the real repo after the fix
 
 ## Tasks
 
-- [ ] 0. Re-measure on the branch base: the 37/14/27/23/1 counts above, by listing rows (not
+- [x] 0. Re-measure on the branch base: the 37/14/27/23/1 counts above, by listing rows (not
   `grep -c`), and the `python3 --version` used. Record the numbers and the base SHA here. A
   different count is a finding, not an error.
+  - Measured 2026-10-17 on branch base `e93790c` (settings.json read via `git show e93790c:settings.json`,
+    rows listed by walking `hooks.<event>[].hooks[]`, modes from `git ls-tree -r e93790c`):
+    37 hook entries, 14 event keys, 10 inline-command entries (the Orca `if [ -f ... ]` one-liner, none
+    containing `.claude/`), 27 repo-script entries by direct path, 23 distinct scripts, 22 at `100755`
+    and 1 at `100644` (`hooks/handoff/handoff-keep-guard.sh`, registered on `Stop`). All match the card.
+    `statusLine` is `bash "$HOME/.claude/statusline-command.sh"` (interpreter + file, to be skipped).
+  - Tool versions: Python 3.9.6, git 2.50.1 (Apple Git-155).
 - [ ] 1. Write `hooks/registered-hooks-executable.test.sh` (R1–R7a). Run it against this repo
   before Task 2: it must fail, naming exactly `hooks/handoff/handoff-keep-guard.sh`, and every
   fixture case must behave as R6 says. Commit the failing suite on its own, staging this card's
