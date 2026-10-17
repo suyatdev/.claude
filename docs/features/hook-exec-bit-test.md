@@ -227,6 +227,24 @@ Scenario: the real repo after the fix
     merged and pulled there (no task numbers); line 51 now says to check `osv-scanner --version`.
 - [ ] 4. Verification section; observability judge (implementation stage); PR.
 
+## Verification
+
+Re-run by the main session on 2026-10-17 at `147c3a8`, independently of the implementer's report:
+
+- `git log --oneline e93790c..HEAD` in this worktree lists the four task commits (`62c138c`,
+  `f8370d0`, `9e1eb4c`, `147c3a8`); `git status --short` is empty.
+- `bash hooks/registered-hooks-executable.test.sh` → rc 0, `27 passed, 0 failed`; real-repo counts
+  `entries read 38 | checked scripts (distinct) 23 | skipped commands 11`. The distinct checked
+  count (23) equals Task 0's distinct-script count (23) — the hand check the last scenario asks for.
+- `git show --summary 9e1eb4c` → `mode change 100644 => 100755 hooks/handoff/handoff-keep-guard.sh`
+  with 0 lines changed in that file.
+- `git diff -U0 e93790c HEAD -- skills/vetting-dependencies/SKILL.md` → two hunks, `-10 +10` and
+  `-51 +51`, nothing else.
+- Not re-run by the main session: the suite's failing run before Task 2 (reported by the
+  implementer, naming only `handoff-keep-guard.sh`). The fail path is still exercised on every run
+  by the fixture cases, e.g. "a `100644` registered script fails".
+- The suite is run by hand; there is no CI and nothing runs it when a hook is added (R7a).
+
 ## Gotchas
 
 - After merge, Mark's primary `~/.claude` already has the bit set locally but uncommitted. A plain
