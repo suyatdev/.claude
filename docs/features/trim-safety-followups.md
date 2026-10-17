@@ -375,7 +375,7 @@ with `TEST_EXEMPT` per the table above.
 - [x] Task 3 — B GREEN: the one-line step-7 change in `hooks/phase-guard.sh`; suite green;
   the decision-table row in `docs/features/phase-guard-hook.md`, marked "added by
   trim-safety-followups".
-- [ ] Task 4 — C RED (writer): in `hooks/lib/write-test-marker.test.py`, a runner with a
+- [x] Task 4 — C RED (writer): in `hooks/lib/write-test-marker.test.py`, a runner with a
   `.test.d/` folder gets `parts` in path order with the folder's `[0-9][0-9]-*.sh` only; an
   empty folder gets `[]`; a runner without one gets no `parts` key; a `.test.py` runner never
   gets one; and `PARTS_GLOB` equals the glob string read out of
@@ -552,3 +552,49 @@ passing. Both belong to other, closed cards and were true when written, so they 
 than live instruction. Recorded here so a later reader finds them on purpose rather than by
 surprise. `docs/features/phase-guard-hook.md:1434` likewise narrates the old step-9 grep and stays
 as written.
+
+### Task 4 — C RED (writer): ten assertions, seven of them red for the missing feature — PASS
+
+Measured 2026-10-16 in `~/.worktrees/.claude/trim-safety-followups`. Written by a dispatched
+worker; every number below was **re-measured here** rather than copied from its report
+([[feedback_a_copied_citation_is_laundered_not_verified]]).
+
+| Check | Result |
+|---|---|
+| `python3 hooks/lib/write-test-marker.test.py` **before** | 70 passed, 2 failed |
+| the same **after** | **73 passed, 9 failed** |
+| totals | 72 → 82 assertions: 10 added, 3 pass, 7 red |
+| `hooks/lib/write-test-marker.py` | byte-identical — `git diff --stat` on it is empty |
+| files changed | `hooks/lib/write-test-marker.test.py` only |
+
+The baseline was measured by restoring `HEAD`'s copy of the suite, running it, and restoring the
+new one — blob `e61cbe04…` before and after, so the measurement put nothing at risk. 70/2 matches
+the marker-gate table's 2026-09-21 figure independently.
+
+**No previously-passing assertion was lost, by set membership and not by arithmetic**
+([[feedback_a_balanced_total_is_not_a_verified_union]]). This suite prints only failures, so the
+passing names cannot be diffed; instead, the old suite held 72 assertions and the `FAIL` list now
+names exactly 9 — the same 2 pre-existing `wired` failures plus 7 names that did not exist before.
+No old name appears among them, so the other 70 old assertions pass.
+
+The two pre-existing failures are the known `wired` false positives (`panes/dispatch-pane-agent`
+and `panes/run-pane-agent` write their receipts through `tl_finish`, which a body grep cannot
+see). Still 2, still those two. They belong to another card.
+
+**Three of the ten pass today, and that is recorded rather than counted as success.** "A runner
+with no parts folder writes no `parts` key" and "a `.test.py` runner never gets one" assert *key
+absence*, which today's writer satisfies vacuously because it writes no `parts` at all; the third
+is the uniqueness guard on the `for` loop. They are guards that go red if task 5 over-writes
+`parts`, not evidence the feature is missing. The discriminating pair is the one that demands a
+real list and the one that demands `[]` for an empty folder — the latter is specifically what
+would catch a lazy "always write `parts: []`" implementation.
+
+**The glob anchor was verified, not trusted.** `hooks/handoff/lib/test-parts.sh:43` is the loop
+that runs (`for part in "$parts_dir"/[0-9][0-9]-*.sh; do`) and `:25` is a comment carrying the
+same glob — both line numbers as the card states. `grep -n 'for part in'` finds exactly **one**
+line, and the assertion anchors on that shape and asserts the count is 1, so a second or reworded
+loop fails loudly instead of being silently skipped. A first-match-on-the-glob test would have
+read the comment and stayed green while the real loop drifted.
+
+**No receipt, by construction.** A RED commit cannot have one — the writer runs only at rc 0 — so
+this commit carries `TEST_EXEMPT`, the case the marker-gate table already names.
