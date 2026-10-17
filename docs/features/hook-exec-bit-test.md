@@ -1,7 +1,8 @@
 ---
 phase: implementation
 model_tier: low
-branch: feat/hook-exec-bit-test  # to be cut from docs/guard-followups (7a1e8b3) in a new worktree after the /clear
+# branch: to be cut from docs/guard-followups (7a1e8b3) in a new worktree after the /clear
+branch: feat/hook-exec-bit-test
 ---
 
 Gate opened 2026-10-16 on the literal user phrase `gate confirmed`; Mark then chose "Quick fixes
@@ -196,10 +197,22 @@ Scenario: the real repo after the fix
     and 1 at `100644` (`hooks/handoff/handoff-keep-guard.sh`, registered on `Stop`). All match the card.
     `statusLine` is `bash "$HOME/.claude/statusline-command.sh"` (interpreter + file, to be skipped).
   - Tool versions: Python 3.9.6, git 2.50.1 (Apple Git-155).
-- [ ] 1. Write `hooks/registered-hooks-executable.test.sh` (R1–R7a). Run it against this repo
+- [x] 1. Write `hooks/registered-hooks-executable.test.sh` (R1–R7a). Run it against this repo
   before Task 2: it must fail, naming exactly `hooks/handoff/handoff-keep-guard.sh`, and every
   fixture case must behave as R6 says. Commit the failing suite on its own, staging this card's
   Task 1 note in the same commit so `doc-guard` sees documentation staged.
+  - Run 2026-10-17 before Task 2: 26 passed, 1 failed. The one failure is the real-repo check, and
+    its only FAIL line names `hooks/handoff/handoff-keep-guard.sh` (Stop, mode 100644). Counts
+    printed: entries read 38 (37 hook entries + `statusLine`), checked scripts (distinct) 23,
+    skipped commands 11 (10 Orca one-liners + the `statusLine` `bash …` command).
+  - Interpretations, not spec edits: combined short flags containing `c` (`-lc`, `-ec`) count as
+    `-c`; options before the script file (`bash -e x.sh`, `python3 -I x.py`) still count as
+    interpreter + file; a no-`command` entry and a `bash -c "$HOME/.claude/x.sh"` entry each sit
+    beside a valid `100755` script so the case asserts its own message, not the zero-scripts one.
+  - Housekeeping: the frontmatter `branch:` line carried a trailing `# to be cut from …` comment,
+    which `hooks/phase-guard.sh` (single-token branch value) reads as no claimed branch, so it
+    denied every source write on this branch. The comment text was kept, moved to its own `# branch:`
+    line above `branch:`; no word of it was removed.
 - [ ] 2. Fix the mode (R7): run `hooks/handoff/handoff-keep-guard.test.sh` in this worktree first
   (the repo's test-marker gate will likely refuse a commit staging that file otherwise — not yet
   tried), then `chmod +x hooks/handoff/handoff-keep-guard.sh`, `git add -- <path>`, commit.
