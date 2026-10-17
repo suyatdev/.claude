@@ -399,7 +399,7 @@ with `TEST_EXEMPT` per the table above.
   writer on itself at rc 0**, like `phase-guard.test.sh:1240` does — without that it would
   satisfy the inventory's `wired` text check merely by naming the writer in a fixture, which is
   exactly the false positive that leaves the writer suite red today.
-- [ ] Task 7 — C GREEN (decider): `_classify_role` row 2a via the imported `is_part`, the
+- [x] Task 7 — C GREEN (decider): `_classify_role` row 2a via the imported `is_part`, the
   per-form part enumeration, `MSG_BAD_MARKER` for a malformed `parts`, the set comparison,
   `MSG_STALE_PART`; suite green except the hook-level assertion.
 - [ ] Task 8 — C hook GREEN: `hooks/test-marker-guard.sh` prints `MSG_STALE_PART`; the task-6
@@ -713,3 +713,77 @@ been wrong this would have been `80 passed, 3 failed`.
 **No receipt, by construction.** The suite is red, and its self-call fires only at rc 0 — which,
 per the point above, is not until task 8. So `TEST_EXEMPT`, exactly as the marker-gate table
 anticipates for a RED commit.
+
+### Task 7 — C GREEN (decider): 17 reds become 1, and the comparison is shown to discriminate — PASS
+
+Measured 2026-10-16 in `~/.worktrees/.claude/trim-safety-followups`. Written by a dispatched
+worker; every figure re-measured here.
+
+| Check | Result |
+|---|---|
+| `python3 hooks/lib/decide-commit-gate.test.py` **before** | 11 passed, 17 failed |
+| the same **after** | **27 passed, 1 failed** |
+| the one remaining failure | the hook-level assertion, as task 6 predicted |
+| `python3 hooks/lib/write-test-marker.test.py` | 81 passed, 2 failed — unchanged |
+| files changed | `hooks/lib/decide-commit-gate.py` only; no test file touched |
+
+**Task 6's open half is now settled: the suite is satisfiable.** 27 of its 28 assertions pass
+against the real decider, so the 17 reds were never fixtures that could not build
+([[feedback_falsifiable_is_not_satisfiable]]).
+
+**The remaining failure is evidence, not a defect.** Its text is
+`got rc 2 stderr 'test-marker-guard: MSG_CLASSIFIER_BAD_OUTPUT -- the decision call named a door
+this version of the gate does not recognise.'` The hook already exits 2 and is already refusing —
+it simply cannot name the door yet. That fallback firing **proves the decider is emitting
+`MSG_STALE_PART`**, since the hook only reaches it for a door it does not know. Task 8 replaces the
+message.
+
+**The comparison was mutated here, not accepted from the report.** A rule that blocks on every
+difference is equally satisfied by one that blocks on everything, so the ALLOW guards are what
+carry the claim. Forcing the set difference to be non-empty
+(`… | {("zz", "x")}`) gives:
+
+| State | Suite | Which ALLOW guards |
+|---|---|---|
+| implementation | 27 passed, 1 failed | all pass |
+| mutated | **21 passed, 7 failed** | 6 ALLOW guards **red** — the `PATHSPEC` deleted-part case, the pre-card receipt for a runner with no parts, `helper.sh` beside a receipted `R.sh`, the `.test.py` hand-made folder, the rerun-clears pair, and the fresh-receipt control |
+| reverted | 27 passed, 1 failed | all pass |
+
+`git hash-object` of the decider is `c700e0cfd763b8c06c34756d87d25f9183c3cf4d` both before the
+mutation and after the revert.
+
+⚠️ **Two guards correctly stayed green under that mutation, and that is not a hole.** The lone part
+deletion and `helper.sh` staged alone form **no pair**, so no receipt is read and the comparison
+never runs. They guard the classifier, not the comparison. Reading their survival as "the mutation
+was absorbed" would be the error ([[feedback_a_round_trip_guard_can_absorb_every_probe]]).
+
+**Row 2a sits after rows 1-2 and before row 3**, exactly as the spec words it. Load-bearing,
+because a part *is* a `.sh` file: row 3 would classify `20-b.sh` as a subject and look for
+`20-b.test.sh`, so no pair would ever form from a part alone.
+
+⚠️ **A latent gap the spec's own row order creates, measured not reasoned.** A part whose basename
+itself ends in `.test.sh` matches the parts glob but is claimed by **row 1** first:
+
+```
+tools/R.test.d/10-a.sh          is_part=True   role=('part', 'tools/R.test.sh')
+tools/R.test.d/10-a.test.sh     is_part=True   role=('test', 'tools/R.test.d/10-a.sh')
+tools/R.test.d/helper.sh        is_part=False  role=('subject', 'tools/R.test.d/helper.test.sh')
+```
+
+So a part named `NN-*.test.sh` derives a subject that does not exist, forms no pair, and is
+**ungated** — `source_test_parts` would still source it. **Latent, not live:** `git ls-files` finds
+18 parts across the 4 real folders and **none** is named that way. No fixture covers it and the
+worker did not special-case it, which is right: "before row 3" is what the card says, and changing
+the row order is a spec decision rather than an implementation one. Recorded for a follow-up card.
+
+**Two deliberate deviations from the card's letter, both flagged by the worker rather than slipped
+in.** (1) `PARTS_GLOB` is **not** imported — only `parts_folder_for` and `is_part`, because
+`is_part` already carries the glob and importing an unused name would be dead code. The card's
+intent, that the glob live in one Python place, holds. (2) `_read_parts` rejects one shape the card
+does not list: a non-empty `parts` on a `.test.py` pair's receipt. That follows from the listed rule
+— such a pair has no folder, so every entry is outside it — and it is an addition, never a
+weakening.
+
+**No receipt.** The suite is red by one assertion until task 8, and the self-call fires only at
+rc 0, so this commit carries `TEST_EXEMPT`. The card's marker-gate table names task 7 as a commit
+that lands while the decider suite is still red by construction.
