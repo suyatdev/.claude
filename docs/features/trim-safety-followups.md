@@ -404,7 +404,7 @@ with `TEST_EXEMPT` per the table above.
   `MSG_STALE_PART`; suite green except the hook-level assertion.
 - [x] Task 8 — C hook GREEN: `hooks/test-marker-guard.sh` prints `MSG_STALE_PART`; the task-6
   hook-level assertion goes green. No change to `hooks/test-marker-guard.test.sh`.
-- [ ] Task 9 — C docs: row 2a, and every "eight" the door-table grep finds, in
+- [x] Task 9 — C docs: row 2a, and every "eight" the door-table grep finds, in
   `docs/features/verification-marker-gate.md` (each marked as this card's amendment); ADR
   `docs/decisions/0048-*.md`, titled and scoped to the `.test.d/` convention — "the receipt
   covers the parts a `.test.d/` runner sources" — amending ADR 0027's rule that "a marker records `git hash-object` of the subject **and** the
@@ -835,3 +835,84 @@ finds three lines, one assigning `$WRITER` and two `cp`-ing it into fixtures, an
 the pair `test-marker-guard.sh`|`test-marker-guard.test.sh` can never have one. Verified rather
 than assumed, and the store listing confirms no entry exists. `TEST_EXEMPT` is set for exactly the
 reason the marker-gate table gives for task 8.
+
+### Task 9 — C docs: the gate's card and ADR 0049, with every count re-derived — PASS
+
+Measured 2026-10-17 in `~/.worktrees/.claude/trim-safety-followups`. Written by a dispatched
+worker; every figure below re-measured here, and the arithmetic checked by **set membership**, not
+by the totals balancing ([[feedback_a_balanced_total_is_not_a_verified_union]]).
+
+| Check | Result |
+|---|---|
+| `grep -o '_emit("BLOCK", "MSG_[A-Z_]*' … \| sort -u \| wc -l` | **9** (was 8) |
+| distinct doors in `hooks/test-marker-guard.sh` (`grep -o 'MSG_[A-Z_]*' \| sort -u`) | **14** (was 13) |
+| the partition | 5 bash-raised + 9 decision-call = 14, and the two sets are disjoint — checked by name, not by subtraction |
+| field-4 split | 5 pair-naming + 8 dash + `MSG_NO_PYTHON` (writes no line) = 14 |
+| doors that write a line | 14 − 1 = **13**, of which the decision call reports 9 and bash the other 4 |
+| `git grep -nw eight` on the card | **10 lines** before (the card's own figure, confirmed), 8 after |
+| `grep -nw` vs `git grep -nw` | agreed exactly |
+
+The 8 remaining `eight`s are all either `(eight through revision 21)` annotations — history, correct
+as history — or the field-4 arithmetic at `:1680`/`:1683`, which **stays** eight because
+`MSG_STALE_PART` names a pair and therefore joins the five, not the eight. Both were marked rather
+than left bare.
+
+**The card's instruction was incomplete, and the worker said so rather than following it
+literally.** Updating only the word "eight" would have left the file contradicting itself: the total
+of thirteen doors, "twelve doors write a line", "all twelve downstream of G", the 5/8 split and
+"exactly four" pair-naming doors all *derive* from that count. Each was updated with the prior figure
+kept beside it. This is the single-source problem this repo keeps meeting
+([[feedback_single_source_the_statement_that_keeps_drifting]]) — one rule, many spellings, and a
+grep for one spelling finds a subset.
+
+**Edits in `docs/features/verification-marker-gate.md`:** row `2a` between rows 2 and 3 of the
+step-1 table with a blockquote marking the amendment and recording the latent `.test.sh`-named-part
+gap; the field-2 domain to nine; a field-3/4 row for `MSG_STALE_PART`; the doors table's row 14; a
+`MSG_STALE_PART` row in the decision-call Scenario Outline; and a blockquote on the receipt schema
+for the `parts` key.
+
+**One flowchart label was wrong after the worker's own edit, and is fixed here.** It added
+`MSG_STALE_PART` to node `W` but left node `N` reading *"Both blobs match post-commit content?"* —
+which understates the comparison now that parts are read too. It now reads *"Blobs and parts
+match"*. A diagram is exactly the kind of statement that keeps its old wording while the rule under
+it moves.
+
+**ADR `0049-the-receipt-covers-the-parts-a-test-d-runner-sources.md`**, 139 lines, in the house
+format of 0044/0047. Its citations were checked individually, not as a block
+([[feedback_a_copied_citation_is_laundered_not_verified]]):
+
+- `docs/decisions/0027-the-marker-is-a-receipt-not-a-grade.md:27` holds the amended sentence
+  verbatim — *"A marker records `git hash-object` of the subject **and** the test file at the moment
+  a suite reported zero failures."* It wraps onto `:28`, so cite the pair.
+- "two blobs" is at `hooks/lib/write-test-marker.py:8` — the **writer's docstring**, not ADR 0027's
+  wording, exactly as the card warned.
+- `MSG_GIT_FAILED` really is emitted from 2 places, which is why the recipe counts distinct
+  constants rather than call sites.
+- The ADR deliberately cites function, constant and file names rather than `:NNN` anchors, apart
+  from that one line, which it re-read on the day of writing.
+
+It carries both limitations as measured, not newly invented: the `.test.sh`-named part that row 1
+claims first (latent — none of the 18 real parts is named that way), and the ungated lone deletion
+(the marker card's standing rule). It also states that the `dispatch-pane-agent.<concern>.test.sh`
+convention stays outside the receipt, citing ADR 0044.
+
+⚠️ **The ADR number is 0049, not the 0048 the card names, and the card's instruction is stale.**
+`0048-an-install-is-vetted-then-asked-never-silently-allowed.md` is on `origin/main`, claimed by the
+dependency-vetting card. `git log --all --remotes` for `0049*` and `0050*` returns nothing, so
+neither is claimed on any ref. The reason this was invisible from here is worth keeping: **this
+branch is behind `origin/main`**, so a local check would have called 0048 free
+([[feedback_check_uniqueness_against_the_deciding_ref]]).
+
+⚠️ **Status is `Accepted (2026-10-17)`**, matching the house form in 0047 (`Accepted (2026-09-14)`).
+The worker offered `Proposed` instead; `Accepted` is right because the code is implemented and the
+gate was confirmed on 2026-10-15.
+
+⚠️ **The v1 mutation floor of 25 was deliberately not re-derived**, and the card now says so: the
+same "one per door" rule would give 26. Item C's door is asserted by
+`hooks/lib/decide-commit-gate.test.py`, including one assertion that drives the real hook — not by a
+re-run of the 25-mutant exercise. Raising the floor belongs to whoever owns that requirement.
+
+**No suite reads this document's contents.** The worker flagged that it had not checked. Four files
+mention the path — `classify-commit-command.py`, `classify-commit-command.test.py`,
+`decide-commit-gate.py`, `test-marker-guard.sh` — and all four references are **prose comments**, so
+no assertion anywhere depends on these figures and nothing needed re-running.
