@@ -213,11 +213,13 @@ Scenario: the real repo after the fix
     which `hooks/phase-guard.sh` (single-token branch value) reads as no claimed branch, so it
     denied every source write on this branch. The comment text was kept, moved to its own `# branch:`
     line above `branch:`; no word of it was removed.
-- [ ] 2. Fix the mode (R7): run `hooks/handoff/handoff-keep-guard.test.sh` in this worktree first
+- [x] 2. Fix the mode (R7): run `hooks/handoff/handoff-keep-guard.test.sh` in this worktree first
   (the repo's test-marker gate will likely refuse a commit staging that file otherwise — not yet
   tried), then `chmod +x hooks/handoff/handoff-keep-guard.sh`, `git add -- <path>`, commit.
   **After** the commit: `git ls-tree HEAD hooks/handoff/handoff-keep-guard.sh` shows `100755`,
   `git show --stat HEAD` shows a mode change and no content change, and the new suite is green.
+  - Before the change, `hooks/handoff/handoff-keep-guard.test.sh` ran 61/61 passed (rc 0) in this
+    worktree. Mode set with `chmod +x` then `git add -- <path>`, committed with an explicit pathspec.
 - [ ] 3. Edit the two lines in `skills/vetting-dependencies/SKILL.md` (R8). Diff must touch
   exactly lines 10 and 51.
 - [ ] 4. Verification section; observability judge (implementation stage); PR.
