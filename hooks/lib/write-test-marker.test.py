@@ -553,6 +553,81 @@ def check_parts_glob_matches_runner(mod, record):
            "want {!r} (the loop's glob), got PARTS_GLOB={!r}".format(runner_glob, got))
 
 
+# --- parts: the differential check (task 9b) --------------------------------------------------
+# The writer and the decider derive `<stem>.test.d/` through the same `parts_folder_for`, so a
+# wrong derivation makes them agree on "no parts" and both suites stay green. The oracle neither
+# produces is the literal N each real runner hand-maintains in `source_test_parts "<dir>" N`.
+#
+# This calls build_marker, NEVER write_marker: write_marker persists, and persisting against the
+# live checkout would stamp genuine-looking receipts for suites that never ran. It neither reads
+# nor writes hooks/state/.
+#
+# Not caught, by design: a derivation resolving to a DIFFERENT folder of the same size passes
+# (the counts are 4, 5, 4, 5), and only the writer's derivation is exercised -- the decider's is
+# covered by decide-commit-gate.test.py's fixtures.
+EXPECTED_SPLIT_RUNNERS = 4  # asserted, so a discovery bug finding none cannot pass vacuously
+
+# A runner declares its own parts folder: a line that STARTS with the helper call and a quoted
+# folder ending .test.d. test-parts.test.sh's `source_test_parts "$2" "$3"` is a test of the
+# helper, not a declaration, so its folder argument does not match.
+STP_DECLARATION_RE = re.compile(r'^\s*source_test_parts\s+"[^"]*\.test\.d"(.*)$')
+STP_LITERAL_COUNT_RE = re.compile(r'^\s+([0-9]+)\s*(?:#.*)?$')
+
+
+def _split_runners(root):
+    """Tracked `*.test.sh` runners that have a parts folder or declare one, sorted.
+
+    Two independent signals, unioned, so a runner that stops passing a literal count is still
+    found (by its folder) and fails loudly instead of dropping out of the comparison.
+    """
+    tracked = subprocess.run(
+        ["git", "-C", root, "ls-files", "--", "*.test.sh", "*.test.d/*"],
+        capture_output=True, text=True, check=True,
+    ).stdout.splitlines()
+    runners = set()
+    for rel in tracked:
+        if rel.endswith(".test.sh"):
+            with open(os.path.join(root, rel)) as handle:
+                if any(STP_DECLARATION_RE.match(line) for line in handle):
+                    runners.add(rel)
+        elif ".test.d/" in rel:
+            runners.add(rel.split(".test.d/")[0] + ".test.sh")
+    return sorted(runners)
+
+
+def _declared_count(root, runner_rel):
+    """(count, problem): the literal N the runner passes to source_test_parts, or a problem."""
+    with open(os.path.join(root, runner_rel)) as handle:
+        declared = [STP_DECLARATION_RE.match(line) for line in handle]
+    declared = [match for match in declared if match]
+    if len(declared) != 1:
+        return None, "want exactly 1 source_test_parts declaration of a .test.d folder, found {}".format(
+            len(declared))
+    count = STP_LITERAL_COUNT_RE.match(declared[0].group(1))
+    if not count:
+        return None, "the count is not a literal integer: {!r}".format(declared[0].group(0).strip())
+    return int(count.group(1)), None
+
+
+def check_parts_count_matches_runner_literal(mod, record):
+    """Assertion 6: build_marker's parts count equals the N each real runner passes."""
+    root = _real_repo_root()
+    runners = _split_runners(root)
+    record(len(runners) == EXPECTED_SPLIT_RUNNERS,
+           "found exactly {} split runners to compare".format(EXPECTED_SPLIT_RUNNERS),
+           "want {} runners, found {}: {!r}".format(EXPECTED_SPLIT_RUNNERS, len(runners), runners))
+    for runner_rel in runners:
+        want, problem = _declared_count(root, runner_rel)
+        if problem:
+            record(False, "parts count readable from {}".format(runner_rel),
+                   "{}: {}".format(runner_rel, problem))
+            continue
+        got = len(mod.build_marker(root, runner_rel).get("parts", []))
+        record(got == want, "build_marker parts count matches {}'s source_test_parts N".format(runner_rel),
+               "{}: source_test_parts passes {}, build_marker listed {} part(s)".format(
+                   runner_rel, want, got))
+
+
 CHECKS = [
     check_derivation,
     check_encoding,
@@ -569,6 +644,7 @@ CHECKS = [
     check_parts_absent_without_folder,
     check_parts_never_for_python_runner,
     check_parts_glob_matches_runner,
+    check_parts_count_matches_runner_literal,
 ]
 
 

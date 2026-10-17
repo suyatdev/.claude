@@ -411,7 +411,7 @@ with `TEST_EXEMPT` per the table above.
   test file" (`0027…md:27` — the phrase "two blobs" is the writer's docstring, not the ADR's),
   and naming the
   `dispatch-pane-agent.<concern>.test.sh` convention as still outside the receipt.
-- [ ] Task 9b — the differential check the two new suites cannot give each other: writer and
+- [x] Task 9b — the differential check the two new suites cannot give each other: writer and
   decider derive `<stem>.test.d/` the same way, so a wrong derivation makes both agree on "no
   parts" and both suites stay green. **One commit, not RED-then-GREEN**: it checks the
   derivation task 5 already shipped, so it passes on its first run and no red state is
@@ -916,3 +916,61 @@ re-run of the 25-mutant exercise. Raising the floor belongs to whoever owns that
 mention the path — `classify-commit-command.py`, `classify-commit-command.test.py`,
 `decide-commit-gate.py`, `test-marker-guard.sh` — and all four references are **prose comments**, so
 no assertion anywhere depends on these figures and nothing needed re-running.
+
+### Task 9b — the live-checkout oracle, and a falsifier the card's own one could not give — PASS
+
+Measured 2026-10-17 in `~/.worktrees/.claude/trim-safety-followups`. Written by a dispatched
+worker; re-measured here, and the falsifier **replaced** rather than reproduced.
+
+| Check | Result |
+|---|---|
+| `python3 hooks/lib/write-test-marker.test.py` before | 81 passed, 2 failed |
+| after | **86 passed, 2 failed** — 5 new passes (4 per-runner + 1 runner-count assertion) |
+| failures | still exactly 2, still the inherited `wired` pair |
+| `hooks/state/test-markers/` | **3 receipts before and after, unchanged** |
+| the check's call | `build_marker` only — `write_marker` appears nowhere but a comment |
+
+The oracle: each split runner hands `source_test_parts` a hand-maintained literal count, measured
+at `handoff-archive.test.sh:74` → 5, `live-handoff.test.sh:135` → 4,
+`pre-compact-handoff.test.sh:132` → 5, `slim-session-start.test.sh:94` → 4. That integer is kept by
+a different author for a different purpose, which is what makes it an oracle **neither** new module
+produces. Discovery found exactly 4 runners and the check asserts that count, so a discovery bug
+finding zero cannot pass vacuously.
+
+`hooks/handoff/lib/test-parts.test.sh` is excluded on both signals — its call is
+`source_test_parts "$2" "$3"`, whose folder argument does not end in `.test.d`, and it has no
+`.test.d/` folder. A count that stops being a literal (`"$N"`, `$((2+3))`, absent, or two
+declarations) makes the check **FAIL naming the runner** rather than skip; the worker probed all
+four shapes. A trailing comment after a literal is accepted.
+
+⚠️ **The card's prescribed falsifier does not discriminate, and saying it passed would have
+overstated this check.** Pointing `parts_folder_for` at a wrong folder took the suite to 76/12 — but
+**6 of those were task 4's own fixture assertions**, because that mutation breaks the writer
+outright. It proves the new check *can* fail; it says nothing about the new check catching anything
+the existing suites miss ([[feedback_a_round_trip_guard_can_absorb_every_probe]]).
+
+**So a discriminating mutation was run instead: change a real runner's declared count, which no
+fixture can see.** `live-handoff.test.sh`'s `source_test_parts … 4` → `3`:
+
+| State | Suite | Failures |
+|---|---|---|
+| as shipped | 86 passed, 2 failed | the 2 inherited |
+| runner's N mutated 4 → 3 | **85 passed, 3 failed** | the 2 inherited **plus only** `build_marker parts count matches hooks/handoff/live-handoff.test.sh's source_test_parts N` — *"source_test_parts passes 3, build_marker listed 4 part(s)"* |
+| reverted | 86 passed, 2 failed | the 2 inherited |
+
+`git hash-object` of the runner is `d7e53d895cbc0c1d5d96c4af5259d3f566d55f2e` before and after. One
+assertion moved and it was this one — so the check is coupled to the real repository's declared
+counts, not to the fixtures. **That is the drift it exists to catch**: a part added to a real folder
+without the runner's `N` being updated.
+
+**It persisted nothing, which is the whole reason task 5 split the function.** The receipt store
+holds the same three entries before and after every run above. Had this check called `write_marker`
+against the live checkout it would have stamped four genuine-looking receipts for suites that never
+ran — the check meant to strengthen the gate punching a hole in it.
+
+**What it still does not catch**, as the card already says: the four counts are 5, 4, 5 and 4, so a
+derivation resolving to a *different folder of the same size* passes; and it exercises the writer's
+derivation only, the decider's being covered by task 6's fixtures.
+
+⚠️ **The current writer-suite figure is 86/2.** The marker-gate table's `70 passed, 2 failed` is a
+2026-09-21 measurement and correct as history — do not read it as current.
