@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: low
-branch: none
+branch: feat/hook-exec-bit-pr-guard
 ---
 
 # Refuse a pull request while a registered hook is stored non-runnable
@@ -347,3 +347,23 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
   of `hooks/hook-exec-pr-guard.sh` before a commit stages the guard.
 - A worktree-isolated session refuses `git -C <main checkout>`; measure the main checkout's side
   of Task 0 and Task 7 by asking Mark or from a session rooted there.
+
+Test-proof gaps from the round-2 observability read (architecting, risk low), left out of the
+requirements because Mark gated without a spec revision; apply them while writing the tests:
+
+- Task 3: the guard suite must set `GIT_CEILING_DIRECTORIES` (and `GIT_CONFIG_GLOBAL=/dev/null`,
+  `GIT_CONFIG_NOSYSTEM=1`) as the exec-bit suite does, or a scratch dir under `$HOME` can resolve
+  to this repo and the out-of-scope scenarios pass for the wrong reason.
+- Task 3: the no-`python3` fixture must keep `git` on `PATH` — both live in `/usr/bin`, so
+  dropping `/usr/bin` also makes R4 decide "out of scope" and the case never reaches R8.
+- Task 1: case (a) checks `commit HEAD` wording on one message; also assert it on the other
+  source-naming messages (the suite's index-naming lines, ~65, 69, 71, 168 at `61d69dd`).
+- Task 7: run the live check from a session rooted in the throwaway worktree — hooks resolve git
+  from the session cwd, so a `cd` from this session tests the wrong checkout. `man gh-pr-create`
+  reads the manual without tripping `judge-guard.sh`, if the `--dry-run` quote needs checking.
+- `judge-guard.sh:45` also accepts `python`, not only `python3`; decide whether R8's
+  "no `python3`" message should say so. Per-Bash-call cost: one `git rev-parse` everywhere,
+  plus Python starts inside this repo — note it in the ADR.
+- Compliance notes: a payload that is valid JSON but not an object (e.g. `[]`) has no stated
+  outcome — treat it as unparseable (R8); load both helper files from the hook's own directory,
+  not `$HOME/.claude/hooks`.
