@@ -188,7 +188,20 @@ case "$f2" in
   # all -- a deletion ships nothing, and a pre-card receipt never recorded parts that did run --
   # so the wording is the disagreement itself. The runner for the remedy is the pair's second half.
   MSG_STALE_PART)
-    printf 'test-marker-guard: MSG_STALE_PART -- %s: the receipt'"'"'s part list differs from what this commit ships (first difference: %s). Re-run: bash %s\n' "$f4" "$f3" "${f4#*|}" >&2
+    # The writer hashes the parts folder from disk, so an UNTRACKED part is in the receipt (bash
+    # sources it too) yet can never be in a commit -- and re-running the suite rewrites the same
+    # receipt, so "Re-run" cannot clear it. Asked only here, on the refusal path, never per commit.
+    # A git failure, a tracked path or a path gone from disk (a deletion) keeps the old message.
+    untracked_part=0
+    if tracked_part=$(git --literal-pathspecs -C "$toplevel" ls-files --cached -- "$f3" 2>/dev/null) \
+       && [ -z "$tracked_part" ] && [ -e "$toplevel/$f3" ]; then
+      untracked_part=1
+    fi
+    if [ "$untracked_part" -eq 1 ]; then
+      printf 'test-marker-guard: MSG_STALE_PART -- %s: the receipt'"'"'s part list differs from what this commit ships (first difference: %s). That file is untracked: stage it or remove it.\n' "$f4" "$f3" >&2
+    else
+      printf 'test-marker-guard: MSG_STALE_PART -- %s: the receipt'"'"'s part list differs from what this commit ships (first difference: %s). Re-run: bash %s\n' "$f4" "$f3" "${f4#*|}" >&2
+    fi
     ;;
   *)
     f2=MSG_CLASSIFIER_BAD_OUTPUT

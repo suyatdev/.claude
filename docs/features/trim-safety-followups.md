@@ -441,7 +441,7 @@ no failing dimension, two concerns.** It reproduced all five suite figures and r
 card's own recorded mutations byte-exact. The three tasks below are its findings; Mark chose each
 fix from alternatives that included "document it and move on" (2026-10-18).
 
-- [ ] Task 11 — `traceability`: an **untracked** file in a parts folder enters the receipt (the
+- [x] Task 11 — `traceability`: an **untracked** file in a parts folder enters the receipt (the
   writer hashes the folder from disk, and bash sources it too) but can never be in what the commit
   ships, so the pair blocks **and the printed remedy loops** — re-running the suite rewrites the
   identical receipt. Reproduced in-session: `BLOCK MSG_STALE_PART detail=…/90-scratch.sh` both
@@ -1062,3 +1062,58 @@ rule: measured today, `/Users/marksuyat/.claude/hooks/phase-guard.sh:409` still 
 remove a workaround that is still required. The file was **annotated instead** — appended, nothing
 removed — with what landed, why it is not yet in effect, and the single grep that settles when it may
 go. Retiring it is a post-merge step.
+
+### Task 11 — the untracked-part remedy: the message branches, and both branches were read — PASS
+
+Measured 2026-10-18 in `~/.worktrees/.claude/trim-safety-followups`. RED `3a2acd1`, GREEN this
+commit. Judge round 1's `traceability` concern.
+
+| Check | Result |
+|---|---|
+| `python3 hooks/lib/decide-commit-gate.test.py` | 28/0 → **29 passed, 1 failed** (RED) → **30 passed, 0 failed** |
+| `bash hooks/test-marker-guard.test.sh` | **255 passed, 0 failed** — no regression |
+| files changed | RED: the decider suite. GREEN: `hooks/test-marker-guard.sh` only — `git diff --stat -- hooks/lib` is empty |
+| door / wire format | unchanged — still `MSG_STALE_PART`, no tenth door, decider untouched |
+
+**The two refusals were read from real runs, not from the format string.** A grep-style assertion
+passes on a sentence a bash quoting slip has mangled, and two passing assertions say nothing about
+whether they *differ*:
+
+```
+UNTRACKED  rc=2
+  …MSG_STALE_PART -- tools/R.sh|tools/R.test.sh: the receipt's part list differs from what this
+  commit ships (first difference: tools/R.test.d/90-scratch.sh). That file is untracked: stage it
+  or remove it.
+
+TRACKED    rc=2
+  …MSG_STALE_PART -- tools/R.sh|tools/R.test.sh: the receipt's part list differs from what this
+  commit ships (first difference: tools/R.test.d/20-b.sh). Re-run: bash tools/R.test.sh
+```
+
+`Re-run:` is dropped from the untracked message because it cannot clear that block — which was the
+whole finding.
+
+**The RED pair is what makes this a branch rather than a swap.** One assertion demands the
+stage-or-remove wording for an untracked part; the other demands a tracked part keeps `Re-run:`
+**and does not** contain the new wording. Without the second, replacing the message outright would
+have gone green.
+
+**Trackedness is asked once, on the block path only** —
+`git --literal-pathspecs -C "$toplevel" ls-files --cached -- "$f3"`, reusing the `$toplevel` the
+hook already resolves. "Untracked" requires all three of: the call exits 0, its output is empty,
+and the file exists on disk. The disk check is what stops a **staged deletion** being mislabelled
+untracked. Siting it inside the arm matters for task 13: the gate is already refusing, so this adds
+nothing to the happy path.
+
+⚠️ **The git-failure fallback is by construction, not measured.** The condition is an `&&` chain, so
+a failed call, a tracked path, or a path missing from disk all leave the flag unset and the old
+message prints; the file uses `set -u`, not `set -e`. No run was made with git forced to fail. An
+explicit gap, recorded rather than implied.
+
+⚠️ **A parallel-dispatch hazard, and it was my briefing error.** Tasks 11 GREEN and 12 were
+dispatched concurrently as "different files" — but task 12's falsifiability check required mutating
+`hooks/test-marker-guard.sh`, which is exactly task 11 GREEN's file. The workers handled it
+correctly (one waited for the other's `.bak` revert before editing), and no work was lost. The
+consequence was real though: task 12's falsification ran against a hook blob (`04ab64e1…`) that
+does **not** ship. It was therefore **re-run in-session against the shipping blob** — see task 12's
+entry. Two tasks are only independent when their *verification* is, not just their edits.
