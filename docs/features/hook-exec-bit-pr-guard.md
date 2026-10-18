@@ -323,6 +323,10 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
   module. Run it and record which cases fail (every case that expects a `FAIL`/`ok` line should;
   a pure "must not contain" check may pass with the module missing — that is expected, not a
   defect). Commit red, with this card's Task 1 note staged.
+  2026-10-18: red at `7 passed, 36 failed`; all 7 passes are `lacks` ("must not contain") checks.
+  Added (a)–(d) plus four `--rev HEAD` wording cases (missing script, settings.json missing, not
+  valid JSON, not an object). The suite pins only substrings, so R1's byte-identity without
+  `--rev` is checked by hand in Task 2 (old heredoc vs module on the real repo).
 - [ ] 2. Write `hooks/lib/registered_hook_modes.py` (R1) by moving the heredoc body, plus `--rev`.
   Suite green: every old case plus (a)–(d); real-repo counts unchanged (38/23/11).
 - [ ] 3. Guard suite first: `hooks/hook-exec-pr-guard.test.sh` with every Scenario above and the
