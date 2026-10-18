@@ -40,8 +40,9 @@ Mark (2026-10-17):
 
 Mine, open to Mark's review (each marked "(my call)" where it appears below): the guard checks the
 branch's last commit, not the index; it checks every registered hook, not only changed ones; one
-shared checker serves the suite and the guard; the bypass variable is `HOOK_EXEC_EXEMPT`; the
-machinery fails the same way `judge-guard.sh` does. Triage (`triaging-new-instructions`): a script
+shared checker serves the suite and the guard; the bypass variable is `HOOK_EXEC_EXEMPT`; scope
+is decided before anything else runs, and only in scope does broken machinery fail closed, as
+`judge-guard.sh` does; a payload with no command passes. Triage (`triaging-new-instructions`): a script
 decides it from the command string and the commit, so it is a hook.
 
 ## Evidence — measured 2026-10-17 on `61d69dd` (re-measure in Task 0)
@@ -56,7 +57,9 @@ decides it from the command string and the commit, so it is a hook.
   `importlib` to pass its own (`hooks/merge-guard.sh:62-69`).
 - From this worktree, `git rev-parse --path-format=absolute --git-common-dir` →
   `/Users/marksuyat/.claude/.git`, the main checkout's git dir.
-- Versions: Python 3.9.6, git 2.50.1 (Apple Git-155), gh 2.96.0.
+- Versions: Python 3.9.6, git 2.50.1 (Apple Git-155), gh 2.96.0, bash 3.2.57 (`/bin/bash`, the
+  only bash on `PATH`; version measured by the round-1 compliance judge). The guard and both suites
+  run under it, so no bash-4 constructs (associative arrays, `mapfile`, `${var,,}`).
 
 ## Scope
 
@@ -69,12 +72,12 @@ Out: other repositories; a SessionStart or `pre-commit` check; CI; changing any 
 
 ```mermaid
 flowchart TD
-  A[Bash command] --> B{classifier: does it run gh pr create?}
-  B -- classifier unusable --> X[refuse: name the classifier, fail closed]
-  B -- no --> OK[allow, silent]
-  B -- yes --> C{session repo's git common dir = ~/.claude/.git?}
-  C -- no / unknowable --> OK
-  C -- yes --> D{HOOK_EXEC_EXEMPT set?}
+  A[Bash command] --> C{session repo's git common dir = ~/.claude/.git? bash + git only}
+  C -- no / unknowable --> OK[allow, silent]
+  C -- yes --> B{classifier: does it run gh pr create?}
+  B -- python3 missing, payload unreadable, classifier unusable --> X[refuse: name the cause, fail closed]
+  B -- no, or no command --> OK
+  B -- yes --> D{non-empty HOOK_EXEC_EXEMPT on that segment?}
   D -- yes --> E[allow, print the reason]
   D -- no --> F[shared checker on HEAD]
   F -- PASS --> OK
@@ -97,49 +100,68 @@ flowchart TD
 ## Requirements
 
 R1. **Shared checker.** `python3 -I hooks/lib/registered_hook_modes.py <repo-root> [--rev <commit>]`
-holds today's `check_repo` logic unchanged (registered-command parsing, skips, fail-closed rules,
-output lines, counts, `result: PASS|FAIL…`, exit 0 clean / 1 problems). Without `--rev` it reads
-the index exactly as today (`git show :settings.json`, `git ls-files -s -z`). With `--rev <c>` it
-reads `git show <c>:settings.json` and modes from `git ls-tree -r -z <c>`; a `<c>` that does not
-resolve is a `FAIL` naming it. Any exit other than 0 or 1, or no `result:` line, means the checker
-did not run. Standard library only.
+holds today's `check_repo` logic (registered-command parsing, skips, fail-closed rules, counts,
+`result: PASS|FAIL…`, exit 0 clean / 1 problems). Without `--rev` it reads the index exactly as
+today (`git show :settings.json`, `git ls-files -s -z`), and its output lines are byte-identical
+to today's. With `--rev <c>` it reads both `settings.json` (`git show <c>:settings.json`) and the
+modes (`git ls-tree -r -z <c>`) from that commit, never mixing in the index, and every line that
+names its source says `commit <c>` where today's names the index (e.g. "missing from commit
+HEAD", "settings.json is missing from commit HEAD"). A `<c>` that does not resolve to a commit is
+a `FAIL` naming it. Any exit other than 0 or 1, or no final `result:` line, means the checker did
+not run. Standard library only.
 
 R2. **Suite on the shared checker.** `check_repo` becomes a one-line call to R1 without `--rev`.
-Every existing fixture case stays and must pass unchanged. Two cases are added: a script `100755`
-in the index but `100644` in the commit fails with `--rev HEAD`; the reverse passes with `--rev
-HEAD` and fails without it.
+Every existing fixture case stays, unchanged, and must pass. Added cases, each in its own repo:
+(a) a script `100755` in the index but `100644` in HEAD fails with `--rev HEAD`, and the message
+says `commit HEAD`; (b) the reverse passes with `--rev HEAD` and fails without it; (c)
+`settings.json` in HEAD registers a `100644` script that the index's `settings.json` does not
+register — fails with `--rev HEAD`, passes without it (catches a build that reads modes from HEAD
+but settings from the index); (d) `--rev nosuchref` fails naming `nosuchref`.
 
-R3. **Which commands.** The guard reads the payload's `tool_input.command` and classifies it with
-`classify(..., subcommand=("pr","create"), exempt_var="HOOK_EXEC_EXEMPT")` imported the way
-`merge-guard.sh` does. `NO` → exit 0, silent. Accepted-open shapes are the classifier's own
-(ADR 0012). An empty payload → exit 0.
+R3. **Which commands.** After R4 says the repo is in scope, the guard reads the payload's
+`tool_input.command` with `python3 -I` and classifies it with `classify(...,
+subcommand=("pr","create"), exempt_var="HOOK_EXEC_EXEMPT")`, loaded by `importlib` from
+`hooks/lib/classify-pr-command.py` under `python3 -I`, and accepted only when that call exits 0
+**and** its first line is exactly `PR` or `NO` — `judge-guard.sh`'s two checks (status and shape),
+not `merge-guard.sh`'s call, which skips `-I` and the status check. `NO` → exit 0, silent. A
+payload whose `tool_input.command` is missing, not a string, or blank → exit 0, silent: there is
+no command to classify, so it cannot be a PR creation (my call; `judge-guard.sh` refuses this
+case, `merge-guard.sh:60` allows it). Accepted-open shapes are the classifier's own (ADR 0012).
 
-R4. **Which repository.** The guard acts only when the session's working directory is inside a
+R4. **Which repository — decided first.** Before any Python runs, the guard decides scope with
+bash and git only: an empty stdin → exit 0; then the session's working directory must be inside a
 git work tree whose `git rev-parse --path-format=absolute --git-common-dir`, resolved with
-`os.path.realpath`, equals the realpath of `$HOME/.claude/.git`. That covers the main checkout and
-all its worktrees. Not in a repo, a different repo, `$HOME` unset, or a common dir that cannot be
-read → exit 0, silent (Mark's scope decision; `judge-guard.sh` still applies to every PR).
+`cd -P … && pwd -P`, equals `$HOME/.claude/.git` resolved the same way. That covers the main
+checkout and all its worktrees. Not in a repo, a different repo, `$HOME` unset, `git` missing, or
+any of those commands failing → exit 0, silent (Mark's scope decision; `judge-guard.sh` still
+applies to every PR). Because scope comes first, nothing this guard does can block a command in
+any other repository.
 
 R5. **What is checked (my call).** R1 with `--rev HEAD`, run against `git rev-parse
 --show-toplevel`: HEAD is what `gh pr create` publishes, and the index can hold staged work that
 is not in the PR. Every script the branch's own `settings.json` registers is checked, changed or
 not, so an old mistake blocks the next PR until fixed.
 
-R6. **Refusal.** Exit 2, stderr: one line per `FAIL` from R1, then the fix for a mode problem —
-`chmod +x <path>`, `git add -- <path>`, commit — then the bypass line. Allow (exit 0) when R1
-passes.
+R6. **Decision.** Allow (exit 0, silent) only when R1 exits 0 **and** its last line is exactly
+`result: PASS`. R1 exiting 1 with a final `result: FAIL…` line → exit 2, stderr: one line per
+`FAIL` from R1, then the fix for a mode problem — `chmod +x <path>`, `git add -- <path>`, commit —
+then the bypass line. Every stderr line starts `hook-exec-pr-guard:`. Anything else from R1 is R8.
 
-R7. **Bypass (my call).** A non-empty `HOOK_EXEC_EXEMPT=<reason>` on the matching segment allows
-the PR and prints `hook-exec-pr-guard: exempted (HOOK_EXEC_EXEMPT=<reason>)` to stderr. It is read
-only after R4 says the repo is in scope. `JUDGE_EXEMPT` and `MERGE_EXEMPT` never satisfy it, and
-it never satisfies them.
+R7. **Bypass (my call).** `HOOK_EXEC_EXEMPT=<reason>` as a leading assignment on the segment that
+runs `gh pr create` (the classifier reads only that segment) allows the PR and prints
+`hook-exec-pr-guard: exempted (HOOK_EXEC_EXEMPT=<reason>)` to stderr. An empty value is no
+bypass. The same assignment on another segment of a chained command is no bypass. `JUDGE_EXEMPT`
+and `MERGE_EXEMPT` never satisfy it, and it never satisfies them.
 
-R8. **Machinery failures (my call: as `judge-guard.sh`).** No `python3`, an unreadable payload, or
-a classifier that exits non-zero or prints anything but `PR`/`NO` → exit 2 for every Bash command,
-naming the classifier path and a repair route that survives the block (the Write tool, or
-unregistering the hook). In scope, an R1 crash (R1's "did not run") → exit 2 naming the module.
-`judge-guard.sh` already blocks every Bash command in the first case, so this adds no new blocked
-state.
+R8. **Machinery failures, in scope only (my call).** Once R4 says the repo is in scope: no
+`python3`, a payload that is not valid JSON, or a classifier that exits non-zero or prints
+anything but `PR`/`NO` → exit 2 for every Bash command in this repo and its worktrees, naming the
+cause and a repair route that survives the block (the Write tool, or unregistering the hook). For
+a `gh pr create`, an R1 that did not run (R1's definition) → exit 2 naming the module. Outside
+this repo none of these can fire (R4). In this repo, `judge-guard.sh` already blocks every Bash
+command on a missing `python3`, an unreadable payload (`judge-guard.test.sh`: "truncated JSON ->
+block") or an unusable classifier, so the only blocked state this guard adds is a broken R1, and
+only for `gh pr create`.
 
 R9. **Registration.** `settings.json` runs `$HOME/.claude/hooks/hook-exec-pr-guard.sh` as a bare
 command under `PreToolUse` `Bash`, after `dependency-guard.sh`. The file is `100755` in git, so
@@ -221,24 +243,48 @@ Feature: hook-exec-pr-guard
     When "HOOK_EXEC_EXEMPT=docs-only gh pr create" runs in scope with a bad HEAD
     Then the hook exits 0 and stderr carries the reason
 
-  Scenario: another guard's bypass does not count
-    When "JUDGE_EXEMPT=x gh pr create" runs in scope with a bad HEAD
+  Scenario Outline: what is not a bypass
+    When "<cmd>" runs in scope with a bad HEAD
     Then the hook exits 2
+    Examples:
+      | cmd                                                |
+      | JUDGE_EXEMPT=x gh pr create                        |
+      | HOOK_EXEC_EXEMPT= gh pr create                     |
+      | HOOK_EXEC_EXEMPT=x true && gh pr create --fill     |
 
-  Scenario: an unusable classifier fails closed
-    Given the classifier file is empty
-    When any Bash command runs
-    Then the hook exits 2 naming the classifier path and a repair route
+  Scenario: a payload with no command passes
+    Given a valid PreToolUse payload whose tool_input has no "command", or a blank one
+    When the hook runs in scope
+    Then the hook exits 0
+
+  Scenario Outline: broken machinery fails closed in scope
+    Given <broken>
+    When "ls" runs in scope
+    Then the hook exits 2 naming <cause> and a repair route
+    Examples:
+      | broken                                  | cause                 |
+      | the classifier file is empty            | the classifier path   |
+      | python3 is not on PATH                  | the missing python3   |
+      | the payload is truncated JSON           | the unreadable payload |
+
+  Scenario: broken machinery never reaches another repository
+    Given the classifier file is empty and python3 is not on PATH
+    When "gh pr create" runs in a different git repo
+    Then the hook exits 0 and prints nothing
 
   Scenario: a broken settings.json at HEAD fails closed
     Given settings.json at HEAD is not valid JSON
     When "gh pr create" runs in scope
     Then the hook exits 2 naming the JSON error
 
-  Scenario: an unusable checker fails closed
-    Given the checker module is empty
+  Scenario Outline: an unusable checker fails closed
+    Given <broken>
     When "gh pr create" runs in scope
     Then the hook exits 2 naming the module
+    Examples:
+      | broken                                                         |
+      | the checker module is empty                                    |
+      | the checker exits 0 but its last line is not "result: PASS"    |
 ```
 
 Each guard-suite case builds its own fixture: a fake `$HOME` in `mktemp -d` holding `.claude` as a
@@ -259,17 +305,20 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
 | A fresh clone of this repo that is not a worktree of `~/.claude` is out of scope. | Mark's scope decision. |
 | If this guard's own file loses its bit it cannot run to say so (exit 126 does not block). | `verify-hook-wiring.sh` reports the disk bit at session start; R9 puts the file under the suite's check. |
 | The guard is live only after merge and pull into the main checkout. | True of every hook here. |
+| In this repo and its worktrees, a missing `python3`, an unreadable payload or a broken classifier blocks every Bash command, not just `gh pr create`. | `judge-guard.sh` already blocks every Bash command in those three states (R8), so no new blocked state; outside this repo R4 makes it impossible. |
+| A `gh pr create` without `HOOK_EXEC_EXEMPT` is still blocked by `judge-guard.sh` until a verdict exists; the two refusals are independent. | Intended: each guard answers one question. |
 
 ## Tasks
 
 - [ ] 0. Re-measure on the branch base: the Evidence list (suite counts by its own output, the
-  common-dir answer from a worktree and from the main checkout, the three versions) and the next
+  common-dir answer from a worktree and from the main checkout, the four versions) and the next
   free ADR number on `origin/main` and on open PR branches. A different count is a finding.
-- [ ] 1. Suite first (R2): add the two `--rev` cases and point `check_repo` at the not-yet-existing
-  module. Run it: the new and existing cases fail because the module is missing. Commit red, with
-  this card's Task 1 note staged.
+- [ ] 1. Suite first (R2): add cases (a)–(d) and point `check_repo` at the not-yet-existing
+  module. Run it and record which cases fail (every case that expects a `FAIL`/`ok` line should;
+  a pure "must not contain" check may pass with the module missing — that is expected, not a
+  defect). Commit red, with this card's Task 1 note staged.
 - [ ] 2. Write `hooks/lib/registered_hook_modes.py` (R1) by moving the heredoc body, plus `--rev`.
-  Suite green: every old case plus the two new ones; real-repo counts unchanged (38/23/11).
+  Suite green: every old case plus (a)–(d); real-repo counts unchanged (38/23/11).
 - [ ] 3. Guard suite first: `hooks/hook-exec-pr-guard.test.sh` with every Scenario above and the
   three file-mode assertions. Run it red against a stub that always allows and one that always
   denies; record which cases each stub passes. Commit red.
@@ -280,9 +329,13 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
 - [ ] 6. Verification section; observability judge (implementation stage); open the PR, then
   commit the verdict.
 - [ ] 7. After merge and Mark's pull: confirm the main checkout's hook blob and mode equal the
-  merge commit's, then, with Mark's OK, one live check in a throwaway local worktree whose HEAD
-  stores a registered script as `100644`: `gh pr create --dry-run` through the Bash tool must be
-  refused. Remove that worktree and its branch after.
+  merge commit's. Then, with Mark's OK, one live check in a throwaway local worktree whose HEAD
+  stores a registered script as `100644`, through the Bash tool:
+  `JUDGE_EXEMPT=live-check gh pr create --help`. `JUDGE_EXEMPT` takes `judge-guard.sh` out of the
+  result, and `--help` does nothing if it does run (`--dry-run` was rejected: the round-1
+  observability judge quotes gh's manual as saying it "may still push git changes"; not
+  re-read here, because reading `gh pr create --help` is itself refused by `judge-guard.sh`). Pass = refused **and** the refusal text names
+  `hook-exec-pr-guard`. Remove that worktree and its branch after.
 
 ## Gotchas
 
