@@ -162,7 +162,11 @@ task 9b's count check is what would notice if it stopped holding.
 
 **The glob lives in one Python place.** `write-test-marker.py` defines `PARTS_GLOB` (and the
 `parts_folder_for(test_rel)` / `is_part(path)` helpers beside `PAIR_SUFFIXES`); the decider
-imports them through its existing `_load()` rather than restating them. The bash copy in
+imports them through its existing `_load()` rather than restating them. *(Amended by task 14: that
+one place is now `hooks/lib/parts_convention.py`, which **both** sides load. Importing the whole
+writer cost a measured ~18 ms on every gate call — see the task 13 and 14 entries in Verification.
+The writer still re-exports the three names, so this paragraph's contract is unchanged; only the
+file holding it moved.)* The bash copy in
 `test-parts.sh` cannot share a constant, so a writer test reads that file and asserts its glob
 string equals `PARTS_GLOB` — a drifted copy fails a test instead of silently receipting a
 different set of files than the runner sources.
@@ -458,7 +462,7 @@ fix from alternatives that included "document it and move on" (2026-10-18).
   **A deliberate, user-approved departure from task 8's "no change to
   `hooks/test-marker-guard.test.sh`"**, because the same change raised the MUST governing it. One
   commit — it asserts behaviour the hook already has — plus a mutation showing the row can fail.
-- [ ] Task 13 — `success_masking` (b): the gate's §Latency budget is **≤200 ms** and last measured
+- [x] Task 13 — `success_masking` (b): the gate's §Latency budget is **≤200 ms** and last measured
   **169.3 ms**, leaving ~31 ms. The judge measured the added cost at `ls-tree` 7.18 ms,
   `ls-files --stage` 6.41 ms, `hash-object` 6.29 ms — **one extra git subprocess per formed bash
   pair even when the runner has no parts folder**, since `parts_folder_for` returns a path whether
@@ -466,6 +470,16 @@ fix from alternatives that included "document it and move on" (2026-10-18).
   this card nor ADR 0049 contains the word "latency". **Measure first, on a commit forming several
   pairs, and record it**; only then decide whether to skip the call when no folder exists — that
   shortcut has a deleted-folder case needing its own test.
+- [x] Task 14 — task 13's finding, and **not** the one the judge predicted: ~18 of the ~25 ms this
+  card adds is `decide-commit-gate.py` loading the **whole writer** at import time — and with it
+  `tempfile`, `datetime` and `glob` — for two pure-string helpers, on **every gate call**, pair or
+  no pair. The new `git ls-files` is only ~7 ms. Fix, chosen by Mark 2026-10-18 from alternatives
+  that included raising the budget: **extract `PARTS_GLOB`, `PARTS_DIR_SUFFIX`, `parts_folder_for`
+  and `is_part` into a small module both sides import.** A refactor with no behaviour change, so no
+  RED half — the three existing suites are the test, and the new module gets **no sibling test**
+  (a `X.py`/`X.test.py` pair would demand a receipt of its own, and the convention is already
+  covered by the writer suite's parts assertions plus task 9b's live cross-check). ADR 0049's "one
+  Python place" sentence and this card's item C must name the new module afterwards.
 
 ## Verification
 
@@ -1168,3 +1182,137 @@ doors; a raw `grep -o 'MSG_[A-Z_]*' | sort -u` here returned **14**. The judge w
 name, `MSG_FROM_A_LATER_VERSION`, is a **fixture constant** for the unrecognised-door case, not a
 door the hook can emit. A name's shape is not its category
 ([[feedback_a_path_shape_is_not_a_category]]).
+
+### Task 13 — the latency measurement: **over budget, and not for the predicted reason** — FINDING
+
+Measured 2026-10-18 in `~/.worktrees/.claude/trim-safety-followups`, reproducing task 10's recorded
+method in `docs/features/verification-marker-gate.md` (`time.perf_counter()` around
+`subprocess.run(['/bin/bash', GATE], input=payload)`, PreToolUse JSON on stdin, n=15, median, sweep
+repeated 4×, spread = min–max of the four run-medians). Every fixture was confirmed ALLOW before
+timing. Machine under load ~3.0 with other sessions running; absolute figures are for this machine
+today, and the **branch-minus-`main` differences are the trustworthy part**.
+
+| Scenario | Budget | Median | Spread | Verdict |
+|---|---|---|---|---|
+| 1 pair, no parts folder — **this branch** | ≤200 ms | **202.2 ms** | 196.2–207.3 | **OVER** (3 of 4 sweeps over 200) |
+| the same, recorded back-to-back method | ≤200 ms | **201.9 ms** | 199.9–213.8 | **OVER** |
+| the same fixture — **`main`, today** | ≤200 ms | 177.5 ms | 170.7–181.6 | under |
+| recorded 2026-08-20, for reference only | ≤200 ms | 169.3 ms | 162.6–173.9 | under |
+| 1 pair **with** 3 tracked parts — branch | ≤200 ms | 197.2 ms | 197.0–205.9 | marginal — median under, one sweep over |
+| 3 pairs, no parts — branch / `main` | *none* | 278.9 / 237.7 ms | — | both over 200 |
+| 5 pairs — branch / `main` | *none* | 340.6 / 282.0 ms | — | both over 200 |
+| 10 pairs — branch / `main` | *none* | 493.0 / 394.4 ms | — | both over 200 |
+
+**Both sides were measured today rather than comparing to the recorded figure**, because a
+differential goes silent when both sides drift
+([[feedback_a_differential_check_goes_silent_when_both_sides_drift]]). `main` reads 177.5 ms against
+the recorded 169.3 ms, so ~8 ms of the gap is the machine and **~25 ms is this card**.
+
+⚠️ **The cause is not the one the judge predicted, and that matters for the fix.** The judge
+attributed the cost to the new git calls. Decomposed:
+
+- `decide-commit-gate.py` now loads the **whole writer** at import time (`_WRITER = _load(…)`) for
+  two pure-string helpers, dragging in `tempfile`, `datetime` and `glob` — **paid on every gate
+  call, pair or no pair, parts folder or none**. Measured **18.3 ms** incrementally in the decision
+  call's own import context, and **28.3 ms** standalone in `python3 -I` (re-measured independently
+  in-session: median 28.27, min 27.70, max 30.92, n=15).
+- The new git call is **~7 ms**. Decision call alone: 112.3 ms on `main` → 137.3 ms on the branch.
+
+So ~18 of the ~25 ms is an import of code that is never used. That is task 14.
+
+**Reading a parts folder costs nothing measurable beyond the fixed and per-pair cost** — 1 pair with
+3 parts came in at 197.2 ms against 202.2 ms for 1 pair with none, a difference inside fixture
+noise.
+
+**Exactly one new git subprocess per `.test.sh` pair, and the judge's three were one set too many.**
+From `GIT_TRACE` counts on the same fixtures: PLAIN 1 pair goes 7 → 8 calls, the addition being
+`git ls-files --stage -z -- <folder>/`; 3 pairs go 13 → 16. It **fires even when the folder does not
+exist**, because `parts_folder_for` returns a path regardless. A `.test.py` runner short-circuits and
+pays nothing, as does any path exiting before `_parts_shipped`. In `PATHSPEC`/`ALL` the added call is
+`ls-tree` instead, plus one `hash-object` per in-set part — so `ls-files --stage`, `ls-tree` and
+`hash-object` are **alternatives by commit form**, not three costs paid together.
+
+⚠️ **The ≤200 ms budget was already unachievable at two pairs, before this card — recorded, not
+fixed, on Mark's instruction (2026-10-18).** Straight-line fits: `main` **23.7 ms per pair**
+(intercept 160 ms), this branch **31.9 ms per pair** (intercept 177 ms), so the card adds ~8.2 ms per
+pair. `main` crosses 200 ms at **~1.7 pairs**; the branch crosses at ~0.7. Task 10 measured **one
+pair only**, so the budget as written only ever described a single-pair commit. The judge's "~5 pairs
+eats the slack" is too generous — on today's numbers the slack is gone at one. **Re-scoping that
+budget belongs to whoever owns it**, not to this card, and setting Mark's performance target as a
+side effect of a test-receipt change would be exactly the wrong place to do it.
+
+Harness and raw run-medians: `/tmp/latency13.VreRt8/` (`harness.py`, `harness2.py`, `harness3.py`,
+`results.json`) — a scratch directory, not committed. Nothing was written to the live `hooks/state/`.
+
+### ⚠️ Correction to task 13's budget verdict — the absolute figure is not settled; the delta is
+
+Written 2026-10-18, within the hour of the task-13 row above. **That row's "OVER budget — 202.2 ms"
+is left as written because it is what was measured, but it must not be read as a settled fact.**
+Task 14 re-measured the **same unfixed `HEAD`** and got **189.1 ms** (run-medians 187.7–191.0) —
+*under* 200 ms — and the same `main` fixture moved from **177.5 ms to 162.0 ms** on the same machine
+in the same session.
+
+So the machine's state moved further than the thing being measured. What survives both runs is the
+**difference**, which was stable: the card adds **+24.7 ms** (task 13) and **+27.1 ms** (task 14) on
+a one-pair commit. Whether the absolute total crosses ≤200 ms depends on machine load, and it was
+observed on **both** sides of the line. Recording the honest version costs a paragraph; leaving
+"over budget" to stand as settled would have put a load-dependent reading into an audit trail
+([[feedback_a_differential_check_goes_silent_when_both_sides_drift]]).
+
+**This does not change the fix or its justification.** Loading a whole module — with `tempfile`,
+`datetime` and `glob` — on every gate call for two pure-string helpers is a defect at any budget.
+
+### Task 14 — the convention moves to its own module; ~18.6 ms of ~27 ms recovered — PASS
+
+Measured 2026-10-18. `hooks/lib/parts_convention.py`, imported by both the writer and the decider.
+
+| Suite | Before | After |
+|---|---|---|
+| `python3 hooks/lib/write-test-marker.test.py` | 86 passed, 2 failed | **86 passed, 2 failed** |
+| `python3 hooks/lib/decide-commit-gate.test.py` | 30 passed, 0 failed | **30 passed, 0 failed** |
+| `bash hooks/test-marker-guard.test.sh` | 255 passed, 0 failed | **255 passed, 0 failed** |
+| `bash hooks/handoff/live-handoff.test.sh` (real parts path) | 69/69 | **69/69**, receipt still names its 4 parts |
+
+A refactor with no behaviour change, so no RED half — the suites are the test, and all four are
+identical before and after. The two writer reds are the inherited `wired` pair throughout.
+
+**Latency, all three trees measured today with the variants interleaved** (n=15 + 3 warm-ups,
+median, 4 sweeps):
+
+| | `main` | `HEAD` before | with the change |
+|---|---|---|---|
+| end-to-end gate | 162.0 ms | 189.1 ms | **170.5 ms** |
+| run-medians | 161.2–163.1 | 187.7–191.0 | 169.1–172.9 |
+| decision call alone | 104.8 ms | 130.1 ms | **111.9 ms** |
+
+**~18.6 ms of the ~27.1 ms regression recovered end to end**, ~18.2 ms of it on the decision call —
+matching the 18.3 ms import cost task 13 isolated and the 28.3 ms standalone figure re-measured
+in-session. The residual **+8.5 ms over `main`** is the new `git ls-files` call plus overhead, which
+is the cost of the feature actually doing something and was not chased further.
+
+**Verified rather than taken from the report:** `grep -c _WRITER hooks/lib/decide-commit-gate.py` is
+**0**; the decider now loads `classify-commit-command.py` and `parts_convention.py` and nothing else;
+the new module imports **only `fnmatch` and `os`** — no `tempfile`, `datetime` or `glob`.
+
+**`fnmatch` was kept on a measurement, not a hunch:** `import fnmatch` 0.36 ms, first
+`fnmatchcase` 0.11 ms — ~0.5 ms against a 25 ms problem.
+
+**Named `parts_convention.py` with an underscore, like `shell_segments.py`** — in `hooks/lib/` the
+hyphenated names are entry-point scripts and the underscored ones are importable libraries. The
+writer still exports `PARTS_GLOB`, `parts_folder_for` and `is_part` in `__all__`, so its suite's
+`getattr(mod, "PARTS_GLOB")` assertion and task 9b's `mod.build_marker` call are untouched.
+
+⚠️ **One duplicated literal, deliberate and commented.** `parts_folder_for` used to read
+`PAIR_SUFFIXES[0][0]` from the writer; the new module cannot import the writer without recreating
+the cycle, so `RUNNER_SUFFIX = ".test.sh"` is a mirrored literal with a comment saying so. The
+writer's suite still pins the glob against the bash loop, but **nothing pins this one literal
+against `PAIR_SUFFIXES`** — an explicit gap, not an oversight.
+
+⚠️ **A copied writer now needs `parts_convention.py` beside it.** `test-marker-guard.test.sh` copies
+the writer into fixtures only as the opt-in *signal* and always executes the real one from
+`$WRITER`, so nothing breaks today — and the four green suites are the evidence, not the reasoning.
+But a fixture that genuinely *executes* a copied writer would now fail, and no assertion pins that.
+
+**The ADR and item C still describe the old arrangement** — `PARTS_GLOB` "lives in
+`write-test-marker.py`" and "the decider imports `is_part` through its existing loader". Both are
+now one hop out of date and are corrected in the same commit as this entry.

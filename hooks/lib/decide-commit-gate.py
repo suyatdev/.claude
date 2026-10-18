@@ -46,11 +46,12 @@ def _load(name, filename):
 _CLASSIFIER = _load("classify_commit_command", "classify-commit-command.py")
 classify = _CLASSIFIER.classify
 
-# The parts-folder convention is defined once, in the writer, so the receipt and this gate cannot
-# drift on what counts as "the suite". Same uncaught-import stance as the classifier above.
-_WRITER = _load("write_test_marker", "write-test-marker.py")
-parts_folder_for = _WRITER.parts_folder_for
-is_part = _WRITER.is_part
+# The parts-folder convention is defined once, in parts_convention.py, so the receipt and this gate
+# cannot drift on what counts as "the suite". It is its own module, not the writer, because loading
+# the whole writer here cost ~18 ms on every gate call. Same uncaught-import stance as above.
+_PARTS = _load("parts_convention", "parts_convention.py")
+parts_folder_for = _PARTS.parts_folder_for
+is_part = _PARTS.is_part
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 

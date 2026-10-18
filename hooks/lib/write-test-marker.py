@@ -27,7 +27,6 @@ the derived subject path is repo-relative, so a git call made from any other cwd
 against *that* cwd (`panes/panes/adapters/...`) and reports a tracked subject as missing.
 """
 
-import fnmatch
 import glob
 import json
 import os
@@ -35,6 +34,16 @@ import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# The parts-folder convention lives in its own import-light module so the commit gate can share it
+# without loading this whole writer on every commit; re-exported below for this module's callers.
+from parts_convention import (  # noqa: E402  (path must be set first)
+    PARTS_GLOB,
+    is_part,
+    parts_folder_for,
+)
 
 __all__ = [
     "write_marker",
@@ -57,13 +66,6 @@ STORE_DIR = os.path.join(STATE_DIR, "test-markers")
 # Rows 1 and 2 of the step-1 classification table -- the only two forms that pair. Rows 3-5 are
 # the gate's direction or form no pair at all, and none of them is valid input here.
 PAIR_SUFFIXES = ((".test.sh", ".sh"), (".test.py", ".py"))
-
-# A bash runner `<stem>.test.sh` may source a folder `<stem>.test.d/` of parts. PARTS_GLOB is the
-# glob in the `for part in` loop of hooks/handoff/lib/test-parts.sh -- bash cannot share a
-# constant, so write-test-marker.test.py asserts the two strings are equal.
-PARTS_GLOB = "[0-9][0-9]-*.sh"
-PARTS_DIR_SUFFIX = ".test.d"
-
 
 class WriterError(Exception):
     """A failure the calling suite must see: it is reported on stderr and exits non-zero."""
@@ -129,26 +131,6 @@ def derive_subject(test_rel):
         if test_rel.endswith(test_suffix):
             return test_rel[: -len(test_suffix)] + subject_suffix
     return None
-
-
-def parts_folder_for(test_rel):
-    """The parts folder (repo-relative, no trailing slash) of a runner, or None.
-
-    Only a `.test.sh` runner has one: nothing sources parts for a `.test.py` runner, so the
-    writer does not even look.
-    """
-    suffix = PAIR_SUFFIXES[0][0]
-    if not test_rel.endswith(suffix):
-        return None
-    return test_rel[: -len(suffix)] + PARTS_DIR_SUFFIX
-
-
-def is_part(path):
-    """True when `path` is `<something>.test.d/<name matching PARTS_GLOB>` (last two components)."""
-    folder, name = os.path.split(path)
-    return os.path.basename(folder).endswith(PARTS_DIR_SUFFIX) and fnmatch.fnmatchcase(
-        name, PARTS_GLOB
-    )
 
 
 def encode_key(subject_rel):

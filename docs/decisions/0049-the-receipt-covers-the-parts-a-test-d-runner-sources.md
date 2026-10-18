@@ -54,9 +54,18 @@ subject, a blob for the test file, **and** a blob for every part in the runner's
   a runner without parts. A `.test.py` runner never has parts and the writer does not look. The
   decider reads an absent key and `[]` as **the same thing, the empty set**.
 - **One glob, in one Python place.** `PARTS_GLOB` (`[0-9][0-9]-*.sh`) lives in
-  `write-test-marker.py` beside `parts_folder_for` and `is_part`; the decider imports `is_part`
-  through its existing loader rather than restating the glob. The bash copy in `test-parts.sh`
-  cannot share a constant, so a writer test asserts its glob string equals `PARTS_GLOB`.
+  `hooks/lib/parts_convention.py` beside `PARTS_DIR_SUFFIX`, `parts_folder_for` and `is_part`; the
+  writer and the decider both import it through their existing loaders rather than restating the
+  glob. The bash copy in `test-parts.sh` cannot share a constant, so a writer test asserts its glob
+  string equals `PARTS_GLOB`. *(Amended in implementation: the convention first lived in
+  `write-test-marker.py` and the decider imported it from there, which made every gate call load
+  `tempfile`, `datetime` and `glob` for two pure-string helpers — a measured ~18 ms of a ~27 ms
+  regression. The module keeps the "one Python place" property while costing only `fnmatch` and
+  `os`. It has no sibling test by design: a `.test.py` sibling would create a pair the gate then
+  demands a receipt for, and the convention is covered by the writer suite's parts assertions and
+  the live-checkout cross-check below. One literal is mirrored rather than shared —
+  `RUNNER_SUFFIX = ".test.sh"`, because the module cannot import the writer's `PAIR_SUFFIXES`
+  without recreating the cycle — and nothing pins the two together.)*
 - **Classification.** A new row `2a` in the gate's step-1 table, **before** row 3:
   `<stem>.test.d/[0-9][0-9]-*.sh` (last two path components) is a *part*, whose pair is test
   `<stem>.test.sh`, subject `<stem>.sh`. A part therefore forms the same pair its runner would, and

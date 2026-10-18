@@ -1192,6 +1192,23 @@ calls that revision 13 would have paid for in a separate process, so it could mo
 direction. Measured, it came in **under** budget at 169.3 ms — the in-process merge paid for itself.
 The two misses were rows 1 and 3 instead.
 
+> ⚠️ **Row 4's budget describes a ONE-PAIR commit only, and it was already unachievable at two —
+> measured, recorded, and deliberately not re-scoped here.** Task 10 timed a single pair, so nothing
+> pinned how the figure behaves as a commit stages more pairs. Measured 2026-10-18 by
+> `docs/features/trim-safety-followups.md` task 13, with a 1/3/5/10-pair sweep: the cost is roughly
+> linear at **≈23.7 ms per pair on this card's base (`main`), intercept ≈160 ms**, so `main`'s own
+> code crosses 200 ms at about **1.7 pairs** — one pair fits, two do not. Nothing at three or more
+> pairs was ever inside 200 ms, before or after that card. Each pair costs two or three git
+> subprocesses; `trim-safety-followups` item C adds roughly **8 ms per pair** on top (one
+> `ls-files --stage` in the `PLAIN` form, or an `ls-tree` plus one `hash-object` per in-set part in
+> `PATHSPEC`/`ALL`), and ADR 0049 records it.
+>
+> **Re-scoping this budget as a per-pair figure belongs to whoever owns this card**, not to a
+> test-receipt change that happened to measure it. Also note the absolute numbers move with machine
+> load: in one session the same unfixed fixture read 202.2 ms and 189.1 ms, and `main` itself read
+> 177.5 ms and 162.0 ms, so a single absolute reading does not settle a verdict against this budget
+> — a measured *difference* between two trees timed together does.
+
 ## Scenarios
 
 ### Correct behaviour
