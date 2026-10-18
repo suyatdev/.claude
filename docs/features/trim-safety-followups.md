@@ -449,7 +449,7 @@ fix from alternatives that included "document it and move on" (2026-10-18).
   and fix the message** — when the first differing part is untracked, the hook says stage-or-remove
   instead of only "Re-run". The door and the wire format do **not** change; a tenth door would
   cascade every count in the gate's card again. RED then GREEN, separate commits.
-- [ ] Task 12 — `success_masking` (a): the amended MUST in
+- [x] Task 12 — `success_masking` (a): the amended MUST in
   `docs/features/verification-marker-gate.md` now requires field 3 asserted for "every one of the
   thirteen doors that writes a line", and **this change raised that figure**. But
   `grep -c MSG_STALE_PART hooks/test-marker-guard.test.sh` is **0**: that suite covers 13 of the
@@ -1117,3 +1117,54 @@ correctly (one waited for the other's `.bak` revert before editing), and no work
 consequence was real though: task 12's falsification ran against a hook blob (`04ab64e1…`) that
 does **not** ship. It was therefore **re-run in-session against the shipping blob** — see task 12's
 entry. Two tasks are only independent when their *verification* is, not just their edits.
+
+### Task 12 — the door table now covers all 14 doors, falsified against the shipping hook — PASS
+
+Measured 2026-10-18 in `~/.worktrees/.claude/trim-safety-followups`. Judge round 1's
+`success_masking` (a).
+
+| Check | Result |
+|---|---|
+| `bash hooks/test-marker-guard.test.sh` | 249/0 → **255 passed, 0 failed** (6 new assertions, the loop's standard set for one door) |
+| `grep -c MSG_STALE_PART hooks/test-marker-guard.test.sh` | **0 → 2** (the table row and the setup arm) |
+| real doors covered | **14 of 14** |
+| files changed | `hooks/test-marker-guard.test.sh` only |
+
+The row went into Section E, *"Every door that writes a line, driven from the spec Examples
+tables"* — the case the amended MUST actually refers to. `DOORS_TSV` gains `MSG_STALE_PART|pair`, and
+`setup_door()` a `MSG_STALE_PART)` arm that uses the **real** writer and decider with no stub:
+commit a part, run the writer so the receipt records it, then edit and stage only the part. Runner
+and subject blobs still match, so the part list is the only disagreement.
+
+**It asserts the exit code and the log line (fields 2, 3, 4), deliberately not the stderr
+sentence** — task 11 rewrites that sentence for the untracked sub-case, and a row asserting the full
+wording would have broken when it landed. The constant name does not change, so the row is stable.
+
+⚠️ **The original falsification measured a hook that does not ship, so it was re-run here.** The
+worker renamed the arm to `MSG_STALE_PART_MUTANT)` and got 252/3 — but against hook blob
+`04ab64e1…`, taken *before* task 11 GREEN. **Re-run in-session against the shipping blob
+`b57d771885cf031f08940c7a89a1280a6e87d0da`:**
+
+| State | Suite | Reds |
+|---|---|---|
+| as shipped | 255 passed, 0 failed | none |
+| arm renamed `MSG_STALE_PART_MUTANT)` | **252 passed, 3 failed** | `message lacks MSG_STALE_PART`; `log field 3: want 'MSG_STALE_PART', got 'MSG_CLASSIFIER_BAD_OUTPUT'`; `log field 4: want 'hooks/foo.sh\|hooks/foo.test.sh', got '-'` |
+| reverted | 255 passed, 0 failed | none |
+
+Blob identical before and after. The third red is the sharpest: with the arm gone the door falls
+through to the unrecognised-door fallback, which writes `-` in field 4 — so the row pins the *pair*
+too, not merely the constant.
+
+**Two stale comments in the same file were corrected**, matching task 9's doc amendment: "MSG_NO_PYTHON
+is the thirteenth door" → fourteenth, and "Nine of the thirteen doors fire" → fourteen.
+
+**Why this was worth a departure from task 8's "no change to `hooks/test-marker-guard.test.sh`":**
+the *same* change raised the MUST that governs this suite from twelve doors to thirteen, so leaving
+it would have shipped a spec requiring a test that did not exist — with 249 green passes reading as
+door-table coverage. Mark approved the departure explicitly.
+
+⚠️ **The count that needed interpreting, not averaging.** The judge reported the suite naming 13
+doors; a raw `grep -o 'MSG_[A-Z_]*' | sort -u` here returned **14**. The judge was right: the 14th
+name, `MSG_FROM_A_LATER_VERSION`, is a **fixture constant** for the unrecognised-door case, not a
+door the hook can emit. A name's shape is not its category
+([[feedback_a_path_shape_is_not_a_category]]).
