@@ -319,7 +319,7 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
   version and the main checkout's common-dir — this worktree-isolated session refuses
   `bash --version` and `git -C ~/.claude`. Next free ADR: `0049` (highest on `origin/main` is 0048;
   the one open PR, #108, adds no ADR file).
-- [ ] 1. Suite first (R2): add cases (a)–(d) and point `check_repo` at the not-yet-existing
+- [x] 1. Suite first (R2): add cases (a)–(d) and point `check_repo` at the not-yet-existing
   module. Run it and record which cases fail (every case that expects a `FAIL`/`ok` line should;
   a pure "must not contain" check may pass with the module missing — that is expected, not a
   defect). Commit red, with this card's Task 1 note staged.
@@ -332,6 +332,10 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
 - [ ] 3. Guard suite first: `hooks/hook-exec-pr-guard.test.sh` with every Scenario above and the
   three file-mode assertions. Run it red against a stub that always allows and one that always
   denies; record which cases each stub passes. Commit red.
+  2026-10-18: 82 cases. Always-allow stub 35/82 (clean, out-of-scope, non-PR, no-command cases);
+  always-deny stub 3/82 (two PATH sanity checks + the on-disk exec bit). No behavior case passes
+  under both: every deny needs text only the intended refusal carries. With no guard file at all
+  the run is `2 passed, 96 failed` — each `mk_copy` adds a "copy the guard" failure.
 - [ ] 4. Write `hooks/hook-exec-pr-guard.sh` (R3–R8), `chmod +x`, `git add --`. Guard suite green;
   exec-bit suite still green.
 - [ ] 5. Register (R9); exec-bit suite shows 24 distinct scripts, all `100755`. Write the ADR and
