@@ -436,6 +436,37 @@ with `TEST_EXEMPT` per the table above.
   observability judge; retire memory `reference_review_phase_card_blocks_source_edits` (it
   documents the workaround B removes) — a `~/.claude/projects/…/memory/` edit, outside git.
 
+**Judge round 1 (observability, implementation stage, `be9f489`): `risk=low` / `confidence=high`,
+no failing dimension, two concerns.** It reproduced all five suite figures and re-ran two of this
+card's own recorded mutations byte-exact. The three tasks below are its findings; Mark chose each
+fix from alternatives that included "document it and move on" (2026-10-18).
+
+- [ ] Task 11 — `traceability`: an **untracked** file in a parts folder enters the receipt (the
+  writer hashes the folder from disk, and bash sources it too) but can never be in what the commit
+  ships, so the pair blocks **and the printed remedy loops** — re-running the suite rewrites the
+  identical receipt. Reproduced in-session: `BLOCK MSG_STALE_PART detail=…/90-scratch.sh` both
+  before and after running the remedy; staging the file clears it. Fix: **keep the receipt honest
+  and fix the message** — when the first differing part is untracked, the hook says stage-or-remove
+  instead of only "Re-run". The door and the wire format do **not** change; a tenth door would
+  cascade every count in the gate's card again. RED then GREEN, separate commits.
+- [ ] Task 12 — `success_masking` (a): the amended MUST in
+  `docs/features/verification-marker-gate.md` now requires field 3 asserted for "every one of the
+  thirteen doors that writes a line", and **this change raised that figure**. But
+  `grep -c MSG_STALE_PART hooks/test-marker-guard.test.sh` is **0**: that suite covers 13 of the
+  hook's 14 real doors (its 14th name, `MSG_FROM_A_LATER_VERSION`, is a fixture constant, not a
+  door), so 249 passes read as door-table coverage while blind to the newest door. Add the row.
+  **A deliberate, user-approved departure from task 8's "no change to
+  `hooks/test-marker-guard.test.sh`"**, because the same change raised the MUST governing it. One
+  commit — it asserts behaviour the hook already has — plus a mutation showing the row can fail.
+- [ ] Task 13 — `success_masking` (b): the gate's §Latency budget is **≤200 ms** and last measured
+  **169.3 ms**, leaving ~31 ms. The judge measured the added cost at `ls-tree` 7.18 ms,
+  `ls-files --stage` 6.41 ms, `hash-object` 6.29 ms — **one extra git subprocess per formed bash
+  pair even when the runner has no parts folder**, since `parts_folder_for` returns a path whether
+  or not it exists. ~5 pairs eats the slack and the repo has 40 tracked `.test.sh` runners. Neither
+  this card nor ADR 0049 contains the word "latency". **Measure first, on a commit forming several
+  pairs, and record it**; only then decide whether to skip the call when no folder exists — that
+  shortcut has a deleted-folder case needing its own test.
+
 ## Verification
 
 <Appended during review: pass/fail per area and open issues only.>

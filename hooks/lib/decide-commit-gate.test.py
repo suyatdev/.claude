@@ -436,6 +436,62 @@ def check_hook_prints_stale_part(record):
                    STALE_PART, PAIR, proc.returncode, proc.stderr.strip()))
 
 
+def _run_hook(root, command):
+    """The REAL hook on `command` in `root` (the writer copied in is its opt-in signal)."""
+    os.makedirs(os.path.join(root, "hooks", "lib"), exist_ok=True)
+    shutil.copy(_WRITER, os.path.join(root, "hooks", "lib", "write-test-marker.py"))
+    payload = {"cwd": root, "tool_name": "Bash", "hook_event_name": "PreToolUse",
+               "tool_input": {"command": command}}
+    return subprocess.run(["bash", _HOOK], input=json.dumps(payload), capture_output=True,
+                          text=True)
+
+
+def check_hook_untracked_part_remedy(record):
+    """An UNTRACKED part in the folder is in the receipt (the writer hashes the folder from disk,
+    and bash sources it) but can never be in a commit, so re-running the suite cannot clear the
+    block. The refusal must say to stage or remove the file, not only to re-run.
+
+    EXPECTED RED until task 11 GREEN: the door, the pair and the path are already printed (this
+    fixture reaches the hook and gets that far); only the stage-or-remove remedy is missing.
+    """
+    scratch = FOLDER + "/90-scratch.sh"
+    with _repo(_parts_files()) as root:
+        # a staged edit to the subject forms the pair; the receipt is written after it, so the
+        # pair is fresh and the untracked scratch part is the only difference
+        _write(root, SUBJECT, "subject v2\n")
+        _git(root, "add", "--", SUBJECT)
+        _write(root, scratch, "scratch\n")
+        _write_receipt(root)
+        proc = _run_hook(root, _commit_command(PLAIN))
+        err = proc.stderr
+        ok = (proc.returncode == 2 and STALE_PART in err and PAIR in err and scratch in err
+              and "stage it or remove it" in err)
+        record(ok, "hook: an untracked part's refusal says to stage it or remove it "
+                   "(red until task 11 GREEN)",
+               "want rc 2 and stderr naming {}, {}, {} and 'stage it or remove it', "
+               "got rc {} stderr {!r}".format(STALE_PART, PAIR, scratch, proc.returncode,
+                                              err.strip()))
+
+
+def check_hook_tracked_part_keeps_rerun_remedy(record):
+    """A tracked part, edited and staged, keeps today's `Re-run: bash <test>` remedy -- the change
+    for untracked parts must not swap one message for the other.
+
+    EXPECTED GREEN today and after task 11 GREEN: a regression guard, not evidence of the feature.
+    """
+    with _repo(_parts_files()) as root:
+        _write_receipt(root)
+        _edit_part_b(root, PLAIN)
+        proc = _run_hook(root, _commit_command(PLAIN))
+        err = proc.stderr
+        ok = (proc.returncode == 2 and STALE_PART in err and PAIR in err and PART_B in err
+              and "Re-run: bash " + RUNNER in err and "stage it or remove it" not in err)
+        record(ok, "hook: a tracked, edited, staged part keeps the 'Re-run: bash <test>' remedy",
+               "want rc 2 and stderr naming {}, {}, {} and 'Re-run: bash {}' without the "
+               "stage-or-remove wording, got rc {} stderr {!r}".format(
+                   STALE_PART, PAIR, PART_B, RUNNER, proc.returncode, err.strip()))
+
+
 CHECKS = [
     check_harness_controls,
     check_changed_part_blocks,
@@ -451,6 +507,8 @@ CHECKS = [
     check_python_runner_has_no_parts,
     check_malformed_parts_outline,
     check_hook_prints_stale_part,
+    check_hook_untracked_part_remedy,
+    check_hook_tracked_part_keeps_rerun_remedy,
 ]
 
 

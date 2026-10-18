@@ -1894,7 +1894,9 @@ one per Python file: emptying the **entry point** (exit 0, no output → `MSG_CL
 emptying the **classifier** (the import succeeds, the call raises → `MSG_CLASSIFIER_FAILED`). It was 24
 through revision 13, when there was one file; the two mutants reach the same door by different routes,
 and a suite that only ever empties one of them never exercises the import path ADR 0026 introduced. A
-two-mutant minimum against thirteen doors establishes nothing about the other eleven.
+two-mutant minimum against thirteen doors establishes nothing about the other eleven. *(Those are
+the v1 figures and are left as written, per the note below; against today's fourteen doors the same
+sentence reads "the other twelve". The argument is unchanged either way.)*
 
 > **Not re-derived by trim-safety-followups C.** The floor of 25 and the "thirteen doors" above are the
 > v1 figures. This card's `MSG_STALE_PART` makes the door count fourteen, so a floor rebuilt by the
