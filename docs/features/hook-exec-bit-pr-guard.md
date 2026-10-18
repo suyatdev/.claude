@@ -310,9 +310,15 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
 
 ## Tasks
 
-- [ ] 0. Re-measure on the branch base: the Evidence list (suite counts by its own output, the
+- [x] 0. Re-measure on the branch base: the Evidence list (suite counts by its own output, the
   common-dir answer from a worktree and from the main checkout, the four versions) and the next
   free ADR number on `origin/main` and on open PR branches. A different count is a finding.
+  2026-10-18: `origin/main` still `61d69dd`. Suite `27 passed, 0 failed`, real repo 38/23/11, all
+  `100755` — unchanged. Worktree common-dir `/Users/marksuyat/.claude/.git`. Python 3.9.6, git
+  2.50.1 (Apple Git-155), gh 2.96.0; `type -a bash` → `/bin/bash` only. **Not measured:** the bash
+  version and the main checkout's common-dir — this worktree-isolated session refuses
+  `bash --version` and `git -C ~/.claude`. Next free ADR: `0049` (highest on `origin/main` is 0048;
+  the one open PR, #108, adds no ADR file).
 - [ ] 1. Suite first (R2): add cases (a)–(d) and point `check_repo` at the not-yet-existing
   module. Run it and record which cases fail (every case that expects a `FAIL`/`ok` line should;
   a pure "must not contain" check may pass with the module missing — that is expected, not a
