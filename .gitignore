@@ -17,7 +17,6 @@
 /hooks/state/
 
 # Backup files
-settings.json
 settings.json.bak
 settings.json.mine
 backups/
