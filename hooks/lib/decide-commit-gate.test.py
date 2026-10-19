@@ -492,6 +492,72 @@ def check_hook_tracked_part_keeps_rerun_remedy(record):
                    STALE_PART, PAIR, PART_B, RUNNER, proc.returncode, err.strip()))
 
 
+def check_hook_untracked_part_name_is_not_a_glob(record):
+    """An untracked part whose NAME holds glob metacharacters is still told to stage or remove it,
+    even with a TRACKED sibling that the name would match as a pattern.
+
+    Pins `git --literal-pathspecs` in the hook's tracked-or-not check. Without the flag,
+    `git ls-files --cached -- 'tools/R.test.d/90-[ab]x.sh'` reads the brackets as a character
+    class, matches the tracked `90-ax.sh`, concludes the untracked file is tracked, and prints
+    `Re-run:` -- a remedy that cannot clear it. Keep BOTH filenames: with a plain name there is no
+    sibling to match, the flag's absence changes nothing, and the fixture stops guarding it.
+
+    EXPECTED GREEN today: a regression guard on behaviour the hook already has.
+    """
+    tracked_sibling = FOLDER + "/90-ax.sh"
+    glob_named = FOLDER + "/90-[ab]x.sh"
+    with _repo(_parts_files({tracked_sibling: "tracked sibling\n"})) as root:
+        # as in the plain untracked fixture: a staged subject edit forms the pair, and the receipt
+        # is written after it, so the untracked part is the only difference
+        _write(root, SUBJECT, "subject v2\n")
+        _git(root, "add", "--", SUBJECT)
+        _write(root, glob_named, "glob-named scratch\n")
+        _write_receipt(root)
+        proc = _run_hook(root, _commit_command(PLAIN))
+        err = proc.stderr
+        ok = (proc.returncode == 2 and STALE_PART in err and glob_named in err
+              and "stage it or remove it" in err and "Re-run:" not in err)
+        record(ok, "hook: an untracked glob-named part beside a tracked sibling still says to "
+                   "stage it or remove it (pins --literal-pathspecs)",
+               "want rc 2 and stderr naming {} and {} with 'stage it or remove it' and no "
+               "'Re-run:', got rc {} stderr {!r}".format(
+                   STALE_PART, glob_named, proc.returncode, err.strip()))
+
+
+def check_hook_deleted_part_keeps_rerun_remedy(record):
+    """A part DELETED from the index and from disk keeps the `Re-run:` remedy.
+
+    Pins `[ -e "$toplevel/$f3" ]`, the third clause of the hook's tracked-or-not check. A deleted
+    part is absent from the index exactly as an untracked one is, so `ls-files --cached` alone
+    cannot tell them apart; only the disk check can. Without that clause this case is told "That
+    file is untracked: stage it or remove it" -- advice to remove a file the commit is already
+    removing. Measured, not inferred: with the clause dropped the hook prints exactly that, and the
+    rest of this suite stays green, which is why this assertion exists.
+
+    The round-2 observability judge reported this clause as unreachable, across four deletion
+    shapes. It is reachable; those shapes very likely lacked the staged subject edit that forms the
+    pair at all. A lone deletion forms no pair and allows -- see check_lone_deletion_not_gated --
+    so the subject edit is what makes the difference, and it must stay in this fixture.
+
+    EXPECTED GREEN today: a regression guard on behaviour the hook already has.
+    """
+    deleted = FOLDER + "/20-b.sh"
+    with _repo(_parts_files()) as root:
+        _write(root, SUBJECT, "subject v2\n")
+        _write_receipt(root)                      # the receipt still lists both parts
+        _git(root, "rm", "-q", "--", deleted)     # gone from the index AND from disk
+        _git(root, "add", "--", SUBJECT)
+        proc = _run_hook(root, _commit_command(PLAIN))
+        err = proc.stderr
+        ok = (proc.returncode == 2 and STALE_PART in err and deleted in err
+              and "Re-run:" in err and "stage it or remove it" not in err)
+        record(ok, "hook: a deleted part keeps the 'Re-run:' remedy, not stage-or-remove "
+                   "(pins the -e clause)",
+               "want rc 2 and stderr naming {} and {} with 'Re-run:' and no 'stage it or remove "
+               "it', got rc {} stderr {!r}".format(
+                   STALE_PART, deleted, proc.returncode, err.strip()))
+
+
 CHECKS = [
     check_harness_controls,
     check_changed_part_blocks,
@@ -509,6 +575,8 @@ CHECKS = [
     check_hook_prints_stale_part,
     check_hook_untracked_part_remedy,
     check_hook_tracked_part_keeps_rerun_remedy,
+    check_hook_untracked_part_name_is_not_a_glob,
+    check_hook_deleted_part_keeps_rerun_remedy,
 ]
 
 

@@ -481,6 +481,23 @@ fix from alternatives that included "document it and move on" (2026-10-18).
   covered by the writer suite's parts assertions plus task 9b's live cross-check). ADR 0049's "one
   Python place" sentence and this card's item C must name the new module afterwards.
 
+**Judge round 2 (`b4894f0`): `risk=low` / `confidence=high`, no failing dimension, two concerns.**
+It verified the task-14 extraction is behaviour-preserving (0 differences over 40 hand-picked inputs
+and 200,000 random strings), that `3a2acd1` was genuinely red, and reproduced every latency figure
+by refitting the regressions. Its `audit_trail` concern — a figure of this card's own, overstated —
+and its correction of the `RUNNER_SUFFIX` wording are closed in `c9dc7ff`. Its `success_masking`
+concern is tasks 15 and 16.
+
+- [x] Task 15 — the hook's tracked-or-not check has three clauses and the judge showed **two of
+  them survive mutation at a fully green suite**. The first: dropping `--literal-pathspecs` from
+  `ls-files` is undetected, and it is **load-bearing** — an untracked `90-[ab]x.sh` beside a tracked
+  `90-ax.sh` is read as a character class, matches the sibling, and prints `Re-run:` for a file
+  re-running cannot clear. One assertion now pins it.
+- [x] Task 16 — the second surviving mutation: dropping `[ -e "$toplevel/$f3" ]`. **The judge
+  reported that clause unreachable across four deletion shapes; it is reachable, and this card
+  measured the recipe.** A deleted part is absent from the index exactly as an untracked one is, so
+  `ls-files --cached` alone cannot tell them apart. One assertion now pins it.
+
 ## Verification
 
 <Appended during review: pass/fail per area and open issues only.>
@@ -1328,3 +1345,61 @@ But a fixture that genuinely *executes* a copied writer would now fail, and no a
 **The ADR and item C still describe the old arrangement** — `PARTS_GLOB` "lives in
 `write-test-marker.py`" and "the decider imports `is_part` through its existing loader". Both are
 now one hop out of date and are corrected in the same commit as this entry.
+
+### Tasks 15 & 16 — both surviving clauses pinned, and the judge's unreachability claim refuted — PASS
+
+Measured 2026-10-18 in `~/.worktrees/.claude/trim-safety-followups`. Judge round 2's
+`success_masking` concern. Task 15's assertion was written by a dispatched worker; task 16's here.
+Both mutations were run **in this session against the shipping hook**, whose blob is
+`b57d771885cf031f08940c7a89a1280a6e87d0da` before and after every one of them.
+
+| Check | Result |
+|---|---|
+| `python3 hooks/lib/decide-commit-gate.test.py` | 30/0 → **32 passed, 0 failed** |
+| `bash hooks/test-marker-guard.test.sh` | **255 passed, 0 failed** |
+| files changed | `hooks/lib/decide-commit-gate.test.py` only — the hook is untouched |
+
+**Both assertions describe behaviour the hook already has, so both pass on their first run. Each
+was therefore mutated to prove it can fail:**
+
+| Mutation of the shipping hook | Suite | The red |
+|---|---|---|
+| drop `--literal-pathspecs` | **31 passed, 1 failed** | only the glob-name assertion |
+| drop `[ -e "$toplevel/$f3" ]` | **31 passed, 1 failed** | only the deleted-part assertion |
+| neither (as shipped) | 32 passed, 0 failed | — |
+
+**Task 15 — the flag is load-bearing, and the mechanism was verified, not assumed.** In a fixture
+with an untracked `tools/R.test.d/90-[ab]x.sh` beside a **tracked** `90-ax.sh`:
+`git ls-files --cached -- '…/90-[ab]x.sh'` prints `tools/R.test.d/90-ax.sh` **without** the flag and
+nothing **with** it. So the brackets are read as a character class, the sibling matches, the
+untracked file is judged tracked, and the hook prints `Re-run: bash tools/R.test.sh` — for a file
+re-running cannot clear. **Keep both filenames in that fixture:** with a plain name there is no
+sibling to match, the flag's absence changes nothing, and the fixture silently stops guarding
+anything ([[feedback_a_falsifier_can_mutate_outside_the_population]]).
+
+⚠️ **Task 16 — the judge said this clause was unreachable. It is reachable, measured here.** Its
+round-2 report tried four deletion shapes and concluded `MSG_STALE_PART` never fires with the part
+gone from disk. The recipe that does reach it, run in-session:
+
+```
+part absent from disk: True
+decider: BLOCK MSG_STALE_PART detail=tools/R.test.d/20-b.sh pair=tools/R.sh|tools/R.test.sh
+hook rc 2, stderr: …(first difference: tools/R.test.d/20-b.sh). Re-run: bash tools/R.test.sh
+```
+
+— write the subject, write the receipt (so it still lists both parts), `git rm` the part, stage the
+subject, commit. **The staged subject edit is what the judge's shapes were missing:** a lone
+deletion forms no pair and allows, which the suite's own `check_lone_deletion_not_gated` records. So
+this was a missing test, not a defensive clause, and the card does not describe it as one.
+
+**The wrong behaviour was measured, not inferred.** The worker that found the recipe could not run
+the mutation — the auto-mode classifier refused its edit as a security-test removal, and it
+correctly did **not** route around the refusal, labelling its conclusion as read from the code. Run
+here instead: with `[ -e ]` dropped, the deleted-part case prints *"That file is untracked: stage it
+or remove it."* — advice to remove a file the commit is already removing — **and the suite stayed
+32 passed, 0 failed**. That green is what made the assertion necessary
+([[feedback_a_green_suite_cannot_validate_assert_messages]]).
+
+**Why `ls-files --cached` alone cannot carry this:** a deleted part and an untracked part are both
+absent from the index. Only the disk check separates them, which is exactly why the clause exists
+and why no index-based test could ever have caught its removal.
