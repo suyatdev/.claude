@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: feat/hook-exec-bit-pr-guard
 ---
@@ -363,6 +363,17 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
   observability judge quotes gh's manual as saying it "may still push git changes"; not
   re-read here, because reading `gh pr create --help` is itself refused by `judge-guard.sh`). Pass = refused **and** the refusal text names
   `hook-exec-pr-guard`. Remove that worktree and its branch after.
+
+## Verification
+
+Run 2026-10-18 at `4abd45b`, in this worktree:
+
+- `hooks/hook-exec-pr-guard.test.sh` — pass, 82/0 (falsified red against always-allow and
+  always-deny stubs in Task 3).
+- `hooks/registered-hooks-executable.test.sh` — pass, 43/0; real repo 39/24/11, all `100755`.
+- Shared checker without `--rev` — output identical to the old heredoc on the real repo.
+- **Open:** the guard has never run as a registered hook. That is Task 7, after merge and pull.
+  The bash version and the main checkout's common-dir were not re-measured (Task 0).
 
 ## Gotchas
 
