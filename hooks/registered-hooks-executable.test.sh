@@ -4,12 +4,14 @@
 # 126), so the hook it implements silently does nothing. Spec: docs/features/hook-exec-bit-test.md
 # (R1-R7a).
 # Run BY HAND: bash hooks/registered-hooks-executable.test.sh
-# There is no CI and nothing runs this when a hook is added (R7a); run it after editing
-# settings.json or adding a hook script.
+# This suite itself still has no CI and nothing runs it when a hook is added (R7a); run it after
+# editing settings.json or adding a hook script. The same check (the shared module, against HEAD)
+# now also runs at `gh pr create` through hooks/hook-exec-pr-guard.sh (docs/decisions/0049-*).
 #
 # What it reads: settings.json and file modes come from the git INDEX (git show :settings.json,
 # git ls-files -s), never the working tree, so a local chmod +x cannot hide a 100644 that a fresh
-# clone would receive. Checking is one function, check_repo <repo-root>; the suite runs it against
+# clone would receive. Checking is one function, check_repo <repo-root> [--rev <commit>], a call
+# into hooks/lib/registered_hook_modes.py; the suite runs it against
 # throwaway fixture repos (to prove it can both fail and pass), then once against the repository
 # that contains this file. Every fixture builds its own repo in its own mktemp -d.
 #
@@ -26,159 +28,11 @@ OUT=""; RC=0; n_repo=0
 pass=0; fail=0
 
 # ------------------------------------------------------------------ the checker
-# check_repo <repo-root>: prints "ok/skip/FAIL" lines, a counts line and "result: PASS|FAIL";
-# exit 0 when clean, 1 otherwise. Runs every git command as git -C <repo-root>.
+# check_repo <repo-root> [--rev <commit>]: one call to the shared checker (R1), which prints
+# "ok/skip/FAIL" lines, a counts line and "result: PASS|FAIL"; exit 0 when clean, 1 otherwise.
+# Without --rev it reads the git index; with --rev it reads that commit. Extra args pass through.
 check_repo() {
-  python3 -I - "$1" <<'PY'
-import json, re, shlex, subprocess, sys
-
-sys.stdout.reconfigure(encoding="utf-8")
-root = sys.argv[1]
-INTERPRETERS = ("bash", "sh", "zsh", "python3", "python", "node")
-PREFIXES = ("$HOME/.claude/", "${HOME}/.claude/", "~/.claude/")
-ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-SHORT_C = re.compile(r"^-[A-Za-z]*c[A-Za-z]*$")
-EXEC_MODE = "100755"
-SHOW = 100
-
-
-def git(*args):
-    return subprocess.run(["git", "-C", root] + list(args),
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-
-def short(cmd):
-    return cmd if len(cmd) <= SHOW else cmd[:SHOW] + "…"
-
-
-def die(msg):
-    print("FAIL " + msg)
-    print("result: FAIL")
-    sys.exit(1)
-
-
-if git("rev-parse", "--git-dir").returncode != 0:
-    die("not a git repository (or not enterable): " + root)
-
-shown = git("show", ":settings.json")
-if shown.returncode != 0:
-    die("settings.json is missing from the git index of " + root)
-try:
-    settings = json.loads(shown.stdout.decode("utf-8"))
-except (ValueError, UnicodeDecodeError) as err:
-    die("settings.json in the index is not valid JSON: " + str(err))
-if not isinstance(settings, dict):
-    die("settings.json in the index is valid JSON but not an object")
-
-problems = []
-entries = []  # (event, handler)
-hooks = settings.get("hooks", {})
-if not isinstance(hooks, dict):
-    problems.append("settings.json 'hooks' is not an object")
-    hooks = {}
-for event, groups in hooks.items():
-    if not isinstance(groups, list):
-        problems.append("hook event %s is not a list" % event)
-        continue
-    for group in groups:
-        inner = group.get("hooks") if isinstance(group, dict) else None
-        if not isinstance(inner, list):
-            problems.append("a group under hook event %s has no 'hooks' list" % event)
-            continue
-        for handler in inner:
-            entries.append((event, handler))
-if settings.get("statusLine") is not None:
-    entries.append(("statusLine", settings["statusLine"]))
-
-
-def classify(cmd):
-    """Return ('checked', repo-relative-path) | ('interpreter', None) | ('other', None)."""
-    words = shlex.split(cmd)
-    while words and ASSIGN.match(words[0]):
-        words.pop(0)
-    if not words:
-        return ("other", None)
-    first = words[0]
-    for prefix in PREFIXES:
-        if first.startswith(prefix):
-            return ("checked", first[len(prefix):])
-    if first not in INTERPRETERS:
-        return ("other", None)
-    has_c = has_file = False
-    rest = words[1:]
-    for i, word in enumerate(rest):
-        if word == "--":
-            has_file = i + 1 < len(rest)
-            break
-        if word.startswith("--"):
-            continue
-        if word.startswith("-") and len(word) > 1:
-            if SHORT_C.match(word):
-                has_c = True
-                break
-            continue
-        has_file = True
-        break
-    return ("interpreter", None) if has_file and not has_c else ("other", None)
-
-
-checked = {}   # repo-relative path -> events, in first-seen order
-skipped = []   # (event, reason, command)
-for event, handler in entries:
-    cmd = handler.get("command") if isinstance(handler, dict) else None
-    if not isinstance(cmd, str) or not cmd.strip():
-        skipped.append((event, "no command", ""))
-        continue
-    try:
-        kind, path = classify(cmd)
-    except ValueError as err:
-        problems.append("cannot split the command on %s (%s): %s" % (event, err, short(cmd)))
-        continue
-    if kind == "checked":
-        events = checked.setdefault(path, [])
-        if event not in events:
-            events.append(event)
-    elif kind == "interpreter":
-        skipped.append((event, "interpreter", cmd))
-    else:
-        skipped.append((event, "other command", cmd))
-        if ".claude/" in cmd:
-            problems.append(
-                "unread .claude/ path in a skipped command on %s: %s -- a likely repo path in a "
-                "shape the parser does not read; teach the parser or explain it, never skip it "
-                "silently" % (event, short(cmd)))
-
-for event, reason, cmd in skipped:
-    print("skip  [%s] %s%s" % (event, reason, ": " + short(cmd) if cmd else ""))
-
-if not checked:
-    problems.append("found no registered hook scripts — the parser is broken, not the repo clean")
-
-modes = {}
-listing = git("ls-files", "-s", "-z").stdout.decode("utf-8", "replace")
-for item in listing.split("\0"):
-    meta, _, path = item.partition("\t")
-    if meta and path:
-        modes.setdefault(path, meta.split()[0])
-
-for path in sorted(checked):
-    where = ", ".join(checked[path])
-    mode = modes.get(path)
-    if mode is None:
-        problems.append("%s is registered on %s but missing from the git index" % (path, where))
-    elif mode != EXEC_MODE:
-        problems.append("%s is registered on %s but stored as mode %s, needs %s"
-                        % (path, where, mode, EXEC_MODE))
-    else:
-        print("ok    %s (%s) registered on: %s" % (path, mode, where))
-
-for problem in problems:
-    print("FAIL " + problem)
-print("counts: entries read %d | checked scripts (distinct) %d | skipped commands %d"
-      % (len(entries), len(checked), len(skipped)))
-print("result: " + ("FAIL (%d problems)" % len(problems) if problems else "PASS"))
-sys.exit(1 if problems else 0)
-PY
+  python3 -I "$HERE/lib/registered_hook_modes.py" "$@"
 }
 
 # ------------------------------------------------------------------ fixture builders
@@ -218,7 +72,15 @@ PY
 }
 
 T="$(printf '\t')"
-run_check() { OUT="$(check_repo "$1" 2>&1)"; RC=$?; }
+RUN_EXTRA=""   # extra checker args for the next run_check (word-split on purpose: "--rev HEAD")
+run_check() { OUT="$(check_repo "$1" $RUN_EXTRA 2>&1)"; RC=$?; }
+with_extra() { # $1 extra checker args, rest: a command (expect_fail ...) run with them, then reset
+  RUN_EXTRA="$1"; shift; "$@"; RUN_EXTRA=""
+}
+commit_repo() { # $1 repo: commit whatever is staged (no pathspec, so staged modes are kept)
+  git -C "$1" -c user.name=fixture -c user.email=fixture@example.invalid commit -q -m fixture \
+    || { say_bad "fixture commit" "git commit failed in $1"; exit 1; }
+}
 
 expect_fail() { # $1 desc, $2 repo, rest: strings the output must contain
   local desc="$1" repo="$2" needle; shift 2
@@ -368,6 +230,76 @@ expect_fail "an event key nobody listed in advance is covered (no hard-coded eve
 
 mkdir -p "$TMP/not-a-repo"
 expect_fail "a target that is not a git repository fails" "$TMP/not-a-repo" "not a git repository"
+
+# ------------------------------------------------------------------ R2 cases: --rev reads a commit
+# Each builds an index that DIFFERS from HEAD, so a checker that reads the wrong side (or mixes
+# the two) gives the wrong answer. HEAD is made by commit_repo (no pathspec), then the index is
+# moved with git update-index / git add.
+printf '\n== --rev HEAD (the commit, never the index) ==\n'
+
+new_repo; r="$REPO"   # (a) 100755 in the index, 100644 in HEAD
+add_script "$r" hooks/x.sh 644
+put_settings "$r" "Stop${T}\$HOME/.claude/hooks/x.sh"
+commit_repo "$r"
+git -C "$r" update-index --chmod=+x -- hooks/x.sh
+with_extra "--rev HEAD" expect_fail "(a) 100755 in the index but 100644 in HEAD fails with --rev HEAD, naming the path, mode and commit HEAD" "$r" "hooks/x.sh" "100644" "commit HEAD"
+lacks "(a) ...and the --rev message does not name the git index" "git index"
+expect_pass "(a) ...while the same repo passes without --rev (the index is 100755)" "$r" "result: PASS"
+
+new_repo; r="$REPO"   # (b) 100644 in the index, 100755 in HEAD
+add_script "$r" hooks/x.sh 755
+put_settings "$r" "Stop${T}\$HOME/.claude/hooks/x.sh"
+commit_repo "$r"
+git -C "$r" update-index --chmod=-x -- hooks/x.sh
+with_extra "--rev HEAD" expect_pass "(b) 100644 in the index but 100755 in HEAD passes with --rev HEAD" "$r" "result: PASS" "checked scripts (distinct) 1"
+expect_fail "(b) ...while the same repo fails without --rev (the index is 100644)" "$r" "hooks/x.sh" "100644"
+
+new_repo; r="$REPO"   # (c) HEAD's settings.json registers a script the index's does not
+add_script "$r" hooks/ok.sh 755
+add_script "$r" hooks/bad.sh 644
+put_settings "$r" "Stop${T}\$HOME/.claude/hooks/ok.sh" "Stop${T}\$HOME/.claude/hooks/bad.sh"
+commit_repo "$r"
+put_settings "$r" "Stop${T}\$HOME/.claude/hooks/ok.sh"
+with_extra "--rev HEAD" expect_fail "(c) a 100644 script registered only in HEAD's settings.json fails with --rev HEAD" "$r" "hooks/bad.sh" "100644"
+expect_pass "(c) ...and passes without --rev (the index's settings.json does not register it)" "$r" "result: PASS" "checked scripts (distinct) 1"
+
+new_repo; r="$REPO"   # (d) a ref that does not resolve
+add_script "$r" hooks/x.sh 755
+put_settings "$r" "Stop${T}\$HOME/.claude/hooks/x.sh"
+commit_repo "$r"
+with_extra "--rev nosuchref" expect_fail "(d) --rev nosuchref fails and names nosuchref" "$r" "nosuchref" "result: FAIL"
+
+# R1: every line that names its source says "commit <c>" where the index run says the index.
+new_repo; r="$REPO"   # registered script absent from HEAD but present in the index
+add_script "$r" hooks/ok.sh 755
+put_settings "$r" "Stop${T}\$HOME/.claude/hooks/ok.sh" "Stop${T}\$HOME/.claude/hooks/gone.sh"
+commit_repo "$r"
+add_script "$r" hooks/gone.sh 755
+with_extra "--rev HEAD" expect_fail "--rev: a registered path absent from the commit is reported as missing from commit HEAD" "$r" "hooks/gone.sh" "missing from commit HEAD"
+lacks "--rev: ...and not as missing from the git index" "git index"
+
+new_repo; r="$REPO"   # settings.json absent from HEAD but staged in the index
+add_script "$r" hooks/x.sh 755
+commit_repo "$r"
+put_settings "$r" "Stop${T}\$HOME/.claude/hooks/x.sh"
+with_extra "--rev HEAD" expect_fail "--rev: settings.json absent from the commit fails as missing from commit HEAD" "$r" "settings.json is missing from commit HEAD"
+lacks "--rev: ...and does not name the git index" "git index"
+
+new_repo; r="$REPO"   # invalid JSON in HEAD, valid JSON staged
+add_script "$r" hooks/x.sh 755
+printf '{ "hooks": ' > "$r/settings.json"; git -C "$r" add -- settings.json
+commit_repo "$r"
+put_settings "$r" "Stop${T}\$HOME/.claude/hooks/x.sh"
+with_extra "--rev HEAD" expect_fail "--rev: settings.json that is not valid JSON in the commit fails, naming commit HEAD" "$r" "not valid JSON" "commit HEAD"
+lacks "--rev: ...and does not say 'in the index'" "in the index"
+
+new_repo; r="$REPO"   # valid JSON but not an object in HEAD, valid object staged
+add_script "$r" hooks/x.sh 755
+printf '[]' > "$r/settings.json"; git -C "$r" add -- settings.json
+commit_repo "$r"
+put_settings "$r" "Stop${T}\$HOME/.claude/hooks/x.sh"
+with_extra "--rev HEAD" expect_fail "--rev: settings.json that is valid JSON but not an object fails, naming commit HEAD" "$r" "valid JSON but not an object" "commit HEAD"
+lacks "--rev: ...and does not say 'in the index'" "in the index"
 
 # ------------------------------------------------------------------ the real repo
 printf '\n== the real repo (the repository containing this suite) ==\n'
