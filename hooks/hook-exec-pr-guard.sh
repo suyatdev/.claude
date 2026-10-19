@@ -17,9 +17,10 @@
 #     with bash and git only, before any Python, so nothing this hook depends on can block a
 #     command in another repository.
 #   - IN scope, machinery broken (no python3, unreadable payload, unusable classifier) -> exit 2 for
-#     every Bash command here, as judge-guard.sh already does in the same three states. The message
-#     names a repair route that survives the block, because git and every other shell command is
-#     denied while it holds.
+#     every Bash command here. judge-guard.sh blocks the last two too, but on a missing python3 it
+#     falls back to plain python, so "python present, python3 missing" is blocked here alone. The
+#     message names a repair route that survives the block, because git and every other shell
+#     command is denied while it holds.
 #   - IN scope, a gh pr create whose checker did not run -> exit 2 naming the module.
 # Not a security boundary: command shapes the classifier does not read are accepted-open (ADR 0012).
 #

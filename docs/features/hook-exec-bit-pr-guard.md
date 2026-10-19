@@ -159,9 +159,13 @@ anything but `PR`/`NO` → exit 2 for every Bash command in this repo and its wo
 cause and a repair route that survives the block (the Write tool, or unregistering the hook). For
 a `gh pr create`, an R1 that did not run (R1's definition) → exit 2 naming the module. Outside
 this repo none of these can fire (R4). In this repo, `judge-guard.sh` already blocks every Bash
-command on a missing `python3`, an unreadable payload (`judge-guard.test.sh`: "truncated JSON ->
-block") or an unusable classifier, so the only blocked state this guard adds is a broken R1, and
-only for `gh pr create`.
+command on an unreadable payload (`judge-guard.test.sh`: "truncated JSON -> block") or an unusable
+classifier, and on a missing `python3` **only when plain `python` is missing too**. So this guard
+adds two blocked states: a broken R1, only for `gh pr create`; and `python` present with
+`python3` missing, for every Bash command. **Correction, 2026-10-18:** this paragraph first said
+judge-guard blocks on any missing `python3` and that a broken R1 was the only new state; the
+implementation-stage observability judge measured judge-guard falling back to `python`
+(`judge-guard.sh:45`) and allowing `ls` where this guard refuses. Behaviour unchanged (Mark).
 
 R9. **Registration.** `settings.json` runs `$HOME/.claude/hooks/hook-exec-pr-guard.sh` as a bare
 command under `PreToolUse` `Bash`, after `dependency-guard.sh`. The file is `100755` in git, so
@@ -305,7 +309,7 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
 | A fresh clone of this repo that is not a worktree of `~/.claude` is out of scope. | Mark's scope decision. |
 | If this guard's own file loses its bit it cannot run to say so (exit 126 does not block). | `verify-hook-wiring.sh` reports the disk bit at session start; R9 puts the file under the suite's check. |
 | The guard is live only after merge and pull into the main checkout. | True of every hook here. |
-| In this repo and its worktrees, a missing `python3`, an unreadable payload or a broken classifier blocks every Bash command, not just `gh pr create`. | `judge-guard.sh` already blocks every Bash command in those three states (R8), so no new blocked state; outside this repo R4 makes it impossible. |
+| In this repo and its worktrees, a missing `python3`, an unreadable payload or a broken classifier blocks every Bash command, not just `gh pr create`. | `judge-guard.sh` already blocks every Bash command in those states except one: with plain `python` present and `python3` missing it falls back and allows, where this guard blocks (R8, corrected 2026-10-18). Outside this repo R4 makes all of it impossible. |
 | A `gh pr create` without `HOOK_EXEC_EXEMPT` is still blocked by `judge-guard.sh` until a verdict exists; the two refusals are independent. | Intended: each guard answers one question. |
 
 ## Tasks
@@ -372,6 +376,10 @@ Run 2026-10-18 at `4abd45b`, in this worktree:
   always-deny stubs in Task 3).
 - `hooks/registered-hooks-executable.test.sh` — pass, 43/0; real repo 39/24/11, all `100755`.
 - Shared checker without `--rev` — output identical to the old heredoc on the real repo.
+- Implementation judge round 1 (at `ac266d0`, risk low): one false claim — "no new blocked state"
+  — corrected in R8, the Known-gaps row, ADR 0049 and the guard's header comment. Both suites
+  re-run after: 82/0 and 43/0. Unquoted path in the `chmod +x` hint left as is (no registered path
+  has a space).
 - **Open:** the guard has never run as a registered hook. That is Task 7, after merge and pull.
   The bash version and the main checkout's common-dir were not re-measured (Task 0).
 

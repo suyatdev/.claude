@@ -94,9 +94,11 @@ The decision order the guard follows is the card's flowchart; this ADR does not 
   matcher group in parallel or in sequence; this ADR claims no latency figure.
 - **A broken guard blocks every Bash command in this repo and its worktrees** when `python3` is
   missing, the payload is unreadable, or the classifier is unusable (R8). `judge-guard.sh` already
-  blocks in the same three states, so this adds no new blocked state; the one new thing that can
-  block is a broken checker, and only for `gh pr create`. Every such message names a repair route
-  that survives the block (the Write tool, or unregistering the hook).
+  blocks on an unreadable payload and an unusable classifier, but on a missing `python3` only when
+  plain `python` is missing too — it falls back to `python` (`py=$(command -v python3 || command -v
+  python)`). So this guard adds two blocked states: `python` present with `python3` missing, for
+  every Bash command; and a broken checker, only for `gh pr create`. Every such message names a
+  repair route that survives the block (the Write tool, or unregistering the hook).
 - **The registration brings the guard under the existing suite.** With it, the real-repo run reads
   39 entries and checks 24 distinct scripts, all `100755` (run 2026-10-18).
 - **Verified so far (2026-10-18):** `hooks/hook-exec-pr-guard.test.sh` 82 passed, 0 failed;
