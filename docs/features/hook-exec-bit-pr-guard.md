@@ -357,8 +357,11 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
   exec-bit 43/0, real repo 39/24/11 with `hook-exec-pr-guard.sh (100755)`; guard suite 82/0.
   ADR 0049's per-call process counts are read from the code, not traced; latency not measured.
   The gates stub is one bullet line, not two.
-- [ ] 6. Verification section; observability judge (implementation stage); open the PR, then
+- [x] 6. Verification section; observability judge (implementation stage); open the PR, then
   commit the verdict.
+  2026-10-18: judge r1 at `ac266d0` risk low (one false claim, fixed in `5d5b402`); r2 at
+  `5d5b402` risk low, confidence high. Draft PR #114 opened at `5d5b402`; the README Roadmap line
+  rides in the verdict commit, unjudged (docs only).
 - [ ] 7. After merge and Mark's pull: confirm the main checkout's hook blob and mode equal the
   merge commit's. Then, with Mark's OK, one live check in a throwaway local worktree whose HEAD
   stores a registered script as `100644`, through the Bash tool:
