@@ -347,8 +347,12 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
   not judge-guard's `python3 || python`: a bare `python` may be Python 2 (no `-I`, no
   `stdout.reconfigure`). The `chmod`/`git add`/commit fix line prints only for mode problems; a
   missing script or bad `settings.json` gets its own FAIL line plus the bypass line.
-- [ ] 5. Register (R9); exec-bit suite shows 24 distinct scripts, all `100755`. Write the ADR and
+- [x] 5. Register (R9); exec-bit suite shows 24 distinct scripts, all `100755`. Write the ADR and
   the gates stub, and update the suite header (R10).
+  2026-10-18: registered after `dependency-guard.sh` (10 hooks on `PreToolUse` `Bash` now);
+  exec-bit 43/0, real repo 39/24/11 with `hook-exec-pr-guard.sh (100755)`; guard suite 82/0.
+  ADR 0049's per-call process counts are read from the code, not traced; latency not measured.
+  The gates stub is one bullet line, not two.
 - [ ] 6. Verification section; observability judge (implementation stage); open the PR, then
   commit the verdict.
 - [ ] 7. After merge and Mark's pull: confirm the main checkout's hook blob and mode equal the

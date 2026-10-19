@@ -47,6 +47,10 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/dependency-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/hook-exec-pr-guard.sh"
           }
         ]
       },

@@ -4,8 +4,9 @@
 # 126), so the hook it implements silently does nothing. Spec: docs/features/hook-exec-bit-test.md
 # (R1-R7a).
 # Run BY HAND: bash hooks/registered-hooks-executable.test.sh
-# There is no CI and nothing runs this when a hook is added (R7a); run it after editing
-# settings.json or adding a hook script.
+# This suite itself still has no CI and nothing runs it when a hook is added (R7a); run it after
+# editing settings.json or adding a hook script. The same check (the shared module, against HEAD)
+# now also runs at `gh pr create` through hooks/hook-exec-pr-guard.sh (docs/decisions/0049-*).
 #
 # What it reads: settings.json and file modes come from the git INDEX (git show :settings.json,
 # git ls-files -s), never the working tree, so a local chmod +x cannot hide a 100644 that a fresh
