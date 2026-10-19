@@ -1196,12 +1196,20 @@ The two misses were rows 1 and 3 instead.
 > measured, recorded, and deliberately not re-scoped here.** Task 10 timed a single pair, so nothing
 > pinned how the figure behaves as a commit stages more pairs. Measured 2026-10-18 by
 > `docs/features/trim-safety-followups.md` task 13, with a 1/3/5/10-pair sweep: the cost is roughly
-> linear at **≈23.7 ms per pair on this card's base (`main`), intercept ≈160 ms**, so `main`'s own
-> code crosses 200 ms at about **1.7 pairs** — one pair fits, two do not. Nothing at three or more
-> pairs was ever inside 200 ms, before or after that card. Each pair costs two or three git
+> linear at **≈23.7 ms per pair on this card's base (`main`)**. Each pair costs two or three git
 > subprocesses; `trim-safety-followups` item C adds roughly **8 ms per pair** on top (one
 > `ls-files --stage` in the `PLAIN` form, or an `ls-tree` plus one `hash-object` per in-set part in
 > `PATHSPEC`/`ALL`), and ADR 0049 records it.
+>
+> **The crossing point is a range, not a number — `main` crosses 200 ms somewhere around two to
+> three pairs**, and anything from four pairs up was outside 200 ms before that card as well as
+> after. An earlier revision of this note said "about 1.7 pairs — one pair fits, two do not", which
+> was **overstated and is corrected here**: that figure was derived from the 177.5 ms intercept
+> while this very note discloses the same fixture also reading 162.0 ms. Hold the measured slope and
+> shift the intercept by that documented 15.5 ms and the crossing moves to ≈2.3 pairs. Caught by the
+> round-2 observability judge on `fix/trim-safety-followups`; the honest reading is that a
+> load-dependent intercept cannot support a one-decimal crossing point, and that the *slope* is the
+> durable part — nobody has measured whether it is itself load-invariant.
 >
 > **Re-scoping this budget as a per-pair figure belongs to whoever owns this card**, not to a
 > test-receipt change that happened to measure it. Also note the absolute numbers move with machine

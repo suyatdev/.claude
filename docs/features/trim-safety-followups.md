@@ -1304,9 +1304,21 @@ writer still exports `PARTS_GLOB`, `parts_folder_for` and `is_part` in `__all__`
 
 ⚠️ **One duplicated literal, deliberate and commented.** `parts_folder_for` used to read
 `PAIR_SUFFIXES[0][0]` from the writer; the new module cannot import the writer without recreating
-the cycle, so `RUNNER_SUFFIX = ".test.sh"` is a mirrored literal with a comment saying so. The
-writer's suite still pins the glob against the bash loop, but **nothing pins this one literal
-against `PAIR_SUFFIXES`** — an explicit gap, not an oversight.
+the cycle, so `RUNNER_SUFFIX = ".test.sh"` is a mirrored literal with a comment saying so.
+**No *dedicated* assertion pins it against `PAIR_SUFFIXES`** — but an earlier draft of this
+paragraph implied silent drift, and that was too pessimistic. **Measured 2026-10-18** by drifting it
+to `.test.bash` and counting new failures against each baseline:
+
+| suite | baseline | drifted | new failures |
+|---|---|---|---|
+| `decide-commit-gate.test.py` | 30 passed, 0 failed | 11 passed, 13 failed | **13** |
+| `write-test-marker.test.py` | 86 passed, 2 failed | 76 passed, 12 failed | **10** |
+| `test-marker-guard.test.sh` | 255 passed, 0 failed | 249 passed, 6 failed | **6** |
+
+So drift is caught **behaviourally, loudly, in three suites** — it just is not caught by a line
+naming the two constants. The round-2 judge made this point and its three figures were right; its
+stated writer baseline (`83/0`) was not — it is `86/2`, and 10 is the count of *new* failures.
+
 
 ⚠️ **A copied writer now needs `parts_convention.py` beside it.** `test-marker-guard.test.sh` copies
 the writer into fixtures only as the opt-in *signal* and always executes the real one from
