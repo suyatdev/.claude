@@ -327,8 +327,13 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
   Added (a)–(d) plus four `--rev HEAD` wording cases (missing script, settings.json missing, not
   valid JSON, not an object). The suite pins only substrings, so R1's byte-identity without
   `--rev` is checked by hand in Task 2 (old heredoc vs module on the real repo).
-- [ ] 2. Write `hooks/lib/registered_hook_modes.py` (R1) by moving the heredoc body, plus `--rev`.
+- [x] 2. Write `hooks/lib/registered_hook_modes.py` (R1) by moving the heredoc body, plus `--rev`.
   Suite green: every old case plus (a)–(d); real-repo counts unchanged (38/23/11).
+  2026-10-18: suite 43/0, 38/23/11. Without `--rev`, output `diff`s empty against the old heredoc
+  on the real repo (36 lines; re-run by me), a non-repo and a four-problem fixture. Falsified:
+  modes-from-index under `--rev` reddens (a), (b), missing-script; settings-from-index reddens (c)
+  and the three settings cases. The index's mode message never named a source, so only under
+  `--rev` it gains `in commit <c>`. A `--rev` starting `-` is refused as unresolvable.
 - [ ] 3. Guard suite first: `hooks/hook-exec-pr-guard.test.sh` with every Scenario above and the
   three file-mode assertions. Run it red against a stub that always allows and one that always
   denies; record which cases each stub passes. Commit red.
