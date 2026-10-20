@@ -462,7 +462,7 @@ A failed marker write **fails the suite**. A silent no-marker would surface late
 }
 ```
 
-> **Amended by `docs/features/trim-safety-followups.md` item C (ADR 0049): the schema gains an
+> **Amended by `docs/features/trim-safety-followups.md` item C (ADR 0050): the schema gains an
 > optional `parts` key; `version` stays `1`.** A runner `<stem>.test.sh` that has a parts folder
 > `<stem>.test.d/` also records every part, so the receipt covers the bytes the runner sources and
 > not only the runner:
@@ -1084,7 +1084,7 @@ path. The order is what stops `foo.test.sh` falling through to the `.sh` arm:
 | 4 | `.py` | subject | strip `.py`, append `.test.py` |
 | 5 | anything else | — | **forms no pair** |
 
-> **Row 2a is an amendment by `docs/features/trim-safety-followups.md` item C (ADR 0049).** It is
+> **Row 2a is an amendment by `docs/features/trim-safety-followups.md` item C (ADR 0050).** It is
 > numbered `2a` so every existing row number keeps its meaning. It matches on the **last two path
 > components**, not the basename, and sits before row 3 because a part's basename is a `.sh` file
 > that row 3 would otherwise take as a subject and pair with a `<part>.test.sh` that does not exist.
@@ -1094,7 +1094,7 @@ path. The order is what stops `foo.test.sh` falling through to the `.sh` arm:
 > falls through to the rows below.
 > ⚠️ **One latent gap, measured and recorded rather than closed:** a part whose own basename ends in
 > `.test.sh` is claimed by row 1 first, so it forms no pair and is ungated. No real part is named that
-> way today. See ADR 0049.
+> way today. See ADR 0050.
 
 Every path gets exactly one role, so a path is never both a subject and a test.
 
@@ -1199,7 +1199,7 @@ The two misses were rows 1 and 3 instead.
 > linear at **≈23.7 ms per pair on this card's base (`main`)**. Each pair costs two or three git
 > subprocesses; `trim-safety-followups` item C adds roughly **8 ms per pair** on top (one
 > `ls-files --stage` in the `PLAIN` form, or an `ls-tree` plus one `hash-object` per in-set part in
-> `PATHSPEC`/`ALL`), and ADR 0049 records it.
+> `PATHSPEC`/`ALL`), and ADR 0050 records it.
 >
 > **The crossing point is a range, not a number — `main` crosses 200 ms somewhere around two to
 > three pairs**, and anything from four pairs up was outside 200 ms before that card as well as

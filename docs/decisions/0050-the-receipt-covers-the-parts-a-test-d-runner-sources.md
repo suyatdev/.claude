@@ -1,4 +1,4 @@
-# 0049 — The receipt covers the parts a `.test.d/` runner sources
+# 0050 — The receipt covers the parts a `.test.d/` runner sources
 
 - **Status:** Accepted (2026-10-17). Amends **ADR 0027** (§1, the rule that a marker records the
   blobs of two files); does not supersede it. The decision was specified as item C of
@@ -10,10 +10,19 @@
   `hooks/handoff/`. Full design, scenarios and the measurement record:
   `docs/features/trim-safety-followups.md` § "C. The receipt names every part". The gate's own
   card, amended in the same change: `docs/features/verification-marker-gate.md`.
-- **Note on the number:** `0049` is not the `0048` the card names. `0048` is already taken on
-  `origin/main` by `0048-an-install-is-vetted-then-asked-never-silently-allowed.md`, a different
-  card's ADR. On 2026-10-17 `git log --all --name-only -- 'docs/decisions/0049*' 'docs/decisions/0050*'`
-  returned nothing, so neither number is claimed on any ref in this clone.
+- **Note on the number — it moved twice, and the second time is the instructive one.** The card
+  names `0048`; that was already taken on `origin/main` by
+  `0048-an-install-is-vetted-then-asked-never-silently-allowed.md`. So this was written as **`0049`**
+  on 2026-10-17, after `git log --all --remotes --name-only -- 'docs/decisions/0049*'
+  'docs/decisions/0050*'` returned nothing on any ref. **That check was correct and still went
+  stale:** on 2026-10-19, merging `origin/main` brought in
+  `0049-a-pr-is-refused-while-a-registered-hook-is-stored-non-runnable.md` — a concurrent card took
+  `0049` during this branch's life. Git saw no conflict, because the two files have different names.
+  Renumbered to **`0050`**, re-verified free on every ref at merge time.
+  **The lesson is not "check against the deciding ref" — that was done.** It is that a reserved
+  number is only reserved until something else merges, so the check belongs **at merge time** as well
+  as at write time, and a number collision is invisible to git. See
+  `docs/features/trim-safety-followups.md` § Verification for the measurement.
 - **Note on anchors:** this ADR cites **function, constant and file names**, not `:NNN` line
   numbers, apart from the single line of ADR 0027 it amends, which was re-read on the day of
   writing.

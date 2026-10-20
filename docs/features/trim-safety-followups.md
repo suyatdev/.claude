@@ -467,7 +467,7 @@ fix from alternatives that included "document it and move on" (2026-10-18).
   `ls-files --stage` 6.41 ms, `hash-object` 6.29 ms — **one extra git subprocess per formed bash
   pair even when the runner has no parts folder**, since `parts_folder_for` returns a path whether
   or not it exists. ~5 pairs eats the slack and the repo has 40 tracked `.test.sh` runners. Neither
-  this card nor ADR 0049 contains the word "latency". **Measure first, on a commit forming several
+  this card nor ADR 0050 contains the word "latency". **Measure first, on a commit forming several
   pairs, and record it**; only then decide whether to skip the call when no folder exists — that
   shortcut has a deleted-folder case needing its own test.
 - [x] Task 14 — task 13's finding, and **not** the one the judge predicted: ~18 of the ~25 ms this
@@ -478,7 +478,7 @@ fix from alternatives that included "document it and move on" (2026-10-18).
   and `is_part` into a small module both sides import.** A refactor with no behaviour change, so no
   RED half — the three existing suites are the test, and the new module gets **no sibling test**
   (a `X.py`/`X.test.py` pair would demand a receipt of its own, and the convention is already
-  covered by the writer suite's parts assertions plus task 9b's live cross-check). ADR 0049's "one
+  covered by the writer suite's parts assertions plus task 9b's live cross-check). ADR 0050's "one
   Python place" sentence and this card's item C must name the new module afterwards.
 
 **Judge round 2 (`b4894f0`): `risk=low` / `confidence=high`, no failing dimension, two concerns.**
@@ -898,7 +898,7 @@ the pair `test-marker-guard.sh`|`test-marker-guard.test.sh` can never have one. 
 than assumed, and the store listing confirms no entry exists. `TEST_EXEMPT` is set for exactly the
 reason the marker-gate table gives for task 8.
 
-### Task 9 — C docs: the gate's card and ADR 0049, with every count re-derived — PASS
+### Task 9 — C docs: the gate's card and ADR 0050, with every count re-derived — PASS
 
 Measured 2026-10-17 in `~/.worktrees/.claude/trim-safety-followups`. Written by a dispatched
 worker; every figure below re-measured here, and the arithmetic checked by **set membership**, not
@@ -939,7 +939,7 @@ which understates the comparison now that parts are read too. It now reads *"Blo
 match"*. A diagram is exactly the kind of statement that keeps its old wording while the rule under
 it moves.
 
-**ADR `0049-the-receipt-covers-the-parts-a-test-d-runner-sources.md`**, 139 lines, in the house
+**ADR `0050-the-receipt-covers-the-parts-a-test-d-runner-sources.md`**, 139 lines, in the house
 format of 0044/0047. Its citations were checked individually, not as a block
 ([[feedback_a_copied_citation_is_laundered_not_verified]]):
 
@@ -958,12 +958,16 @@ claims first (latent — none of the 18 real parts is named that way), and the u
 (the marker card's standing rule). It also states that the `dispatch-pane-agent.<concern>.test.sh`
 convention stays outside the receipt, citing ADR 0044.
 
-⚠️ **The ADR number is 0049, not the 0048 the card names, and the card's instruction is stale.**
-`0048-an-install-is-vetted-then-asked-never-silently-allowed.md` is on `origin/main`, claimed by the
-dependency-vetting card. `git log --all --remotes` for `0049*` and `0050*` returns nothing, so
-neither is claimed on any ref. The reason this was invisible from here is worth keeping: **this
-branch is behind `origin/main`**, so a local check would have called 0048 free
-([[feedback_check_uniqueness_against_the_deciding_ref]]).
+⚠️ **The ADR number moved twice and is now `0050`. This paragraph is the only place that records
+it** — every other reference in this card and in the gate's card points at the live file, so a
+reader following any of them lands on the real ADR rather than on a number's history. Written
+2026-10-17 as `0049` — the card's `0048` was already
+taken on `origin/main` by `0048-an-install-is-vetted-then-asked-never-silently-allowed.md`, and
+`git log --all --remotes` for `0049*` and `0050*` returned nothing on any ref, so `0049` was genuinely
+free. **That check was right and still went stale:** the 2026-10-19 merge of `origin/main` brought
+in `0049-a-pr-is-refused-while-a-registered-hook-is-stored-non-runnable.md`, a concurrent card
+having taken `0049` during this branch's life. Renumbered to `0050`, re-verified free on every ref
+at merge time. Full record in the "merge of `origin/main`" entry at the end of this section.
 
 ⚠️ **Status is `Accepted (2026-10-17)`**, matching the house form in 0047 (`Accepted (2026-09-14)`).
 The worker offered `Proposed` instead; `Accepted` is right because the code is implemented and the
@@ -1403,3 +1407,75 @@ or remove it."* — advice to remove a file the commit is already removing — *
 **Why `ls-files --cached` alone cannot carry this:** a deleted part and an untracked part are both
 absent from the index. Only the disk check separates them, which is exactly why the clause exists
 and why no index-based test could ever have caught its removal.
+
+### Merge of `origin/main` (2026-10-19) — clean, but it exposed a number collision git cannot see
+
+Measured in `~/.worktrees/.claude/trim-safety-followups`. The branch was **78 behind / 24 ahead**
+when merged (64 behind an hour earlier — `main` moves under this branch continuously).
+`git merge --no-edit origin/main` merged with the `ort` strategy, **no conflicts**, bringing 38
+files and ~11,000 lines: the dependency-vetting guard, the hook-exec-bit PR guard, and both judge
+ledgers.
+
+⚠️ **THE FINDING: `docs/decisions/0049-*` is now claimed by two different ADRs, and git saw nothing
+wrong.** The merge brought in `0049-a-pr-is-refused-while-a-registered-hook-is-stored-non-runnable.md`
+beside this card's `0049-the-receipt-covers-the-parts-a-test-d-runner-sources.md`. Different
+filenames, so no textual conflict — a merge can be *clean* and still leave the repository with two
+ADR 0049s. Renumbered to **`0050`**, re-verified free on every ref **at merge time**
+(`git log --all --remotes` for `0050*` and `0051*`: empty).
+
+**The instructive part is that the original check was correct.** On 2026-10-17 `0049` was genuinely
+free on every ref, verified against `origin/main` and not against stale local `main`
+([[feedback_check_uniqueness_against_the_deciding_ref]]). It went stale anyway, because a concurrent
+card merged in between. **A reserved number is only reserved until something else merges**, so the
+uniqueness check belongs at *merge* time as well as at write time, and nothing in git will raise it.
+
+**The renumber was scoped by hand, not by a repo-wide regex.** `git grep -ln 0049` matched ten files,
+and **five of them legitimately cite the other 0049** — `README.md:83`, `rules/gates.md:31`,
+`docs/features/hook-exec-bit-pr-guard.md`, `hooks/registered-hooks-executable.test.sh`, and that ADR
+itself — plus the compliance ledger's own rows. A blanket substitution would have falsified every one
+([[feedback_a_blanket_rewrite_corrupts_historical_claims]]). Changed: the file's own title, 4 lines
+in `verification-marker-gate.md`, 4 in this card. **The history lives in exactly one paragraph**, the
+"number moved twice" note above, so every other reference points at the live file and a reader
+following any of them lands on the real ADR ([[feedback_single_source_the_statement_that_keeps_drifting]]).
+
+**Both sides of the `rules/gates.md` auto-merge survived**, checked individually: this card's
+`implementation` **or `review`** clause (1 match) and `main`'s new Hook-exec-bit PR gate bullet
+(1 match).
+
+**The union-merged ledgers were checked by identity, not by line.** A `merge=union` ledger duplicates
+an *edited* row as two different texts, so an exact-duplicate check reports zero while the same
+verdict sits there twice ([[feedback_union_merge_duplicates_an_edited_row]]).
+
+| check | observability | compliance |
+|---|---|---|
+| rows after | 361 | 280 |
+| rows lost from either side | **0** | — |
+| rows from neither side | **0** | — |
+| exactly duplicated lines | **0** | — |
+| **duplicate verdict identities** | **1** | **2** |
+| …present before this merge? | yes — in `origin/main`; branch and merge-base had 0 | yes — in the merge-base, the branch **and** `origin/main` |
+
+So **this merge introduced no duplicate**: all three belong to other cards and predate it. Each of
+this card's own two rows appears exactly once. Note the whole-line check said `0 duplicates` while
+three existed — that check alone would have been a false all-clear.
+
+**Every suite re-run against the merged tree**, since the merge changed 38 files including hooks:
+
+| suite | before the merge | after |
+|---|---|---|
+| `hooks/phase-guard.test.sh` | 159/0 | **159 passed, 0 failed** |
+| `hooks/handoff/handoff-keep-guard.test.sh` | 61/61 | **61/61** |
+| `hooks/lib/decide-commit-gate.test.py` | 32/0 | **32 passed, 0 failed** |
+| `hooks/test-marker-guard.test.sh` | 255/0 | **255 passed, 0 failed** |
+| `hooks/lib/write-test-marker.test.py` | 86 passed, 2 failed | **93 passed, 2 failed** |
+| `hooks/handoff/live-handoff.test.sh` | 69/69 | **69/69** |
+
+⚠️ **The writer suite's rise 86 → 93 is not a regression and not a gain of this card's making.** Its
+`wired` inventory adds one assertion per tracked runner, and the merge brought seven new ones (the
+dependency-vetting and hook-exec-bit suites); all seven pass. The failure count is **still exactly 2
+and still the same two names** — `wired: panes/dispatch-pane-agent.test.sh` and
+`wired: panes/run-pane-agent.test.sh` ([[feedback_a_changed_count_is_not_a_regression]]).
+
+**All 7 receipts still match the merged `HEAD`** — 26 blob comparisons, 0 mismatches, the four
+parts-bearing ones still naming 5/4/5/4 parts. `handoff-keep-guard.sh`'s mode changed `100644 →
+100755` upstream, which does not alter its blob, so its receipt stayed valid.
