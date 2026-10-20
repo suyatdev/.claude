@@ -12,6 +12,29 @@
 #
 # The commands below are DATA fed to the hook on stdin. Nothing here executes them.
 set -u
+
+# Sever this suite from the machine's git configuration before it builds anything.
+#
+# Not cosmetic, and not about config values: `core.hooksPath` is set in the GLOBAL config
+# on this machine, and it points at the layer-2 `reference-transaction` hook of the worktree
+# guard. Without this line every fixture repository below inherits that hook, so each
+# fixture `commit`/`checkout` is judged — and, in `log` mode, RECORDED — as a HEAD write in a
+# primary checkout. Measured 2026-09-17: one run of this suite appended 54 lines to
+# `hooks/state/reference-transaction.log`, and this suite alone accounted for 967 of the 1066
+# fixture lines in that machine-wide log — 435 under the shared `repo` fixture, 506 under the
+# per-case `repo.XXXXXX` variants, and 26 at a bare mktemp root. (This read 941 until
+# 2026-10-10: 941 is 435+506, the total of one fixture *shape*, and reusing it as the suite
+# total silently dropped the 26 bare-root lines. Re-derived from the raw log, not the table.)
+# See `docs/features/worktree-location-guard.md` task 18.
+#
+# It is also what stops this suite going red the day that guard is armed: a refused fixture
+# checkout is a fixture that never gets built. `reference-transaction.test.sh:58` and
+# `worktree-guard.test.sh:29` have carried this same line from the start, which is exactly
+# why neither of them appears in that log.
+#
+# Safe here because nothing in this file reads global config: every identity it needs is set
+# per-repository with `git -C "$dir" config user.email` / `user.name` below.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 MARKER_SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 MARKER_ROOT="$(git rev-parse --show-toplevel)" || exit 1
 
