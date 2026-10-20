@@ -942,7 +942,8 @@ MSG_GIT_FAILED|-
 MSG_NO_MARKER|pair
 MSG_BAD_MARKER|pair
 MSG_STALE_SUBJECT|pair
-MSG_STALE_TEST|pair'
+MSG_STALE_TEST|pair
+MSG_STALE_PART|pair'
 
 DOORS_BASH='MSG_CLASSIFIER_MISSING|-
 MSG_BAD_PAYLOAD|-
@@ -985,6 +986,16 @@ setup_door() {
       mark "$repo" hooks/foo.test.sh
       edit "$repo" hooks/foo.test.sh 'v2 suite'
       stage "$repo" hooks/foo.test.sh ;;
+    MSG_STALE_PART)
+      # A part is committed and recorded in the receipt, then edited and staged alone: the
+      # runner and the subject both still match, so only the part list disagrees.
+      mkdir -p "$repo/hooks/foo.test.d"
+      edit "$repo" hooks/foo.test.d/10-a.sh 'v1 part'
+      git -C "$repo" add -- hooks/foo.test.d/10-a.sh
+      git -C "$repo" commit -qm part
+      mark "$repo" hooks/foo.test.sh
+      edit "$repo" hooks/foo.test.d/10-a.sh 'v2 part'
+      stage "$repo" hooks/foo.test.d/10-a.sh ;;
     MSG_CLASSIFIER_MISSING)
       stage "$repo" hooks/foo.sh
       gate="$(stub_gate door-noentry OMIT REAL)" ;;
@@ -1030,7 +1041,7 @@ stage "$R" docs/notes.md
 allow "an allowed commit writes no log line" "$R" 'git commit -m msg'
 expect_log_count "an allowed commit writes no log line" "$R" 0
 
-# MSG_NO_PYTHON is the thirteenth door and the only machine-global one: no toplevel has been
+# MSG_NO_PYTHON is the fourteenth door and the only machine-global one: no toplevel has been
 # resolved, so there is no <repo>/hooks/state/ to append to. The PATH below grants exactly the
 # externals the gate is allowed to need -- adding one to the gate means adding it here.
 NOPY="$TMP/nopy"
@@ -1049,7 +1060,7 @@ expect_exit "python3 missing blocks at MSG_NO_PYTHON" 2
 expect_msg "python3 missing blocks at MSG_NO_PYTHON" MSG_NO_PYTHON
 expect_log_count "the door that fires before a repo is known writes no line" "$R" 0
 
-# Nine of the thirteen doors fire before a pair exists; field 4 is total because it has a
+# Nine of the fourteen doors fire before a pair exists; field 4 is total because it has a
 # defined value for them, not because every door reaches one.
 R="$(new_repo adopt)"
 stage "$R" hooks/foo.sh

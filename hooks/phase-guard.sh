@@ -406,7 +406,10 @@ for f in "$root"/docs/features/*.md; do
   file_branch=${parsed_fm#*"$TAB"}
   # Collected in THIS loop, from THIS parse, so a claim can only come from a file the contract
   # accepted. Step 9 checks membership rather than re-reading anything off disk.
-  if [ "$file_phase" = "implementation" ] && [ -n "$file_branch" ]; then
+  # `review` claims as well as `implementation`, for step 8's reason read the other way round: a
+  # card at review is still that branch's open gate, so the branch it names stays authorized
+  # while its findings are fixed. Added by docs/features/trim-safety-followups.md (item B).
+  if { [ "$file_phase" = "implementation" ] || [ "$file_phase" = "review" ]; } && [ -n "$file_branch" ]; then
     claimed_branches="$claimed_branches$file_branch
 "
   fi
