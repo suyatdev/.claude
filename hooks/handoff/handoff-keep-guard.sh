@@ -8,7 +8,7 @@
 # "Guard liveness (finding O2)" and "Block-message sanitization (finding C8)".
 #
 # ==========================================================================================
-# Stop-hook contract — measured against the installed binary /Users/marksuyat/.local/bin/claude,
+# Stop-hook contract — measured against the installed binary ~/.local/bin/claude,
 # version 2.1.267 (2026-09-10), NOT the docs site (the docs page is known-wrong about hook
 # decision values; see MEMORY.md "Hooks can return ask, not just allow/deny").
 #

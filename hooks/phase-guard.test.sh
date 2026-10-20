@@ -521,6 +521,29 @@ BREV="$TMP/b-superseded-review"; supersede_repo "$BREV" review review/x
 allow_silent "B5 a planning file superseded by review stops denying too" "$BREV" \
   "$(payload Write file_path "$BREV/src/x.sh")"
 
+# B5a-c: a card at phase review claims the branch it names, exactly as implementation does (a
+# review-phase card is still that branch's open gate). Unlike B5, the planning file P stays
+# un-superseded: the review card is a SEPARATE file (r.md) that only ever exists in the working
+# tree, so no other branch's committed copy of P reads a non-planning phase.
+review_claim_repo() { # $1 dir, $2 branch to end up on, $3 branch value on the review card ("" omits the key)
+  mkrepo "$1"
+  feature_file "$1" docs/features/a.md planning
+  feature_file "$1" docs/features/r.md review "$3"
+  ( cd "$1" && git checkout -q -b "$2" )
+}
+BRC1="$TMP/b-review-claims"; review_claim_repo "$BRC1" feat/r feat/r
+allow_silent "B5a a review card unlocks the branch it names" "$BRC1" \
+  "$(payload Write file_path "$BRC1/src/x.sh")"
+
+BRC2="$TMP/b-review-other-branch"; review_claim_repo "$BRC2" feat/other feat/r
+deny "B5b a review card does not unlock any other branch" "$BRC2" \
+  "$(payload Write file_path "$BRC2/src/x.sh")"
+err_has "B5b the deny names the planning card, not the review one" 'docs/features/a\.md.*phase: planning'
+
+BRC3="$TMP/b-review-no-branch"; review_claim_repo "$BRC3" feat/r ""
+deny "B5c a review card with no branch: key claims nothing" "$BRC3" \
+  "$(payload Write file_path "$BRC3/src/x.sh")"
+
 # The regression test for the file_path-only bug: NotebookEdit carries notebook_path and nothing
 # else, so reading file_path alone would silently exempt an entire tool.
 deny "B6 NotebookEdit is guarded like any other write" "$OPTED" \

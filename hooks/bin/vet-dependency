@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""vet-dependency <ecosystem> <name> [<version>] -- vet one package, write its report and record.
+
+Spec: docs/features/dependency-vetting-guard.md. The checks live in hooks/lib/vet_checks.py; this
+file is the command line: argument handling, the report, the files, the exit code.
+
+Exit 0: vetted and written (stop signals do not change that -- the vetter reports, Mark decides).
+Exit 1: could not be vetted (OSV failing, a registry 404, Homebrew lookup failing, a write failing);
+        nothing is left behind. Exit 2: bad arguments; nothing fetched, nothing written.
+Thresholds are the named constants at the top of hooks/lib/vet_checks.py.
+"""
+
+import os
+import sys
+
+HOOKS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.insert(0, os.path.join(HOOKS_DIR, "lib"))
+
+import vet_checks as vc  # noqa: E402
+import vetting_record as vr  # noqa: E402
+
+EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
+USAGE = "usage: vet-dependency <ecosystem> <name> [<version>]   (ecosystem: {}; homebrew takes no version)".format(
+    "|".join(vr.ECOSYSTEMS))
+DEFAULT_STORE = os.path.join(HOOKS_DIR, "state", "vetting")
+REPO_ROOT = os.path.dirname(HOOKS_DIR)
+OSV_VULN_URL = "https://osv.dev/vulnerability/"
+THRESHOLDS = ("TYPOSQUAT_RATIO", "MIN_RELEASE_AGE_DAYS", "MIN_WEEKLY_DOWNLOADS", "HTTP_TIMEOUT_SECONDS",
+              "SUBPROCESS_TIMEOUT_SECONDS")
+
+
+def report_reference(path):
+    """How the record names its report: repo-relative inside the repo (as the spec shows), else absolute."""
+    absolute = os.path.abspath(path)
+    inside = absolute.startswith(REPO_ROOT + os.sep)
+    return os.path.relpath(absolute, REPO_ROOT).replace(os.sep, "/") if inside else absolute
+
+
+def _cell(text):
+    return text.replace("|", "\\|")
+
+
+def _advisory_line(advisory_id):
+    safe = all(c.isalnum() or c in "-._:" for c in advisory_id) and advisory_id != "(id missing)"
+    return "- [{0}]({1}{0})".format(advisory_id, OSV_VULN_URL) if safe else "- {}".format(_cell(advisory_id))
+
+
+def _tally(vetted, status):
+    return [s["check"] for s in vetted["signals"] if s["status"] == status]
+
+
+def render_report(vetted):
+    package = "{} {}@{}".format(vetted["ecosystem"], vetted["name"], vetted["version"])
+    stops, cautions = _tally(vetted, "stop"), _tally(vetted, "caution")
+    lines = ["# Vetting report: {}".format(package), "",
+             "- Vetted at: {} (UTC)".format(vetted["vetted_at"]),
+             "- Result: {} stop ({}) / {} caution ({})".format(len(stops), ", ".join(stops) or "none", len(cautions),
+                                                                 ", ".join(cautions) or "none"),
+             "- Complete: {}".format("yes" if vetted["complete"] else "NO -- INCOMPLETE, a check could not run")]
+    lines += ["  - " + _cell(reason) for reason in vetted["incomplete_reasons"]]
+    versions = ["{} {}".format(p, v) if v and not v.lower().startswith(p) else (v or "{} (version unavailable)".format(p))
+                for p, v in sorted(vetted["tool_versions"].items())]
+    lines += ["- Tools used: {}".format(", ".join(versions) or "none"), "",
+              "## Checks", "", "| Check | Status | Detail |", "| --- | --- | --- |"]
+    lines += ["| {} | {} | {} |".format(s["check"], s["status"], _cell(s["detail"])) for s in vetted["signals"]]
+    advisories = [s for s in vetted["signals"] if s["advisories"]]
+    if advisories:
+        lines += ["", "## Advisories"]
+        for s in advisories:
+            lines += ["", "### {} ({})".format(s["check"], len(s["advisories"])), ""]
+            lines += [_advisory_line(a) for a in s["advisories"]]
+    notes = [n for s in vetted["signals"] for n in s["notes"]]
+    lines += ["", "## Notes", ""] + ["- {}".format(_cell(n)) for n in notes] if notes else []
+    counts = next(s for s in vetted["signals"] if s["check"] == "transitive_vulns").get("counts")
+    lines += ["", "## Transitive packages", "",
+              "{} packages resolved, {} with advisories".format(counts["packages"], counts["with_advisories"]) if counts
+              else "not available (see the transitive_vulns row)"]
+    lines += ["", "## Thresholds compared against", ""] + ["- {} = {}".format(n, getattr(vc, n)) for n in THRESHOLDS]
+    return "\n".join(lines) + "\n"
+
+
+def _write(store, vetted):
+    """Report first, record last; if the record cannot be written the report is removed too."""
+    ecosystem, name, version = vetted["ecosystem"], vetted["name"], vetted["version"]
+    report_file = vr.report_path(store, ecosystem, name, version)
+    record = vc.to_record(vetted, report_reference(report_file))
+    vr.write_report(store, ecosystem, name, version, render_report(vetted))
+    try:
+        record_file = vr.write_record(store, record)
+    except BaseException:
+        try:
+            os.remove(report_file)
+        except FileNotFoundError:
+            pass
+        raise
+    return report_file, record_file
+
+
+def main(argv=None, ctx=None, store=None, stdout=None, stderr=None):
+    argv = sys.argv[1:] if argv is None else list(argv)
+    stdout, stderr = stdout or sys.stdout, stderr or sys.stderr
+    if argv in (["-h"], ["--help"]):
+        print(USAGE, file=stdout)
+        return EXIT_OK
+    if len(argv) not in (2, 3) or any(a.startswith("-") for a in argv):
+        print(USAGE, file=stderr)
+        return EXIT_USAGE
+    ecosystem, name, version = argv[0], argv[1], argv[2] if len(argv) == 3 else None
+    store = store or DEFAULT_STORE
+    try:
+        vetted = vc.vet(ctx or vc.Context(), ecosystem, name, version)
+    except vr.ValidationError as exc:
+        print("vet-dependency: {}\n{}".format(exc, USAGE), file=stderr)
+        return EXIT_USAGE
+    except vc.VetError as exc:
+        print("vet-dependency: {}".format(exc), file=stderr)
+        return EXIT_FAILED
+    try:
+        report_file, record_file = _write(store, vetted)
+    except (OSError, vr.ValidationError) as exc:
+        print("vet-dependency: could not write the vetting files: {}".format(exc), file=stderr)
+        return EXIT_FAILED
+    stops, cautions = _tally(vetted, "stop"), _tally(vetted, "caution")
+    print("vetted {} {}@{}: {} stop ({}) / {} caution ({})".format(
+        ecosystem, vetted["name"], vetted["version"], len(stops), ", ".join(stops) or "none",
+        len(cautions), ", ".join(cautions) or "none"), file=stdout)
+    if not vetted["complete"]:
+        print("INCOMPLETE: " + "; ".join(vetted["incomplete_reasons"]), file=stdout)
+    print("report: {}\nrecord: {}".format(report_file, record_file), file=stdout)
+    return EXIT_OK
+
+
+if __name__ == "__main__":
+    sys.exit(main())
