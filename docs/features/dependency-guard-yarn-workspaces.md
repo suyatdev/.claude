@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: low
-branch: none
+branch: fix/dependency-guard-yarn-workspaces
 ---
 
 # Dependency guard: yarn workspace forms get the same decision as plain yarn
