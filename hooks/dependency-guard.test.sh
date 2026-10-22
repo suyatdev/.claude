@@ -397,10 +397,14 @@ done
 for c in 'uv run --upgrade pytest -h' 'npm update -- -h'; do
   ask_cmd "a help flag that is not the tool's own does not exempt the update: $c" "$c" "$UPDATE_NOTE"
 done
-# Known gap (card, 2026-10-15): yarn's workspace forms pass silently — pinned so closing it is a deliberate edit
-for c in 'yarn workspace app add zod@1.0.0' 'yarn workspaces foreach -A add zod@1.0.0' 'yarn workspace app up zod'; do
-  allow_cmd "known gap: yarn workspace form allowed: $c" "$c"
-done
+# Closed gap (docs/features/dependency-guard-yarn-workspaces.md, R8): these three were ALLOW pins; a yarn
+# workspace wrapper now gets the decision of the command inside it. The full matrix is further down.
+deny_cmd "yarn workspace add is denied like yarn add: yarn workspace app add zod@1.0.0" "yarn workspace app add zod@1.0.0" \
+  "has no vetting report from the last 7 days" "vet-dependency npm zod 1.0.0"
+deny_cmd "yarn workspaces foreach add is denied like yarn add: yarn workspaces foreach -A add zod@1.0.0" "yarn workspaces foreach -A add zod@1.0.0" \
+  "has no vetting report from the last 7 days" "vet-dependency npm zod 1.0.0"
+ask_cmd "yarn workspace up is asked about like yarn up: yarn workspace app up zod" "yarn workspace app up zod" \
+  "yarn workspace up zod: $UPDATE_NOTE" "check what it will change before approving"
 before="$(log_count)"; run "$(bash_payload "npm update zod")"
 [ $(( $(log_count) - before )) -eq 1 ] && say_ok "an update ask appends exactly one log line" || say_bad "an update ask appends exactly one log line" "gained $(( $(log_count) - before ))"
 case "$(tail -n 1 "$STATE/dependency-guard.log")" in
@@ -431,6 +435,114 @@ deny_cmd "VET_EXEMPT does not turn an update's deny into anything but the unpinn
 new_state
 mkrec go example.com/m v1.2.3 24 true
 ask_cmd "with a record the go -u command asks, update clause included" "go get -u example.com/m@v1.2.3" "go example.com/m@v1.2.3" "$UPDATE_NOTE"
+
+# ---- yarn workspace forms (docs/features/dependency-guard-yarn-workspaces.md, R1-R8)
+# `yarn workspace <name> <rest>` and `yarn workspaces foreach [options] <rest>` get the decision of
+# `yarn <rest>`. Rows under "stays allowed" and the --cwd control pass before the fix too: they pin what
+# the fix must not break.
+new_state
+same_result() { # $1 desc, $2 wrapped command, $3 plain command: same exit code, stdout and stderr.
+  # The plain form must itself decide (deny or ask), or the comparison would pass on two silent allows.
+  local rc_p out_p err_p
+  run "$(bash_payload "$3")"; rc_p=$RC; out_p=$OUT; err_p=$ERR
+  if [ "$rc_p" -eq 0 ] && [ -z "$out_p" ]; then say_bad "$1" "control [$3] was allowed, so there is nothing to compare"; return; fi
+  run "$(bash_payload "$2")"
+  if [ "$RC" -eq "$rc_p" ] && [ "$OUT" = "$out_p" ] && [ "$ERR" = "$err_p" ]; then say_ok "$1"
+  else say_bad "$1" "want the result of [$3] (rc=$rc_p out=[$out_p] err=[$err_p]); got rc=$RC out=[$OUT] err=[$ERR]"; fi
+}
+
+# R1 + Evidence rows 1, 4, 5, 6 + Scenarios 1-2: install/dlx/global forms, same reason text as top level
+deny_cmd "Scenario: an unvetted add inside a workspace is denied like a plain add" "yarn workspace web add lodash" \
+  "npm lodash has no exact version" "lodash@<exact-version>"
+deny_cmd "Scenario: dlx inside a workspace is denied like plain dlx" "yarn workspace web dlx x" \
+  "npm x has no exact version" "x@<exact-version>"
+deny_cmd "a pinned but unvetted add inside a workspace is stopped with the vet command" "yarn workspace web add lodash@4.17.21" \
+  "npm lodash@4.17.21 has no vetting report from the last 7 days" "vet-dependency npm lodash 4.17.21"
+for c in 'add lodash' 'add lodash@4.17.21' 'install lodash' 'dlx x' 'dlx x@1.0.0' 'global add lodash'; do
+  same_result "yarn workspace web $c has the exact result of yarn $c" "yarn workspace web $c" "yarn $c"
+done
+# R2: foreach (yarn 4 has no `global`, so that form is not paired with it)
+for c in 'add lodash' 'add lodash@4.17.21' 'install lodash' 'dlx x' 'dlx x@1.0.0'; do
+  same_result "yarn workspaces foreach -A $c has the exact result of yarn $c" "yarn workspaces foreach -A $c" "yarn $c"
+done
+mkrec npm zod 3.23.8 24 true
+ask_cmd "a vetted add inside a workspace reaches Mark like a plain add" "yarn workspace web add zod@3.23.8" "npm zod@3.23.8" "vetted 1 day ago"
+ask_cmd "a vetted add inside foreach reaches Mark like a plain add" "yarn workspaces foreach -A add zod@3.23.8" "npm zod@3.23.8" "vetted 1 day ago"
+
+# R1 + R5 + Evidence rows 2, 3: updates ask, and the form keeps the wrapper but never the workspace name
+for pair in 'up|up everything' 'upgrade|upgrade everything' 'up lodash|up lodash' 'upgrade lodash|upgrade lodash' \
+            'upgrade-interactive|upgrade-interactive everything'; do
+  rest="${pair%%|*}"; form="${pair#*|}"
+  ask_cmd "yarn workspace web $rest asks, naming the wrapper: yarn workspace $form" "yarn workspace web $rest" \
+    "yarn workspace $form: $UPDATE_NOTE" "check what it will change before approving"
+  ask_cmd "yarn workspaces foreach -A $rest asks, naming the wrapper: yarn workspaces foreach $form" "yarn workspaces foreach -A $rest" \
+    "yarn workspaces foreach $form: $UPDATE_NOTE" "check what it will change before approving"
+done
+ask_cmd "Scenario: an update inside foreach asks, naming the wrapper" "yarn workspaces foreach -A up" \
+  "yarn workspaces foreach up everything"
+ask_cmd "the workspace global upgrade form asks like yarn global upgrade" "yarn workspace web global upgrade" "$UPDATE_NOTE"
+run "$(bash_payload "yarn workspace web up")"
+lacks "R5: the workspace name is never part of the form" "$(ask_reason)" "workspace web" "$UPDATE_NOTE"
+before="$(log_count)"
+ask_cmd "an update inside a workspace asks (for the log check below)" "yarn workspace web up lodash" "yarn workspace up lodash: $UPDATE_NOTE"
+[ $(( $(log_count) - before )) -eq 1 ] && say_ok "a workspace update ask appends exactly one log line" || say_bad "a workspace update ask appends exactly one log line" "gained $(( $(log_count) - before ))"
+case "$(tail -n 1 "$STATE/dependency-guard.log")" in
+  *"${TAB}ask${TAB}npm${TAB}lodash${TAB}-${TAB}"*"yarn workspace up lodash: $UPDATE_NOTE"*) say_ok "R5: the workspace log line carries the wrapper form and no workspace name" ;;
+  *) say_bad "R5: the workspace log line carries the wrapper form and no workspace name" "$(tail -n 1 "$STATE/dependency-guard.log")" ;; esac
+
+# R2: foreach options. Value-taking ones (--from, --include, --exclude, -j/--jobs) consume the next word;
+# every other dash word is a flag on its own. The first word left starts <rest>.
+for o in '' '-A' '--all' '-R' '-W' '-v' '-p' '-i' '-t' '-pt' '-Apt' '--parallel' '--topological' '--topological-dev' \
+         '--verbose' '--no-private' '--recursive' '--worktree' '--interlaced' '--jobs=2' '--include=web' '--exclude=api' '--from=web' \
+         '--include web' '--exclude api' '--from web' '-j 2' '--jobs 2' '--include up' '--exclude dlx' '--from add' \
+         '-A --include web --exclude api -j 4 -pt'; do
+  deny_cmd "foreach option(s) skipped, add still denied: foreach ${o:-<none>} add lodash" "yarn workspaces foreach${o:+ $o} add lodash" \
+    "npm lodash has no exact version" "lodash@<exact-version>"
+done
+deny_cmd "foreach dlx still denied behind a value-taking option" "yarn workspaces foreach --include web dlx x" "npm x has no exact version" "x@<exact-version>"
+ask_cmd "foreach -j 2 up asks, naming the wrapper" "yarn workspaces foreach -j 2 up" "yarn workspaces foreach up everything" "$UPDATE_NOTE"
+ask_cmd "foreach --include web up asks, naming the wrapper" "yarn workspaces foreach --include web up lodash" "yarn workspaces foreach up lodash" "$UPDATE_NOTE"
+# Scenarios 4-7 (R3): --since never takes the next word
+deny_cmd "Scenario: a value-taking foreach option is skipped (--include web add lodash)" "yarn workspaces foreach --include web add lodash" \
+  "npm lodash has no exact version" "lodash@<exact-version>"
+deny_cmd "Scenario: a bare --since is a flag on its own" "yarn workspaces foreach --since add lodash" \
+  "npm lodash has no exact version" "lodash@<exact-version>"
+ask_cmd "Scenario: --since=ref is one word, so up asks" "yarn workspaces foreach --since=main up" "yarn workspaces foreach up everything" "$UPDATE_NOTE"
+allow_cmd "Scenario: the word after a bare --since is the command, so it runs a script named main (up)" "yarn workspaces foreach --since main up"
+allow_cmd "R3: the word after a bare --since is the command (add lodash is script main's arguments)" "yarn workspaces foreach --since main add lodash"
+
+# R7: a value-taking option that swallows the last word leaves nothing after the wrapper
+for c in 'yarn workspace web' 'yarn workspaces foreach' 'yarn workspaces foreach -A' 'yarn workspaces foreach -A --include up' \
+         'yarn workspaces foreach --include web' 'yarn workspaces foreach -j 2' 'yarn workspaces foreach --since main'; do
+  allow_cmd "R7: a wrapper with nothing after it stays allowed: $c" "$c"
+done
+
+# R4 + Evidence row 7 + Scenario 8: yarn 1's workspaces run is a script run, not a wrapper
+for c in 'yarn workspaces run add lodash' 'yarn workspaces run upgrade' 'yarn workspaces run dlx x' 'yarn workspaces run build'; do
+  allow_cmd "R4: workspaces run is a script run and stays allowed: $c" "$c"
+done
+
+# R6 + Evidence row 6 + Scenario 9: not an install, update or runner form inside the wrapper -> stays allowed
+for c in 'yarn workspace web remove lodash' 'yarn workspace web run build' 'yarn workspace web run add lodash' 'yarn workspace web build' \
+         'yarn workspaces foreach run build' 'yarn workspaces foreach -A run build' 'yarn workspaces foreach -A run add lodash' \
+         'yarn workspaces foreach -A remove lodash' 'yarn workspaces info' 'yarn workspaces list'; do
+  allow_cmd "R6: stays allowed: $c" "$c"
+done
+
+# Evidence row 3: other spellings of the program, and a wrapper inside a chain or behind an assignment
+for pre in 'yarnpkg' 'corepack yarn' 'VAR=1 yarn' 'cd x && yarn' 'env FOO=1 yarn' 'node_modules/.bin/yarnpkg'; do
+  deny_cmd "Scenario: other spellings are covered: $pre workspace web add lodash" "$pre workspace web add lodash" \
+    "npm lodash has no exact version" "lodash@<exact-version>"
+  deny_cmd "Scenario: other spellings are covered: $pre workspaces foreach -A add lodash" "$pre workspaces foreach -A add lodash" \
+    "npm lodash has no exact version" "lodash@<exact-version>"
+  ask_cmd "other spellings are covered: $pre workspace web up" "$pre workspace web up" "workspace up everything: $UPDATE_NOTE"
+done
+for pre in 'yarnpkg' 'corepack yarn' 'VAR=1 yarn' 'cd x && yarn'; do
+  allow_cmd "other spellings stay allowed for a script run: $pre workspaces run add lodash" "$pre workspaces run add lodash"
+  allow_cmd "other spellings stay allowed for a remove: $pre workspace web remove lodash" "$pre workspace web remove lodash"
+done
+# Evidence row 8: --cwd was already handled
+deny_cmd "control: yarn --cwd web add lodash is already denied" "yarn --cwd web add lodash" "npm lodash has no exact version" "lodash@<exact-version>"
 
 # ---- log forging
 new_state
