@@ -1064,10 +1064,12 @@ Scenario: an update beside a pinned install still reaches the strongest decision
   `bundle` (not a recognised tool at all), `uv export -U` and `uv tree -U` (both re-lock),
   `find … -exec npm i` and GNU `parallel npm i ::: …` (neither is `xargs`).
   Extending the table is a deliberate edit, not drift.
-- yarn's workspace forms — `yarn workspace <name> add|up …` and `yarn workspaces foreach … add|up
-  …` — install or update with no output (measured by the implementation-stage observability judge
-  round 2, 2026-10-15; already silent before the update ask). pnpm's, npm's and bun's workspace
-  forms are caught.
+- `yarn exec <cmd>` — including `yarn workspace <name> exec …` and `yarn workspaces foreach … exec
+  …` — is allowed with no output, so `yarn exec npm i x` installs unvetted; and a yarn workspace
+  wrapper nested in another (`yarn workspace web workspaces foreach -A add x`) is unwrapped only
+  once. Both measured ALLOW on `d19d46b` and on `03cac59` (2026-10-22, by the
+  `dependency-guard-yarn-workspaces` observability judge, then re-run against an archived hook with
+  a deny control) — pre-existing, not introduced by that fix.
 - An install inside a script file, a Makefile target, or a `package.json` `scripts` entry.
 - `bash -c "…"`, `sh -c`, `eval "…"` (quoted), backticks — including under `xargs` (`xargs sh -c
   'npm i {}'`) — the lexer keeps the body as one token
@@ -1326,6 +1328,9 @@ Scenario: an update beside a pinned install still reaches the strongest decision
       reconcile it; never stash, overwrite or commit it on his behalf.
 
 ## Verification
+
+- yarn workspace forms: fixed on `fix/dependency-guard-yarn-workspaces` — see
+  `docs/features/dependency-guard-yarn-workspaces.md`.
 
 **Task 11, after merge (2026-10-15).** #109 merged as `281a1c5`; `git merge-base --is-ancestor
 102b3b0 origin/main` → 0.

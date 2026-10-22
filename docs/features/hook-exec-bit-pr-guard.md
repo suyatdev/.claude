@@ -362,7 +362,7 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
   2026-10-18: judge r1 at `ac266d0` risk low (one false claim, fixed in `5d5b402`); r2 at
   `5d5b402` risk low, confidence high. Draft PR #114 opened at `5d5b402`; the README Roadmap line
   rides in the verdict commit, unjudged (docs only).
-- [ ] 7. After merge and Mark's pull: confirm the main checkout's hook blob and mode equal the
+- [x] 7. After merge and Mark's pull: confirm the main checkout's hook blob and mode equal the
   merge commit's. Then, with Mark's OK, one live check in a throwaway local worktree whose HEAD
   stores a registered script as `100644`, through the Bash tool:
   `JUDGE_EXEMPT=live-check gh pr create --help`. `JUDGE_EXEMPT` takes `judge-guard.sh` out of the
@@ -370,6 +370,16 @@ asserts the hook file is executable on disk, `100755` in git, and runs with no `
   observability judge quotes gh's manual as saying it "may still push git changes"; not
   re-read here, because reading `gh pr create --help` is itself refused by `judge-guard.sh`). Pass = refused **and** the refusal text names
   `hook-exec-pr-guard`. Remove that worktree and its branch after.
+  2026-10-19: #114 merged as `eb8c71c`; Mark pulled `~/.claude` (main `10dfb5f`). Its
+  `hooks/hook-exec-pr-guard.sh` is blob `c2d8fef`, `100755` on disk and in `eb8c71c`; the module and
+  `settings.json` blobs equal `eb8c71c`'s too, and `settings.json:53` registers the guard. Live check,
+  from an inline Sonnet sub-session rooted in a throwaway worktree (common dir `~/.claude/.git`),
+  after a commit (`6675fe2`) storing `hooks/git-guard.sh` as `100644`: **refused**, text
+  `hook-exec-pr-guard: FAIL hooks/git-guard.sh is registered on PreToolUse but stored as mode 100644
+  in commit HEAD, needs 100755`, then the `fix` line and the bypass line. Pass. Worktree and branch
+  removed. Not run: the direct-stdin cross-check (its payload file was refused by `phase-guard.sh`;
+  the live refusal already settles it). The throwaway commit needed `TEST_EXEMPT=live-check`
+  (`test-marker-guard`: no marker in a fresh worktree).
 
 ## Verification
 
@@ -385,6 +395,9 @@ Run 2026-10-18 at `4abd45b`, in this worktree:
   has a space).
 - **Open:** the guard has never run as a registered hook. That is Task 7, after merge and pull.
   The bash version and the main checkout's common-dir were not re-measured (Task 0).
+- **Closed 2026-10-19 (Task 7):** the guard ran as a registered hook from a throwaway worktree and
+  refused `gh pr create` on a `100644` registered script, naming `hook-exec-pr-guard`. The bash
+  version is still not re-measured.
 
 ## Gotchas
 

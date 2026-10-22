@@ -69,6 +69,8 @@ NODE_UPDATE_WORDS = {
     "bun": frozenset(["update", "upgrade"]),
 }
 YARN_PROGRAMS = frozenset(["yarn", "yarnpkg"])
+# yarn 4 `workspaces foreach` options that take the NEXT word (--opt=value is one word); --since takes none
+FOREACH_VALUE_FLAGS = frozenset(["--from", "--include", "--exclude", "-j", "--jobs"])
 PNPM_PROGRAMS = frozenset(["pnpm", "pn"])
 UV_UPGRADE_FLAGS = frozenset(["-U", "--upgrade"])
 UV_UPGRADE_PACKAGE_FLAGS = frozenset(["-P", "--upgrade-package"])
@@ -349,13 +351,34 @@ def _runner_intents(prog, runner, args, ecosystem):
     return found
 
 
+def _yarn_workspace_inner(sub, rest):
+    """-> (wrapper_words, sub, rest) for the command inside a yarn workspace wrapper. `yarn workspace
+    <name> <rest>` and `yarn workspaces foreach [options] <rest>` run `yarn <rest>`. yarn 1 `workspaces
+    run` is a script run and `workspaces info|list` only read, so they carry no inner command (sub None)."""
+    if sub == "workspace":
+        _name, rest = _subcommand(rest, NODE_VALUE_FLAGS)
+        inner, rest = _subcommand(rest, NODE_VALUE_FLAGS)
+        return ["workspace"], inner, rest
+    verb, rest = _subcommand(rest, NODE_VALUE_FLAGS)
+    if verb != "foreach":
+        return [], None, []
+    i = 0
+    while i < len(rest) and rest[i].startswith("-") and len(rest[i]) > 1:
+        i += 2 if rest[i] in FOREACH_VALUE_FLAGS else 1
+    inner, rest = _subcommand(rest[i:], NODE_VALUE_FLAGS)
+    return ["workspaces", "foreach"], inner, rest
+
+
 def _node_manager(prog, args):
     install_words, run_words = NODE_MANAGERS[prog]
     sub, rest = _subcommand(args, NODE_VALUE_FLAGS)
-    words = [sub]
+    wrapper = []
+    if sub in ("workspace", "workspaces") and prog in YARN_PROGRAMS:
+        wrapper, sub, rest = _yarn_workspace_inner(sub, rest)
+    words = wrapper + [sub]
     if sub == "global" and prog in YARN_PROGRAMS:  # `yarn global add` is `add`, `yarn global upgrade` an update
         sub, rest = _subcommand(rest, NODE_VALUE_FLAGS)
-        words = ["global", sub]
+        words = wrapper + ["global", sub]
     if sub in run_words:
         return _runner_intents(prog, _runner_name(prog, sub), rest, ECO_NPM)
     if sub in NODE_UPDATE_WORDS[prog]:
