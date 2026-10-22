@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: fix/dependency-guard-yarn-workspaces
 ---
@@ -207,3 +207,9 @@ two bare wrappers, `foreach --since main up` and `yarn main up` (R3, R4, R6, R7)
 this card was added under its Verification.
 
 Not verified here: the live hook in `~/.claude` — it changes only after the merge is pulled.
+
+**After merge (2026-10-22).** PR #116 merged as `a1a7cc8`; `git merge-base --is-ancestor 378afa8
+origin/main` → 0. The primary checkout was pulled (`--no-rebase`, Mark's approval) and the live
+`~/.claude/hooks/dependency-guard.sh` probed: `yarn workspace web add lodash` → deny,
+`yarn workspace web dlx x` → deny, `yarn workspace web up` → ask ("yarn workspace up everything"),
+`yarn workspaces run add lodash` → allow; control `yarn add lodash` → deny.
