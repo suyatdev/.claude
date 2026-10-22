@@ -1,7 +1,7 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
-branch: fix/trim-safety-followups
+branch: none  # merged via PR #113 (513fa28) 2026-10-20
 worktree: ~/.worktrees/.claude/trim-safety-followups
 ---
 
