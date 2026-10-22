@@ -171,3 +171,39 @@ Scenario: other spellings are covered
 - Point any state or log variable the test suite uses at a scratch directory, never the real
   `hooks/state/`.
 - The hook runs from the primary checkout; a merge is live only after `~/.claude` pulls it.
+
+## Verification
+
+All probes below fed PreToolUse payloads (with `hook_event_name`) to this worktree's
+`hooks/dependency-guard.sh`, state pointed at a `mktemp -d` directory. Harness controls on the
+base: `npm install left-pad` → deny (rc 2), `npm update` → ask, `ls` → allow.
+
+**Task 0 — re-measure on the base `4442e53` (2026-10-22).** No commit. Every Evidence-table row
+reproduced as recorded (56 commands, re-run twice: by the worker and independently by the main
+session). Source read as tarballs in a `mktemp -d`, never installed or run:
+- `@yarnpkg/cli-dist@4.18.1`, `package/bin/yarn.js` line 768 (`workspaces foreach` class): the
+  options taking the next word are exactly `--from`, `--include`, `--exclude`, `-j/--jobs`; `--since`
+  is a `String` with `tolerateBoolean`, built at line 132 with arity 0, so it never takes the next
+  word; line 96's batch handling makes combined short flags (`-pt`) standalone. R2 and R3 hold.
+- `yarn@1.22.22`, `lib/cli.js:88349` (`workspace` runs `yarn <rest>` in the workspace dir) and
+  `:88569` (`workspaces run` runs `yarn run <args>`); `:88629-88640` register only `info` and `run`
+  under `workspaces`. R1 and R4 hold.
+
+**Task 1 — red suite `c085ab8`.** `hooks/dependency-guard.test.sh`: before `313 passed, 0 failed`;
+after `342 passed, 91 failed`. The only pre-existing assertions gone are the three replaced pins;
+none of the 91 failures is pre-existing. Committed with `TEST_EXEMPT`, since a red suite never
+writes a marker.
+
+**Task 2 — fix `2c1e1c8`.** `_yarn_workspace_inner` and `FOREACH_VALUE_FLAGS` in
+`hooks/lib/classify-install-command.py` (now 679 lines). `dependency-guard: 433 passed, 0 failed`;
+`classify-install-command unit: 1137 passed, 0 failed` (both re-run by the main session).
+The same 56 commands after the fix: 25 deny, 17 ask, 14 allow. Every `yarn workspace <name> …` and
+`yarn workspaces foreach … ` install, update, dlx and `global add` form matches its plain-yarn
+decision; the allows are `workspaces run …`, `run …`, `remove`, `run build`, `workspaces info`, the
+two bare wrappers, `foreach --since main up` and `yarn main up` (R3, R4, R6, R7).
+
+**Task 3 — parent card `55dd2d3`.** The yarn workspace Known-gaps row was removed from
+`docs/features/dependency-vetting-guard.md` (Mark approved the cut, 2026-10-22) and a pointer to
+this card was added under its Verification.
+
+Not verified here: the live hook in `~/.claude` — it changes only after the merge is pulled.
