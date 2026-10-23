@@ -59,24 +59,36 @@ rc 2 as deny and `"ask"` on stdout as ask.
 
 ## What the tools actually do — read 2026-10-23 (re-read in Task 0)
 
-Read from tarballs/source in a `mktemp -d` directory, never installed or run.
+Read from tarballs/source in a `mktemp -d` directory, never installed or run. Everything below is
+settled for this card; Task 0 only re-checks it (see Task 0 for what a difference means).
 
 - **yarn 1.22.22** (`yarn@1.22.22`, `lib/cli.js:84251-84262`): `exec` takes the first argument as
   a program and the rest as its arguments, `spawn(execName, rest)` — no shell. No options of its own.
+  **`--`:** yarn splits its whole argv at the first `--` (`lib/cli.js:89283-89288`) and re-appends
+  what follows *without* the `--` (`:88866`, `endArgs.slice(1)`), so `yarn exec -- npm i x` runs
+  `npm i x`.
 - **yarn 4.18.1** (`@yarnpkg/cli-dist@4.18.1`, `bin/yarn.js`, class with `paths=[["exec"]]`):
   `commandName = String`, `args = Proxy` — no options of its own. `execute()` calls
   `executePackageShellcode(locator, commandName, args)`, which runs `commandName` as **shell code**
   through yarn's portable shell (`pC`): it parses the string, and unless the script refers to its
   own positional arguments, appends `args` to the **last** command of the parsed script. Its own
   help gives `yarn exec "tsc & babel src --out-dir lib"` as an example. So `yarn exec npm i x` runs
-  `npm i x`, and so does `yarn exec "npm i x"`.
-- **pnpm 12.15.0** (a Rust binary; read from `pnpm/pnpm` @ `v12.15.0`,
-  `pnpm/crates/cli/src/cli_args/exec.rs:29-39`): `command` is a trailing list (the first word is the
-  program, hyphen words after it are its own), plus one option, `-c`/`--shell-mode` (boolean), which
-  runs the command through `/bin/sh`. `RecursiveExecutionArgs`
-  (`cli_args/recursive/execution_args.rs`) are all `#[clap(skip)]`, not command-line options of
-  `exec`. Not yet read: how shell mode joins the words, and whether a global option (`--filter`,
-  `-r`) is accepted *after* `exec` — Task 0.
+  `npm i x`, and so does `yarn exec "npm i x"`. **`--`:** clipanion's `registerOptions` maps a `--`
+  token to `inhibateOptions` (consumed, not kept as a positional) on the nodes before
+  `commandName`, so `yarn exec -- npm i x` also runs `npm i x`. (Read in minified source, not run.)
+- **pnpm 12.15.0** (a Rust binary; read from `pnpm/pnpm` @ `v12.15.0`):
+  - `pnpm/crates/cli/src/cli_args/exec.rs:29-39`: `command` is a trailing list
+    (`trailing_var_arg`, `allow_hyphen_values`: the first word is the program, hyphen words after
+    it are its own), plus `-c`/`--shell-mode` (boolean). `RecursiveExecutionArgs` are all
+    `#[clap(skip)]`.
+  - `exec.rs:135-147`: a leading `--` left in `command` is removed.
+  - `exec.rs:209-221`: shell mode runs `command.join(" ")` — the words joined with single spaces,
+    no escaping — through `/bin/sh`.
+  - `cli_args/cli_command.rs:109-300`: about twenty top-level options are `global = true`, so clap
+    accepts them after `exec` too, before the command word. Several take a value (`-C`/`--dir`,
+    `-F`/`--filter`, `--filter-prod`, `--store-dir`, `--state-dir`, `--registry`, `--reporter`,
+    `--loglevel`, …) and more sit in flattened groups not listed here. The card therefore does not
+    rely on a list of them (R3).
 
 ## Scope
 
@@ -90,39 +102,56 @@ never fetch); npm runners (`npm exec`, `npx`), which are already handled.
 "Yarn programs" are `yarn`, `yarnpkg`, and `corepack yarn`; "pnpm programs" are `pnpm`, `pn`,
 and `corepack pnpm` — as the classifier already recognises them.
 
-R1. **`yarn exec` runs what follows.** For a yarn program, `exec <cmd> <args…>` gets the same
-decision (allow / ask / deny) and the same reason text as the command line `<cmd> <args…>` typed
-on its own. `yarn exec` takes no options, so `<cmd>` is the first word after `exec`, even if it
-starts with `-`.
+R1. **`exec` runs what follows.** For a yarn or pnpm program, `exec [options] [--] <cmd> <args…>`
+gets the same decision (allow / ask / deny) and the same reason text as the command line
+`<cmd> <args…>` typed on its own. What counts as `[options]` and `<cmd>` is R3; how `<cmd>` is read
+is R2.
 
 R2. **The command word is read as shell code.** `<cmd>` is lexed with the existing
 `shell_segments.segments()`, and `<args…>` are appended to the argv of the **last** segment that
 lexing produces; then every segment is classified as an ordinary command. This copies yarn 4
 (see above). For a plain word like `npm` it gives exactly `npm <args…>`. For a string like
-`'npm i x'` or `'cd web && npm i x'` it finds the install. In yarn 1 such a string would fail to
-run, so reading it as an install only ever adds an ask/deny to a command that errors anyway.
-- If `<cmd>` cannot be lexed (`segments(cmd) == []` with non-blank `cmd`): when it names an install
-  tool (`mentions_install_tool`), return one indirect intent for the yarn program — the same ask the
-  `xargs` rule gives; otherwise nothing.
+`'npm i x'` or `'cd web && npm i x'` it finds the install. In yarn 1 and in pnpm without `-c` such
+a string would fail to run, so reading it as an install only ever adds an ask/deny to a command
+that errors anyway.
+- **pnpm `-c`:** when `-c`/`--shell-mode` is among the options, `<cmd> <args…>` are instead joined
+  with single spaces (as pnpm does, `exec.rs:220`) and that one string is lexed; every segment is
+  classified.
+- **A string the lexer cannot read** — the lexed text (`<cmd>`, or the `-c` joined string) is
+  non-blank and `segments()` returns `[]`: when `<cmd> <args…>` names an install tool
+  (`mentions_install_tool`), the result is the guard's existing **cannot-read ask** — the same text
+  (`CANNOT_READ_TEXT`, `decide-dependency.py:43-44`) and the same log word (`cannot-read`) a
+  top-level unreadable command gets (`decide-dependency.py:319-321`); otherwise nothing. This needs a
+  new intent source in the classifier and one branch in `decide_intent` (R8). The `xargs` message is
+  not reused: it names `xargs`.
 - A script that refers to its own positional arguments (`$@`, `$1`) is not special-cased: the
   arguments are still appended. Disclosed in Known gaps; it can only add an ask/deny.
+- **`VET_EXEMPT`:** a prefix assignment on the outer segment (`VET_EXEMPT=r yarn exec npm i x`)
+  applies to the intents found inside it, as it does for the workspace wrappers today. An
+  assignment *inside* the exec'd string (`yarn exec 'VET_EXEMPT=r npm i x'`) is not read — the
+  intents get no exemption, so the guard denies. Fail-safe, and pinned by a test.
 
-R3. **`pnpm exec` the same way.** For a pnpm program, `exec [options] <cmd> <args…>`:
-- Options before `<cmd>`: `-c`/`--shell-mode` stand alone; a flag in `NODE_VALUE_FLAGS` takes the
-  next word; any other word starting with `-` stands alone. The first word left is `<cmd>`.
-  (Task 0 confirms or corrects this against pnpm 12.15.0's global options.)
-- Without `-c`: as R1/R2 (lex `<cmd>`, append `<args…>`). pnpm spawns without a shell, so the
-  lexing only matters for a quoted string, which would fail to run — same argument as R2.
-- With `-c`: `<cmd> <args…>` joined with single spaces, lexed as one shell string, every segment
-  classified (Task 0 confirms that pnpm joins them this way).
-- `pnpm -r exec …`, `pnpm --filter web exec …`: global options before `exec` are already skipped by
+R3. **Finding `<cmd>`: options, `--`, and unknown option widths.** After `exec`:
+- One `--` directly before `<cmd>` is dropped — yarn 1, yarn 4 and pnpm all drop it (see above).
+- Words starting with `-` (other than `--`) before `<cmd>` are options. yarn's `exec` has none of
+  its own, and pnpm accepts its own `-c` plus some twenty global options there, several taking a
+  value; the card does not keep a list of them. Instead, a word that starts with `-`, has no `=`,
+  and is followed by a word not starting with `-` is read **both ways**: as standing alone (the
+  next word is `<cmd>`), and as taking that next word as its value (the search continues after
+  it). Every reading's intents are combined, and identical intents are kept once. Over-reading can
+  only add an ask/deny; it can never hide one, which a wrong guess at an option's width could.
+  Example: `pnpm exec --filter web npm i x` is read as `web npm i x` (nothing) and as `npm i x`
+  (deny), so it is denied.
+- `-c`/`--shell-mode` switches on R2's pnpm `-c` rule; for a yarn program it is just an option.
+- `pnpm -r exec …`, `pnpm --filter web exec …`: options before `exec` are already skipped by
   `_subcommand`; R3 applies to what follows.
 
-R4. **Wrappers are unwrapped until none is left.** After a yarn `workspace <name>`,
-`workspaces foreach [opts]` or `exec` is removed, if what remains starts with another one, it is
-removed too, in any order and any number of times. Each step consumes at least one word, so this
-ends. `yarn workspace a workspace b add x` → like `yarn add x`;
-`yarn workspace web exec npm i x` → like `npm i x`.
+R4. **Workspace wrappers are unwrapped until none is left, and `exec` ends the chain.** After a yarn
+`workspace <name>` or `workspaces foreach [opts]` is removed, if what remains starts with another
+one, it is removed too, in any order and any number of times; each step consumes at least one
+word, so this ends. If what remains starts with `exec`, R1–R3 apply to what follows it, and what
+follows is a fresh command, not more yarn arguments. `yarn workspace a workspace b add x` → like
+`yarn add x`; `yarn workspace web exec npm i x` → like `npm i x`.
 
 R5. **Reason text.** Workspace wrappers keep the parent card's convention: the update-form words
 in the log and the ask keep each wrapper in order, never the workspace name
@@ -138,11 +167,16 @@ after it (`yarn exec`, `pnpm exec -c`), and every R6/R7 case of the yarn-workspa
 R7. **Pins and Known gaps.** Any existing ALLOW assertion that pins one of the Evidence-table
 holes is replaced by its deny/ask assertion (Task 1 lists them; none is known today). In the
 parent card, the `yarn exec`/nested-wrapper Known-gaps row is removed, `bun exec '<string>'` is
-added to the `bash -c` row, and the `$@` over-read (R2) gets one line; one line under its
-Verification points to this card.
+added to the `bash -c` row, and the `$@` over-read (R2) and the both-ways option reading (R3) get
+one line each; one line under its Verification points to this card. Each new or changed Known-gaps
+line is pinned by an assertion, as the parent card's other gaps are: `bun exec 'npm i x'` stays
+allowed silently; `yarn exec 'npm i "$@"' x` is denied (yarn 4 would substitute rather than
+append; either way `x` is installed).
 
-R8. `hooks/lib/classify-install-command.py` (679 lines today) stays under the 800-line cap, and
-the change is one small helper plus edits to `_node_manager`, not a new module.
+R8. **Size and shape.** `hooks/lib/classify-install-command.py` (679 lines today) stays under the
+800-line cap; the classifier change is one small helper plus edits to `_node_manager`, not a new
+module. `hooks/lib/decide-dependency.py` gets only the R2 cannot-read branch in `decide_intent` (a
+few lines, reusing `CANNOT_READ_TEXT` and `LOG_CANNOT_READ`); no other decider change.
 
 ## Scenarios
 
@@ -164,9 +198,36 @@ Scenario: arguments are appended to the last command of the string
   When Claude runs "yarn exec 'cd web && npm' i x"
   Then the guard denies like "npm i x"
 
-Scenario: an unreadable exec string that names an install tool asks
-  When Claude runs a yarn exec whose command word has an unbalanced quote and contains "npm"
-  Then the guard asks
+Scenario: an unreadable exec string that names an install tool gets the cannot-read ask
+  When Claude runs "yarn exec \"npm i 'x\"" (the command word has an unbalanced quote)
+  Then the guard asks with the same text as a top-level command it cannot read
+  And the log line's decision word is "cannot-read"
+
+Scenario: an unreadable pnpm shell-mode string gets the cannot-read ask
+  When Claude runs "pnpm exec -c \"npm i 'x\""
+  Then the guard asks with the same text as a top-level command it cannot read
+
+Scenario: an unreadable exec string with no install tool is allowed
+  When Claude runs "yarn exec \"echo 'hi\""
+  Then the guard allows it silently
+
+Scenario: a -- before the command is dropped
+  When Claude runs "yarn exec -- npm i x" or "pnpm exec -- npm i x"
+  Then the guard denies like "npm i x"
+
+Scenario: a pnpm global option after exec, with or without a value
+  When Claude runs "pnpm exec --filter web npm i x" or "pnpm exec -r npm i x" or "pnpm exec --dir=web npm i x"
+  Then the guard denies like "npm i x"
+
+Scenario: an exemption on the outer command covers the exec'd install
+  Given x@1.0.0 has no vetting report
+  When Claude runs "VET_EXEMPT=reason yarn exec npm i x@1.0.0"
+  Then the guard asks like "VET_EXEMPT=reason npm i x@1.0.0"
+
+Scenario: an exemption inside the exec'd string is not read
+  Given x@1.0.0 has no vetting report
+  When Claude runs "yarn exec 'VET_EXEMPT=reason npm i x@1.0.0'"
+  Then the guard denies like "npm i x@1.0.0"
 
 Scenario: exec of a harmless command is still allowed
   When Claude runs "yarn exec tsc" or "pnpm exec eslint ."
@@ -203,16 +264,27 @@ Scenario: an exec with nothing after it is allowed
 
 ## Tasks
 
-- [ ] 0. Re-measure on the branch base: re-run every Evidence-table probe. Re-read the three
-  sources above at the pinned versions and record file:line for each. Settle the two open pnpm
-  questions (shell-mode joining; global options after `exec`) from `pnpm/pnpm` @ `v12.15.0` and
-  correct R3 if they differ. A different result is a finding, not an error. Source is read only as
-  a tarball or via `gh api` into a `mktemp -d` directory, never installed or run.
+- [ ] 0. Re-measure on the branch base: re-run every Evidence-table probe and re-check each
+  file:line under "What the tools actually do" at the pinned versions. Nothing in the spec is
+  edited here: if any result differs, stop and announce "GATE: Spec change needed" (the phase gate
+  forbids spec edits during implementation). Source is read only as a tarball or via `gh api` into
+  a `mktemp -d` directory, never installed or run.
 - [ ] 1. Tests first, in `hooks/dependency-guard.test.sh` (hook level) and the classifier's own
-  suite: one assertion per Evidence-table row and per scenario, using the existing
-  `deny_cmd`/`ask_cmd`/`allow_cmd` helpers, and replace any pin found under R7. Run: the new
-  assertions fail, nothing else does. Commit the red suite on its own (`TEST_EXEMPT`, since a red
-  suite writes no marker).
+  suite: one assertion per Evidence-table row, per scenario, and per R7 pin, and replace any pin
+  found under R7. Every "like `<plain command>`" row uses the existing `same_result`
+  (`hooks/dependency-guard.test.sh:444`), which compares exit code, stdout and stderr with the plain
+  command and refuses a silently-allowed control; the cannot-read rows compare with a top-level
+  unreadable command and check the log word; allow rows use `allow_cmd`. Before committing, list
+  the new assertions in two groups and run the suite:
+  - **must fail before the fix:** every Evidence-table row marked "allow, silent" except
+    `bun exec`, and every deny/ask scenario that goes through `exec` or a nested wrapper;
+  - **already pass, pinning behaviour the fix must keep:** the allow rows (`yarn exec echo hi`,
+    `yarn exec tsc`, `pnpm exec eslint .`, `yarn exec`, `pnpm exec -c`, the unreadable string with
+    no install tool), the already-handled rows (`yarn workspace web add x`, `npm exec -- npm i x`),
+    and the `bun exec` Known-gaps pin.
+
+  Pass condition: exactly the first group fails, and nothing else does. Commit the red suite on
+  its own (`TEST_EXEMPT`, since a red suite writes no marker).
 - [ ] 2. Classifier change (R1–R6, R8). Re-run both suites: green; the pre-existing assertion count
   is unchanged apart from replaced pins. Re-run the Evidence-table probes.
 - [ ] 3. Parent card Known-gaps edits and the pointer line (R7).
