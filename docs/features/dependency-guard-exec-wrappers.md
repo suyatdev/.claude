@@ -517,4 +517,17 @@ Scenario: an exec with nothing after it is allowed
 
 ## Verification
 
-(empty until implementation)
+Task 0 (2026-10-24, on `50060ec`; `hooks/` unchanged since `a1a7cc8` and identical to
+`origin/main`):
+
+- Evidence probes: the controls (`npm install left-pad` deny, `npm update` ask, `ls` allow) and all
+  72 commands of the three Evidence tables plus the Task 1 pins re-measured with the same harness:
+  75 of 75 match, 0 differ.
+- Source re-read at the pinned versions (yarn 1.22.22, `@yarnpkg/cli-dist` 4.18.1, pnpm
+  `v12.15.0`) and the local file:line refs: all hold except one wording point, recorded here
+  at Mark's choice instead of a spec edit (it changes no behaviour). "What the tools actually do"
+  says `RecursiveExecutionArgs` are "all `#[clap(skip)]`". The struct is defined in
+  `cli_args/recursive/execution_args.rs`, flattened into exec at `exec.rs:37-38`. Three fields
+  are `#[clap(skip)]` (lines 6, 11, 17) and three are `#[clap(skip = true)]` (`sort`, `reverse`,
+  `parallel`, lines 20, 23, 26). None of the six is a command-line option, so the card's
+  conclusion holds.
