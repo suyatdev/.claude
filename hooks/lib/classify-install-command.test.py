@@ -996,6 +996,83 @@ add_cases("pinned from a null version", [
 ])
 
 # ---------------------------------------------------------------------------------------------
+# yarn exec, pnpm exec, nested yarn wrappers, pnpm option widths (docs/features/dependency-guard-exec-wrappers.md)
+# ---------------------------------------------------------------------------------------------
+# `exec` runs what follows: the intents are those of the inner command typed alone (R1, R2, R4).
+add_cases("exec wrappers", [
+    ("yarn exec npm i x", [npm("x", None, False)], "R1: yarn exec runs npm i x"),
+    ("yarn exec yarn add x", [npm("x", None, False, tool="yarn")], "R1: yarn exec runs yarn add x"),
+    ("yarn exec npx cowsay", [npm("cowsay", None, False, "npx", "npx")], "R1: yarn exec runs npx cowsay"),
+    ("yarn exec 'npm i x'", [npm("x", None, False)], "R2: the command word is shell code"),
+    ("yarn exec 'cd web && npm i x'", [npm("x", None, False)], "R2: the string is lexed, every segment classified"),
+    ("yarn exec 'cd web && npm' i x", [npm("x", None, False)], "R2: args go to the last segment of the string"),
+    ("yarn exec -- npm i x", [npm("x", None, False)], "R3: one -- before the command is dropped"),
+    ("pnpm exec npm i x", [npm("x", None, False)], "R1: pnpm exec runs npm i x"),
+    ("pnpm exec -c 'npm i x'", [npm("x", None, False)], "R2: pnpm -c joins the words and lexes the string"),
+    ("pnpm exec --filter web npm i x", [npm("x", None, False)], "R3: an unknown option is read both ways"),
+    ("pnpm --reporter silent exec npm i x", [npm("x", None, False)], "R9: an unknown value option before exec"),
+    ("yarn workspace web exec npm i x", [npm("x", None, False)], "R4: exec behind a workspace wrapper"),
+    ("yarn workspaces foreach -A exec npm i x", [npm("x", None, False)], "R4: exec behind foreach"),
+    ("yarn workspace a workspace b add x", [npm("x", None, False, tool="yarn")], "R4: a workspace inside a workspace"),
+    ("yarn workspace web workspaces foreach -A add x", [npm("x", None, False, tool="yarn")], "R4: foreach inside a workspace"),
+    ("yarn workspaces foreach -A workspace b add x", [npm("x", None, False, tool="yarn")], "R4: a workspace inside foreach"),
+    ("VET_EXEMPT=r yarn exec npm i x@1.0.0", exempt([npm("x", "1.0.0", True)], "r"),
+     "R2: an assignment on the outer segment covers the exec'd install"),
+    ("yarn exec 'VET_EXEMPT=r npm i x@1.0.0'", [npm("x", "1.0.0", True)],
+     "R2: an assignment inside the exec'd string is not read"),
+])
+# R9, R10: pnpm's boolean -w/--workspace/--config, unknown option widths, the m/multi/recursive alias.
+add_cases("pnpm widths", [
+    ("pnpm -w add x", [npm("x", None, False, tool="pnpm")], "R9: -w is a boolean"),
+    ("pnpm add -w x", [npm("x", None, False, tool="pnpm")], "R9: -w after add is a boolean"),
+    ("pnpm add --workspace x", [npm("x", None, False, tool="pnpm")], "R9: --workspace is a boolean"),
+    ("pnpm add --config x", [npm("x", None, False, tool="pnpm")], "R9: --config is a boolean"),
+    ("pnpm --reporter silent add x", [npm("x", None, False, tool="pnpm")], "R9: an unknown value option"),
+    ("yarn --mutex file:/tmp/m add x", [npm("x", None, False, tool="yarn")], "R9: an unknown value option, yarn"),
+    ("yarn -w add x", [npm("x", None, False, tool="yarn")], "R9: yarn's -w before the subcommand, both ways"),
+    ("pnpm dlx -w cowsay", [npm("cowsay", None, False, "pnpm", "pnpm dlx")], "R9: pnpm dlx -w is a boolean"),
+    ("pnpm dlx -c cowsay", [npm("cowsay", None, False, "pnpm", "pnpm dlx")], "R9: pnpm dlx -c is a boolean"),
+    ("pnpm m add x", [npm("x", None, False, tool="pnpm")], "R10: m is --recursive"),
+    ("pnpm multi add x", [npm("x", None, False, tool="pnpm")], "R10: multi is --recursive"),
+    ("pnpm recursive add x", [npm("x", None, False, tool="pnpm")], "R10: recursive is --recursive"),
+    ("pnpm m up", [upd("npm", "pnpm", "pnpm", "pnpm up")], "R10: the alias adds no word to the update form"),
+    ("pnpm -r run add x", [npm("x", None, False, tool="pnpm")], "R7: the accepted over-read"),
+    ("pnpm --filter add test", [npm("test", None, False, tool="pnpm")], "R7: the accepted over-read"),
+    ("npm --prefix add test", [npm("test", None, False)], "R7: the accepted over-read"),
+])
+# What today's reading already gives, and what the fix must keep.
+add_cases("exec wrappers kept", [
+    ("pnpm -w web add x", [npm("x", None, False, tool="pnpm")], "R9: today's reading is one of the readings"),
+    ("pn -w web add x", [npm("x", None, False, tool="pn")], "R9: today's reading is one of the readings"),
+    ("pnpm --workspace web add x", [npm("x", None, False, tool="pnpm")], "R9: today's reading is one of the readings"),
+    ("pnpm --config foo add x", [npm("x", None, False, tool="pnpm")], "R9: today's reading is one of the readings"),
+    ("pnpm add -w --filter x", [npm("x", None, False, tool="pnpm")], "R9: today's reading is one of the readings"),
+    ("npm -w web install x", [npm("x", None, False)], "R9: npm's -w takes a value"),
+    ("pnpm -c exec cd web '&&' npm i x", [npm("x", None, False)], "the lexer splits at a quoted &&"),
+])
+none_of("exec wrappers kept", ["yarn exec echo hi", "yarn exec tsc", "pnpm exec eslint .", "yarn exec", "pnpm exec -c",
+                               "pnpm m", "pnpm recursive", "bun exec 'npm i x'", "yarn add -w x", "bun --cwd add x",
+                               "yarn exec \"echo 'hi\""],
+        "R6/R9: installs nothing, or nothing the guard reads")
+
+
+def _cannot_read_intent_ok(command, program):
+    """R2/R3: exactly one intent, the cannot-read one: ecosystem npm, name = the outer program, form add, source
+    "cannot-read". Only the fields the card names are compared (the rest is the decider's contract, not pinned here)."""
+    got = classify(command)
+    want = {"ecosystem": "npm", "name": program, "form": "add", "source": "cannot-read"}
+    ok = len(got) == 1 and all(got[0].get(k) == v for k, v in want.items())
+    return ok, "want one intent with {!r}\n       got  {!r}".format(want, got)
+
+
+_MAX_READINGS_CAP_COMMAND = "yarn exec -y exec " * 7 + "npm i x"  # 2^7 = 128 readings > MAX_READINGS (64)
+for _cmd, _program in [("yarn exec \"npm i 'x\"", "yarn"), ("pnpm exec -c \"npm i 'x\"", "pnpm"),
+                       ("pnpm -c exec npm i \"'x\"", "pnpm"), (_MAX_READINGS_CAP_COMMAND, "yarn")]:
+    add_check("exec cannot-read intent: {!r}".format(_cmd), lambda c=_cmd, p=_program: _cannot_read_intent_ok(c, p))
+add_check("exec reading cap: MAX_READINGS is the named constant 64", lambda: (
+    getattr(_MOD, "MAX_READINGS", None) == 64, "want a module constant MAX_READINGS = 64"))
+
+# ---------------------------------------------------------------------------------------------
 # The cannot-read case, and the INSTALL_TOOL_WORDS helpers the hook shares
 # ---------------------------------------------------------------------------------------------
 UNREADABLE_WITH_TOOL = [
