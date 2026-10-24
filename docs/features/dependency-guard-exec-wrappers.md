@@ -12,6 +12,9 @@ observability judge found both yarn holes. Mark asked for this card on 2026-10-2
 (same day) to include `pnpm exec`, which the planning probe found has the same hole.
 Model routing (Mark, 2026-10-23): plan on Opus max; implement with inline Sonnet-high workers;
 judges on Opus high. Nothing here is built until Mark types `gate confirmed`.
+Stop rule (Mark, 2026-10-24): round 4 is the last judge round. A further finding of the same
+kind (how an option's width is read) is recorded as a Known gap, and the card goes to Mark's
+review instead of a fifth round.
 
 ## Why
 
@@ -69,7 +72,22 @@ harness:
 | `pnpm --workspace-root add x`, `pnpm --filter web add x`, `pnpm -r add x` | deny (correct) | — |
 | `pnpm m`, `pnpm recursive` | allow (correct) | nothing is installed |
 | `npm -w web install x` | deny (correct: npm's `-w` takes a value) | — |
-| `yarn -w add x` | allow, silent | not examined (Known gaps, R7) |
+| `yarn -w add x` | allow, silent | not examined; R9's before-the-subcommand rule denies it either way |
+
+Added 2026-10-24 (round-3 findings), measured on 824ab6c with the same harness:
+
+| Command | Today | Why |
+|---|---|---|
+| `pnpm --reporter silent add x`, `pnpm --store-dir /s add x`, `pnpm --state-dir /s add x` | allow, silent | a value option missing from `NODE_VALUE_FLAGS`; its value is read as the subcommand |
+| `yarn --mutex file:/tmp/m add x` | allow, silent | the same, for yarn |
+| `pnpm --reporter=silent add x`, `pnpm add --store-dir /s x` | deny (correct) | `=` form; an unknown option among the subcommand's words over-reads its value |
+| `pnpm dlx -w cowsay`, `pnpm dlx -c cowsay` | allow, silent | the runner scan reads `-w` and `-c` as taking a value |
+| `pnpm dlx cowsay` | deny (correct) | — |
+| `pnpm -w web add x`, `pn -w web add x`, `pnpm --workspace web add x`, `pnpm --config foo add x`, `pnpm add -w --filter x` | deny | must **stay** denied (R9 keeps today's reading) |
+| `pnpm -w web update`, `pnpm -w foo audit --fix`, `pnpm -r up` | ask | must stay asked |
+| `pnpm m up` | allow, silent | R10: asks like `pnpm -r up` |
+| `pnpm -r run add x`, `pnpm --filter add test` | allow (correct) | R9's accepted over-read makes these ask/deny (Known gaps) |
+| `yarn add -w x` | allow, silent | not examined; stays allowed (Known gaps) |
 
 Note: `pnpm -c exec cd web '&&' npm i x` is already denied today, but only because the shared lexer
 splits at a quoted `&&` (`segments()` gives `[pnpm -c exec cd web]`, `[npm i x]`) — an accident,
@@ -157,9 +175,12 @@ that errors anyway.
   top-level unreadable command gets (`decide-dependency.py:319-321`); otherwise nothing. This needs a
   new intent source in the classifier and one branch in `decide_intent` (R8). The `xargs` message is
   not reused: it names `xargs`.
-  - The new intent carries ecosystem `npm` and the yarn/pnpm program as its name, because
-    `decide_intent` validates the ecosystem before anything else (`decide-dependency.py:275`). The
-    branch sits with the other source branches (`:277-286`), before the unpinned deny (`:287`).
+  - The new intent carries ecosystem `npm`, the yarn/pnpm program as its name, `form: "add"` and
+    a new `source` (`"cannot-read"`), because `decide_intent` validates the ecosystem before
+    anything else (`decide-dependency.py:275`). `form` must be `"add"`: its name (`yarn`/`pnpm`)
+    is in `INSTALL_TOOL_WORDS`, so `form: "run"` would be caught by the runner-installer check at
+    `:277` and denied with the wrong text. The new branch goes after that check, with the
+    `source` branches (`:279-286`), and before the unpinned deny (`:287`).
   - Its log line therefore shows `npm` and the program name in the ecosystem and name fields,
     where a top-level cannot-read line shows `- - -` (`:321`). Only the text and the log *word*
     must match; tests check those two and nothing else about the line.
@@ -173,13 +194,15 @@ that errors anyway.
 R3. **Finding `<cmd>`: options, `--`, and unknown option widths.** After `exec`:
 - One `--` directly before `<cmd>` is dropped — yarn 1, yarn 4 and pnpm all drop it (see above).
 - Words starting with `-` (other than `--`) before `<cmd>` are options. yarn's `exec` has none of
-  its own, and pnpm accepts its own `-c` plus some twenty global options there, several taking a
-  value; the card does not keep a list of them. Instead, a word that starts with `-`, has no `=`,
+  its own, and pnpm accepts its own `-c` plus its global options there, several taking a value;
+  the card does not keep a list of them. Instead, a word that starts with `-`, has no `=`,
   and is followed by a word not starting with `-` is read **both ways**: as standing alone (the
   next word is `<cmd>`), and as taking that next word as its value (the search continues after
-  it). Every reading's intents are combined. A duplicate is dropped only when two *readings*
-  produce it, never within one reading: `npm i x x` gives two intents, so `yarn exec npm i x x`
-  must too, or it would not match the plain command. Over-reading can only add an ask/deny; it can
+  it). Every reading's intents are combined: for each distinct intent, keep the **largest number
+  of copies any one reading produced**. So duplicates are dropped only across readings, never
+  within one: `npm i x x` gives two intents, and `yarn exec npm i x x` must give two as well, or
+  it would not match the plain command. If one reading gives `[x, x]` and another `[x]`, two
+  copies survive. (R9 combines its readings the same way.) Over-reading can only add an ask/deny; it can
   never hide one, which a wrong guess at an option's width could. Example:
   `pnpm exec --filter web npm i x` is read as `web npm i x` (nothing) and as `npm i x` (deny), so
   it is denied.
@@ -217,35 +240,72 @@ holes is replaced by its deny/ask assertion (Task 1 lists them; none is known to
 parent card, the `yarn exec`/nested-wrapper Known-gaps row is removed, `bun exec '<string>'` is
 added to the `bash -c` row, and the `$@` over-read (R2) and the both-ways option reading (R3) get
 one line each; one line under its Verification points to this card. Each new or changed Known-gaps
-line is pinned by an assertion, as the parent card's other gaps are: `bun exec 'npm i x'` stays
-allowed silently; `yarn exec 'npm i "$@"' x` is denied (yarn 4 would substitute rather than
-append; either way `x` is installed); the both-ways reading: `pnpm exec --filter npm i x` is
-denied. Two more Known-gaps lines, each pinned: `yarn -w add x` stays allowed silently (yarn's
-`-w` was not examined against yarn source; R9 is pnpm only); and the shared value list's other
-entries were checked against pnpm only for `-w`, `--workspace` and `--config` — any other entry
-that is a boolean in pnpm still swallows the package after it (no pin: none is known).
+line that names a command is pinned by an assertion, as the parent card's other gaps are:
+`bun exec 'npm i x'` stays allowed silently; `yarn exec 'npm i "$@"' x` is denied (yarn 4 would
+substitute rather than append; either way `x` is installed); the both-ways reading:
+`pnpm exec --filter npm i x` is denied; the R9 over-read: `pnpm -r run add x` and
+`pnpm --filter add test` are no longer allowed; and `yarn add -w x` stays allowed silently (yarn's
+own subcommand words keep one reading, and yarn's `-w` was not examined against yarn source).
+One more line names no command, so it has no pin: among a pnpm subcommand's words, only `-w`,
+`--workspace`, `--config` and the runner's `-c` were checked against pnpm; any other
+`NODE_VALUE_FLAGS` entry that is a boolean in pnpm still swallows the package after it there.
 
 R8. **Size and shape.** `hooks/lib/classify-install-command.py` (679 lines today) stays under the
 800-line cap; the classifier change is one small helper plus edits to `_node_manager`, not a new
 module. `hooks/lib/decide-dependency.py` gets only the R2 cannot-read branch in `decide_intent` (a
-few lines, reusing `CANNOT_READ_TEXT` and `LOG_CANNOT_READ`); no other decider change. R9 and R10
-are a constant and a few lines in `_node_manager`/`_subcommand`'s callers, not a new module.
+few lines, reusing `CANNOT_READ_TEXT` and `LOG_CANNOT_READ`); no other decider change. R3's and
+R9's readings share one small helper (enumerate readings, combine as in R3); R9 adds a pnpm width
+set and a call to it at each scan site it names; R10 is a few lines in `_node_manager`. No new
+module. If the classifier would pass 800 lines, stop and announce "GATE: Spec change needed".
 
-R9. **pnpm option widths.** For a pnpm program, the classifier reads options with
-`PNPM_VALUE_FLAGS` = `NODE_VALUE_FLAGS` minus `-w`, `--workspace` and `--config` — the three that
-pnpm 12.15.0 declares as booleans (see above) — everywhere it reads `NODE_VALUE_FLAGS` today: before
-the subcommand and among the subcommand's own words. npm and yarn keep `NODE_VALUE_FLAGS`
-unchanged (`npm -w web install x` must stay denied). Removing an entry can only make a word be
-read as a package rather than swallowed, so it can add an ask/deny but never hide one. So
-`pnpm -w add x`, `pnpm add -w x`, `pnpm add --workspace x` and `pnpm add --config x` are read like
-`pnpm add x`.
+R9. **Option widths: add readings, never replace one.** Mark's ruling (2026-10-24, round-3
+escalation): one rule for npm, yarn and pnpm. The principle is that **today's reading is always
+one of the readings**, so nothing denied or asked today can become an allow — every other reading
+can only add intents. (Round 3 showed why: an earlier draft *replaced* pnpm's widths, and
+`pnpm -w web add x`, `pnpm add -w --filter x` and six more went from deny/ask to allow.)
+Readings are combined as in R3: for each distinct intent, keep the largest number of copies any
+one reading produced.
+- **Before the subcommand** — every `_subcommand` call a node manager's words go through
+  (`_node_manager`, `_yarn_workspace_inner`, npm's `audit fix` in `_audit_fix`): R3's both-ways
+  rule, for **every** option word that has no `=` and is followed by a word not starting with `-`.
+  It is read as today (taking a value if it is in `NODE_VALUE_FLAGS`, otherwise standing alone)
+  and the other way too. Either way one branch ends at once (the next word is the subcommand), so
+  `k` such options give at most `k + 1` readings. This covers value options missing from the list
+  (`pnpm --reporter silent add x`, `pnpm --store-dir /s add x`, `yarn --mutex file:/tmp/m add x`)
+  and list entries that are booleans for this tool (`pnpm -w add x`, `yarn -w add x`), with no
+  per-tool list to keep up to date.
+- **Among a pnpm subcommand's own words** — the install-positional scan in `_node_manager`,
+  `_plain_update`, pnpm's `audit --fix` in `_audit_fix`, and `_runner_intents` for `pnpm dlx`/
+  `pn dlx`: two readings, today's widths and pnpm 12.15.0's. pnpm's widths are today's value set
+  minus `-w`, `--workspace` and `--config` (booleans: `cli_command.rs:266-267`,
+  `add/arguments.rs:101-102`, `:106-107`) and, for the runner scan, also minus `-c` (pnpm's
+  `dlx -c` is the boolean `--shell-mode`, `dlx.rs:79-80`; npm's `-c` is `--call`, which takes a
+  value). So `pnpm add -w x`, `pnpm add --workspace x`, `pnpm add --config x`, `pnpm dlx -w cowsay`
+  and `pnpm dlx -c cowsay` are read like `pnpm add x` / `pnpm dlx cowsay`, while
+  `pnpm add -w --filter x` stays denied through today's reading.
+- npm's and yarn's own subcommand words keep today's single reading (`npm -w web install x` must
+  stay denied naming `x`).
+- **Not covered: the `workspaces foreach` option loop** in `_yarn_workspace_inner` (its own loop
+  over `FOREACH_VALUE_FLAGS`, not a `_subcommand` call). It keeps its single reading: the
+  yarn-workspaces card ruled that the word after a bare `--since` is the command, pinned by
+  `hooks/dependency-guard.test.sh:511-512` (`yarn workspaces foreach --since main up` and
+  `… --since main add lodash` are allowed). A both-ways reading there would flip both.
+- If any pre-existing assertion changes result under R9, that is a spec problem, not a test to
+  edit: stop and announce "GATE: Spec change needed".
+- **Accepted over-read** (Known gaps, R7): before the subcommand, the extra reading can turn a
+  value or a non-installing subcommand into an install. `pnpm -r run add x` (a script named `add`)
+  and `pnpm --filter add test` (a package named `add`) would be denied or asked. Both are allowed
+  today. This needs a value word, or the word after a boolean option, that is spelled like an
+  install subcommand.
 
 R10. **pnpm's `recursive`/`multi`/`m` alias.** For a pnpm program, while the subcommand word is
 `recursive`, `multi` or `m` and another positional follows it, that word is skipped as pnpm's
 `--recursive` and the next positional is the subcommand (`flag_relocation.rs:139-158`). So
 `pnpm m add x` and `pnpm recursive add x` are read like `pnpm -r add x`, and `pnpm m exec npm i x`
 like `pnpm -r exec npm i x`. `pnpm m` and `pnpm recursive` with nothing after them stay as today
-(allowed).
+(allowed). The alias word is read as the option it stands for, not as a wrapper: it adds no word
+to an update ask, so `pnpm m up` asks exactly as `pnpm -r up` does (today `pnpm -r up` asks and
+`pnpm m up` is allowed, both measured on 824ab6c).
 
 ## Scenarios
 
@@ -330,6 +390,20 @@ Scenario: pnpm's boolean -w, --workspace and --config no longer swallow the pack
   When Claude runs "pnpm -w add x" or "pnpm add -w x" or "pnpm add --workspace x" or "pnpm add --config x"
   Then the guard denies like "pnpm add x"
 
+Scenario: a value option the guard does not know, before the subcommand
+  When Claude runs "pnpm --reporter silent add x" or "pnpm --store-dir /s add x" or "yarn --mutex file:/tmp/m add x" or "yarn -w add x"
+  Then the guard denies like "pnpm add x" or "yarn add x"
+
+Scenario: pnpm dlx with pnpm's boolean -w or -c
+  When Claude runs "pnpm dlx -w cowsay" or "pnpm dlx -c cowsay"
+  Then the guard denies like "pnpm dlx cowsay"
+
+Scenario: today's reading is kept, so nothing denied today is allowed
+  When Claude runs "pnpm -w web add x" or "pnpm --workspace web add x" or "pnpm --config foo add x" or "pnpm add -w --filter x"
+  Then the guard still denies
+  When Claude runs "pnpm -w web update" or "pnpm -w foo audit --fix"
+  Then the guard still asks
+
 Scenario: npm's -w still takes a value
   When Claude runs "npm -w web install x"
   Then the guard denies naming x, not web
@@ -339,6 +413,8 @@ Scenario: pnpm's recursive alias
   Then the guard denies like "pnpm -r add x"
   When Claude runs "pnpm m" or "pnpm recursive"
   Then the guard allows it silently
+  When Claude runs "pnpm m up"
+  Then the guard gives the exact result of "pnpm -r up"
 
 Scenario: other spellings are covered
   When Claude runs "yarnpkg exec npm i x" or "corepack yarn exec npm i x"
@@ -363,16 +439,20 @@ Scenario: an exec with nothing after it is allowed
   command and refuses a silently-allowed control; the cannot-read rows compare with a top-level
   unreadable command and check the log word; allow rows use `allow_cmd`. Before committing, list
   the new assertions in two groups and run the suite:
-  - **must fail before the fix:** every row of both Evidence tables marked "allow, silent"
-    except `bun exec` and `yarn -w add x`; every deny/ask scenario that goes through `exec`, a
-    nested wrapper, R9 or R10; the `$@` pin (`yarn exec 'npm i "$@"' x`, allowed today); and the
-    both-ways pin (`pnpm exec --filter npm i x`);
+  - **must fail before the fix:** every row of the three Evidence tables marked "allow, silent"
+    except `bun exec` and `yarn add -w x`; every deny/ask scenario that goes through `exec`, a
+    nested wrapper, R9 or R10 except the "today's reading is kept" scenario; the `$@` pin
+    (`yarn exec 'npm i "$@"' x`, allowed today); the both-ways pin
+    (`pnpm exec --filter npm i x`); and the two over-read pins (`pnpm -r run add x`,
+    `pnpm --filter add test`, allowed today);
   - **already pass, pinning behaviour the fix must keep:** the allow rows (`yarn exec echo hi`,
     `yarn exec tsc`, `pnpm exec eslint .`, `yarn exec`, `pnpm exec -c`, `pnpm m`,
     `pnpm recursive`, the unreadable string with no install tool), the already-handled rows
     (`yarn workspace web add x`, `npm exec -- npm i x`, `pnpm --workspace-root add x`,
     `pnpm --filter web add x`, `pnpm -r add x`, `npm -w web install x`,
-    `pnpm -c exec cd web '&&' npm i x`), and the `bun exec` and `yarn -w add x` Known-gaps pins.
+    `pnpm -c exec cd web '&&' npm i x`, `pnpm --reporter=silent add x`,
+    `pnpm add --store-dir /s x`, `pnpm dlx cowsay`, `pnpm -r up`), every command of the "today's
+    reading is kept" scenario, and the `bun exec` and `yarn add -w x` Known-gaps pins.
 
   Pass condition: exactly the first group fails, and nothing else does. Commit the red suite on
   its own (`TEST_EXEMPT`, since a red suite writes no marker).
