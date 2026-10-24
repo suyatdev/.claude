@@ -1,7 +1,7 @@
 ---
-phase: planning
-model_tier: high
-branch: none
+phase: implementation
+model_tier: low
+branch: fix/dependency-guard-exec-wrappers
 ---
 
 # Dependency guard: `yarn exec`, `pnpm exec` and nested yarn wrappers
