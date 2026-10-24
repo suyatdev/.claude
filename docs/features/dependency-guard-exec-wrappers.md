@@ -15,6 +15,10 @@ judges on Opus high. Nothing here is built until Mark types `gate confirmed`.
 Stop rule (Mark, 2026-10-24): round 4 is the last judge round. A further finding of the same
 kind (how an option's width is read) is recorded as a Known gap, and the card goes to Mark's
 review instead of a fifth round.
+Round 4 outcome (Mark, 2026-10-24): fix all five round-4 points in place rather than log them,
+with no fifth round. They were: the R3 wording that pointed at the wrong R9 rule, a reading cap
+of 64 (R3), bun kept out of R9, two misplaced Task 1 rows, and an npm over-read pin. This revision
+was not re-judged.
 
 ## Why
 
@@ -206,16 +210,27 @@ R3. **Finding `<cmd>`: options, `--`, and unknown option widths.** After `exec`:
   never hide one, which a wrong guess at an option's width could. Example:
   `pnpm exec --filter web npm i x` is read as `web npm i x` (nothing) and as `npm i x` (deny), so
   it is denied.
-- **The readings grow linearly, not exponentially:** the "stands alone" reading ends the option
+- **Within one scan the readings grow linearly:** the "stands alone" reading ends the option
   scan at once (the next word is `<cmd>`), so only the "takes a value" reading continues. `k`
-  ambiguous options give at most `k + 1` readings.
+  ambiguous options give at most `k + 1` readings **per scan**. Across scans they multiply: each
+  reading of an `exec` starts a fresh command (R4) with its own scans, so nesting compounds them
+  (round 4 modelled `yarn exec -y exec yarn exec -y exec …` doubling every four words).
+- **Reading cap (Mark, 2026-10-24, round 4):** the classifier counts every reading it starts for
+  one command, across all scans and all nesting, against a named constant `MAX_READINGS = 64`.
+  When starting one more would pass the cap, it stops and returns, in place of the intents found
+  so far, the single cannot-read intent of R2 (ecosystem `npm`, name = the outer program,
+  `form: "add"`, source `"cannot-read"`), so the guard gives the cannot-read ask. Asking is the
+  fail-safe answer: an ask can never hide a deny, and a command past 64 readings is almost
+  certainly crafted. No decider change beyond R2's branch.
 - **`-c`/`--shell-mode` switches on R2's pnpm `-c` rule wherever it is typed before `<cmd>`:**
   after `exec`, or — for a pnpm program — before `exec`, since pnpm moves it there
   (`flag_relocation.rs:110-137`). `pnpm -c exec …` and `pnpm --shell-mode exec …` are read exactly as
   `pnpm exec -c …`. For a yarn program `-c` is just an option.
-- `pnpm -r exec …`, `pnpm --filter web exec …`: options before `exec` are skipped by
-  `_subcommand` (with R9's widths for a pnpm program); R3 applies to what follows. `pnpm -w exec …`
-  and `pnpm m exec …` reach R3 only once R9 and R10 are in.
+- `pnpm -r exec …`, `pnpm --filter web exec …`: options before `exec` are words before the
+  subcommand, so R9's **before-the-subcommand** rule reads them (every option without `=` followed
+  by a non-hyphen word, both ways); R3 applies to what follows `exec` in each reading. So
+  `pnpm --reporter silent exec npm i x` is denied like `npm i x`. `pnpm -w exec …` and
+  `pnpm m exec …` reach R3 only once R9 and R10 are in.
 
 R4. **Workspace wrappers are unwrapped until none is left, and `exec` ends the chain.** After a yarn
 `workspace <name>` or `workspaces foreach [opts]` is removed, if what remains starts with another
@@ -243,9 +258,11 @@ one line each; one line under its Verification points to this card. Each new or 
 line that names a command is pinned by an assertion, as the parent card's other gaps are:
 `bun exec 'npm i x'` stays allowed silently; `yarn exec 'npm i "$@"' x` is denied (yarn 4 would
 substitute rather than append; either way `x` is installed); the both-ways reading:
-`pnpm exec --filter npm i x` is denied; the R9 over-read: `pnpm -r run add x` and
-`pnpm --filter add test` are no longer allowed; and `yarn add -w x` stays allowed silently (yarn's
-own subcommand words keep one reading, and yarn's `-w` was not examined against yarn source).
+`pnpm exec --filter npm i x` is denied; the R9 over-read: `pnpm -r run add x`,
+`pnpm --filter add test` and `npm --prefix add test` are no longer allowed; `yarn add -w x` stays
+allowed silently (yarn's own subcommand words keep one reading, and yarn's `-w` was not examined
+against yarn source); `bun --cwd add x` stays allowed silently (bun is outside R9); and the R3
+reading cap gives the cannot-read ask for a command past 64 readings.
 One more line names no command, so it has no pin: among a pnpm subcommand's words, only `-w`,
 `--workspace`, `--config` and the runner's `-c` were checked against pnpm; any other
 `NODE_VALUE_FLAGS` entry that is a boolean in pnpm still swallows the package after it there.
@@ -265,7 +282,11 @@ can only add intents. (Round 3 showed why: an earlier draft *replaced* pnpm's wi
 `pnpm -w web add x`, `pnpm add -w --filter x` and six more went from deny/ask to allow.)
 Readings are combined as in R3: for each distinct intent, keep the largest number of copies any
 one reading produced.
-- **Before the subcommand** — every `_subcommand` call a node manager's words go through
+- **Programs covered:** npm, yarn and pnpm (and their spellings `yarnpkg`, `corepack yarn`,
+  `pn`), as Mark named them. bun is in the same node-manager table
+  (`classify-install-command.py:90`), so it also goes through `_node_manager`, but it keeps today's single reading everywhere, so
+  `bun --cwd add x` stays allowed silently (measured on 451194f). Pinned (R7).
+- **Before the subcommand** — every `_subcommand` call a covered program's words go through
   (`_node_manager`, `_yarn_workspace_inner`, npm's `audit fix` in `_audit_fix`): R3's both-ways
   rule, for **every** option word that has no `=` and is followed by a word not starting with `-`.
   It is read as today (taking a value if it is in `NODE_VALUE_FLAGS`, otherwise standing alone)
@@ -293,10 +314,13 @@ one reading produced.
 - If any pre-existing assertion changes result under R9, that is a spec problem, not a test to
   edit: stop and announce "GATE: Spec change needed".
 - **Accepted over-read** (Known gaps, R7): before the subcommand, the extra reading can turn a
-  value or a non-installing subcommand into an install. `pnpm -r run add x` (a script named `add`)
-  and `pnpm --filter add test` (a package named `add`) would be denied or asked. Both are allowed
-  today. This needs a value word, or the word after a boolean option, that is spelled like an
-  install subcommand.
+  value or a non-installing subcommand into an install. `pnpm -r run add x` (a script named `add`),
+  `pnpm --filter add test` (a package named `add`) and `npm --prefix add test` (a directory named
+  `add`) would be denied or asked. All three are allowed today (measured on 451194f). This needs a
+  value word, or the word after a boolean option, that is spelled like an install, update or
+  runner subcommand. On a command already denied or asked, the extra reading can also add names
+  to the message (`npm --prefix add install x` would also name `install`); the decision does not
+  change.
 
 R10. **pnpm's `recursive`/`multi`/`m` alias.** For a pnpm program, while the subcommand word is
 `recursive`, `multi` or `m` and another positional follows it, that word is skipped as pnpm's
@@ -398,8 +422,23 @@ Scenario: pnpm dlx with pnpm's boolean -w or -c
   When Claude runs "pnpm dlx -w cowsay" or "pnpm dlx -c cowsay"
   Then the guard denies like "pnpm dlx cowsay"
 
+Scenario: a value option the guard does not know, before exec
+  When Claude runs "pnpm --reporter silent exec npm i x"
+  Then the guard denies like "npm i x"
+
+Scenario: a command past the reading cap gets the cannot-read ask
+  When Claude runs "yarn exec -y exec " repeated 7 times, followed by "npm i x"
+    (2^7 = 128 readings under the round-4 model; the classifier test also asserts the cap was hit,
+    and if 7 does not pass it, Task 1 uses the smallest repeat count that does)
+  Then the guard asks with the same text as a top-level command it cannot read
+  And the log line's decision word is "cannot-read"
+
+Scenario: bun keeps today's reading
+  When Claude runs "bun --cwd add x"
+  Then the guard allows it silently
+
 Scenario: today's reading is kept, so nothing denied today is allowed
-  When Claude runs "pnpm -w web add x" or "pnpm --workspace web add x" or "pnpm --config foo add x" or "pnpm add -w --filter x"
+  When Claude runs "pnpm -w web add x" or "pn -w web add x" or "pnpm --workspace web add x" or "pnpm --config foo add x" or "pnpm add -w --filter x"
   Then the guard still denies
   When Claude runs "pnpm -w web update" or "pnpm -w foo audit --fix"
   Then the guard still asks
@@ -441,10 +480,11 @@ Scenario: an exec with nothing after it is allowed
   the new assertions in two groups and run the suite:
   - **must fail before the fix:** every row of the three Evidence tables marked "allow, silent"
     except `bun exec` and `yarn add -w x`; every deny/ask scenario that goes through `exec`, a
-    nested wrapper, R9 or R10 except the "today's reading is kept" scenario; the `$@` pin
-    (`yarn exec 'npm i "$@"' x`, allowed today); the both-ways pin
-    (`pnpm exec --filter npm i x`); and the two over-read pins (`pnpm -r run add x`,
-    `pnpm --filter add test`, allowed today);
+    nested wrapper, R9 or R10 except the "today's reading is kept" and "npm's -w still takes a
+    value" scenarios; the `$@` pin (`yarn exec 'npm i "$@"' x`, allowed today); the both-ways pin
+    (`pnpm exec --filter npm i x`); the reading-cap scenario (allowed today); and the three
+    over-read pins (`pnpm -r run add x`, `pnpm --filter add test`, `npm --prefix add test`,
+    allowed today);
   - **already pass, pinning behaviour the fix must keep:** the allow rows (`yarn exec echo hi`,
     `yarn exec tsc`, `pnpm exec eslint .`, `yarn exec`, `pnpm exec -c`, `pnpm m`,
     `pnpm recursive`, the unreadable string with no install tool), the already-handled rows
@@ -452,7 +492,8 @@ Scenario: an exec with nothing after it is allowed
     `pnpm --filter web add x`, `pnpm -r add x`, `npm -w web install x`,
     `pnpm -c exec cd web '&&' npm i x`, `pnpm --reporter=silent add x`,
     `pnpm add --store-dir /s x`, `pnpm dlx cowsay`, `pnpm -r up`), every command of the "today's
-    reading is kept" scenario, and the `bun exec` and `yarn add -w x` Known-gaps pins.
+    reading is kept" scenario (`pn -w web add x` included), and the `bun exec`, `yarn add -w x`
+    and `bun --cwd add x` Known-gaps pins.
 
   Pass condition: exactly the first group fails, and nothing else does. Commit the red suite on
   its own (`TEST_EXEMPT`, since a red suite writes no marker).
