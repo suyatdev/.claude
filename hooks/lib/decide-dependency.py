@@ -284,6 +284,8 @@ def decide_intent(ctx, intent):
         return decision("ask", msg_update(intent), intent)
     if intent["source"] == "indirect":
         return decision("ask", msg_indirect(intent), intent)
+    if intent["source"] == "cannot-read":  # a yarn/pnpm exec string, or a reading budget, the classifier gave up on
+        return decision("ask", CANNOT_READ_TEXT, intent, LOG_CANNOT_READ)
     if eco != "homebrew" and not intent["pinned"]:
         return decision("deny", msg_unpinned(ctx, intent), intent)
     try:
