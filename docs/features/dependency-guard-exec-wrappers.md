@@ -531,3 +531,18 @@ Task 0 (2026-10-24, on `50060ec`; `hooks/` unchanged since `a1a7cc8` and identic
   are `#[clap(skip)]` (lines 6, 11, 17) and three are `#[clap(skip = true)]` (`sort`, `reverse`,
   `parallel`, lines 20, 23, 26). None of the six is a command-line option, so the card's
   conclusion holds.
+
+Task 2 (2026-10-24): both suites green (hook 527 passed, 0 failed; classifier 1194 passed,
+0 failed); no pre-existing assertion changed or was replaced. Two rulings by Mark the same day:
+
+- **R8 line cap raised to 900 for this change.** The classifier came to 854 lines, over R8's 800.
+  The gate was announced, and Mark chose to raise the cap to 900 over splitting the readings code
+  into a sibling module. R8's "no new module" stands.
+- **`npm --prefix x ci` is a Known gap, not fixed (stop rule).** R9's extra reading takes
+  `--prefix` as standing alone, so a directory named like an npm runner alias (`x`, `exec`)
+  becomes the subcommand and `ci` the package to run. `npm --prefix x ci` and
+  `npm --prefix exec ci` now deny (`npm ci has no exact version`). It is the same over-read class
+  as R7's three pins, and it fails toward a refusal. Measured: `npm --prefix frontend ci`,
+  `npm --prefix web install`, `npm --prefix web run build`, `pnpm --filter web build`,
+  `pnpm --dir web test`, `yarn exec tsc --noEmit` and `pnpm exec prettier --write .` still
+  allow. Task 3 records it in the parent card's Known gaps, and a test pins it.

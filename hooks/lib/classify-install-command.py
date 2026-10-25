@@ -13,6 +13,7 @@ Beyond classify(), two helpers carry the card's "command the lexer cannot read" 
 this module share one INSTALL_TOOL_WORDS list: is_unreadable() and mentions_install_tool().
 """
 
+import collections
 import os
 import re
 import sys
@@ -23,12 +24,12 @@ from shell_segments import ASSIGN_RE, WRAPPERS, program, segments  # noqa: E402
 from vetting_record import is_exact_version, is_npm_git_shorthand  # noqa: E402
 
 __all__ = ["classify", "is_unreadable", "mentions_install_tool", "is_exact_version", "RUNNERS",
-           "INSTALL_TOOL_WORDS"]
+           "INSTALL_TOOL_WORDS", "MAX_READINGS"]
 
 ECO_NPM, ECO_PYPI, ECO_CRATES, ECO_GO, ECO_GEMS, ECO_BREW = (
     "npm", "pypi", "crates.io", "go", "rubygems", "homebrew")
 REGISTRY, OTHER, REQUIREMENTS_FILE = "registry", "other", "requirements-file"
-UPDATE, INDIRECT = "update", "indirect"
+UPDATE, INDIRECT, CANNOT_READ = "update", "indirect", "cannot-read"
 
 # The plain-word allowlist for a VET_EXEMPT value. A local copy of the one at
 # hooks/lib/secret_approval.py:261 (_EXEMPT_VALUE_ALLOWED_RE), not an import: that name is private to
@@ -72,6 +73,12 @@ YARN_PROGRAMS = frozenset(["yarn", "yarnpkg"])
 # yarn 4 `workspaces foreach` options that take the NEXT word (--opt=value is one word); --since takes none
 FOREACH_VALUE_FLAGS = frozenset(["--from", "--include", "--exclude", "-j", "--jobs"])
 PNPM_PROGRAMS = frozenset(["pnpm", "pn"])
+EXEC_PROGRAMS = YARN_PROGRAMS | PNPM_PROGRAMS  # `<program> exec <command>` runs <command>
+WIDTH_PROGRAMS = EXEC_PROGRAMS | {"npm"}  # R9: the programs whose option widths are read both ways (bun is not)
+PNPM_RECURSIVE_ALIASES = frozenset(["recursive", "multi", "m"])  # pnpm rewrites these to --recursive
+SHELL_MODE_FLAGS = frozenset(["-c", "--shell-mode"])
+# R3: the most readings one command may start, over every scan and every nested exec; past it, the cannot-read ask
+MAX_READINGS = 64
 UV_UPGRADE_FLAGS = frozenset(["-U", "--upgrade"])
 UV_UPGRADE_PACKAGE_FLAGS = frozenset(["-P", "--upgrade-package"])
 UV_UPGRADE_GROUP_FLAG = "--upgrade-group"
@@ -103,6 +110,10 @@ NODE_VALUE_FLAGS = frozenset([
     "--otp", "--scope", "--tag", "--omit", "--include", "--save-prefix", "--install-strategy", "--before",
     "--filter", "-F", "--dir", "--cwd", "--cache-folder", "--config"])
 NPM_RUNNER_VALUE_FLAGS = NODE_VALUE_FLAGS | NPM_PACKAGE_FLAGS | frozenset(["-c", "--call"])
+# pnpm 12.15.0 reads these as booleans (R9), though they take a value for npm. `dlx -c` is its --shell-mode.
+PNPM_BOOLEAN_FLAGS = frozenset(["-w", "--workspace", "--config"])
+PNPM_VALUE_FLAGS = NODE_VALUE_FLAGS - PNPM_BOOLEAN_FLAGS
+PNPM_RUNNER_VALUE_FLAGS = NPM_RUNNER_VALUE_FLAGS - PNPM_BOOLEAN_FLAGS - frozenset(["-c"])
 PIP_VALUE_FLAGS = frozenset([
     "-r", "--requirement", "-c", "--constraint", "-i", "--index-url", "--extra-index-url", "-f", "--find-links",
     "-t", "--target", "--prefix", "--root", "--python", "--platform", "--python-version", "--implementation",
@@ -196,6 +207,78 @@ def _subcommand(args, value_flags):
     items, rest = _scan(args, value_flags, first_only=True)
     found = _positionals(items)
     return (found[0] if found else None), rest
+
+
+# ------------------------------------------------------------------------------------ readings
+class _ReadingCapExceeded(Exception):
+    """One command needed more than MAX_READINGS readings (R3)."""
+
+
+class _Readings:
+    """Counts the readings started for one command, across every scan and nested exec (R3). `outer` is the
+    first node package manager reached; it names the cannot-read intent a spent budget turns into."""
+
+    def __init__(self):
+        self.count, self.outer = 0, None
+
+    def spend(self):
+        self.count += 1
+        if self.count > MAX_READINGS:
+            raise _ReadingCapExceeded()
+
+
+def _merge_readings(readings):
+    """R3/R9: the intents of several readings of one command. A distinct intent keeps the largest number of
+    copies any ONE reading gave it, so `npm i x x` stays two intents; a single reading comes back unchanged."""
+    merged, have = [], collections.Counter()
+    for intents in readings:
+        seen = collections.Counter()
+        for intent in intents:
+            key = tuple(sorted(intent.items()))
+            seen[key] += 1
+            if seen[key] > have[key]:
+                have[key] = seen[key]
+                merged.append(intent)
+    return merged
+
+
+def _is_option(arg):
+    return arg.startswith("-") and len(arg) > 1
+
+
+def _may_take_value(args, i):
+    """R3/R9: an option word with no `=` and a non-option word after it may be read as taking that word."""
+    return "=" not in args[i] and i + 1 < len(args) and not args[i + 1].startswith("-")
+
+
+def _end_reading(budget, words, flags):
+    budget.spend()
+    return [(words[0], words[1:], tuple(flags))] if words else [(None, [], tuple(flags))]
+
+
+def _sub_readings(prog, args, budget, flags=()):
+    """R9: every reading of the words before the subcommand -> [(sub, rest, option flags seen)], today's
+    reading (`_subcommand`'s) first. An option that may take a value is read as taking it and as standing
+    alone, so a width the lists get wrong cannot hide the subcommand; one branch ends at the next word, so
+    k such options give k + 1 readings. A program outside WIDTH_PROGRAMS (bun) keeps its single reading."""
+    if prog not in WIDTH_PROGRAMS:
+        budget.spend()
+        sub, rest = _subcommand(args, NODE_VALUE_FLAGS)
+        return [(sub, rest, ())]
+    flags, i = list(flags), 0
+    while i < len(args):
+        if args[i] == "--":
+            return _end_reading(budget, args[i + 1:], flags)
+        if not _is_option(args[i]):
+            return _end_reading(budget, args[i:], flags)
+        flag, _value, step = _read_option(args, i, NODE_VALUE_FLAGS)
+        flags.append(flag)
+        if _may_take_value(args, i):
+            alone = _end_reading(budget, args[i + 1:], flags)
+            valued = _sub_readings(prog, args[i + 2:], budget, flags)
+            return valued + alone if step == 2 else alone + valued
+        i += step
+    return _end_reading(budget, [], flags)
 
 
 # ------------------------------------------------------------------------------------ spec parsing
@@ -337,11 +420,14 @@ def _intents(ecosystem, specs, parse, tool, runner=None):
 
 
 # --------------------------------------------------------------------------------------- handlers
-def _runner_intents(prog, runner, args, ecosystem):
+def _runner_intents(prog, runner, args, ecosystem, value_flags=None):
     """A runner fetches and runs a package. The first non-flag word names it; for npm-registry
-    runners every -p/--package value does too. Words after the package are its own arguments."""
+    runners every -p/--package value does too. Words after the package are its own arguments.
+    value_flags overrides the default set of the ecosystem (pnpm's widths, R9)."""
     npm_registry = ecosystem == ECO_NPM
-    items, _ = _scan(args, NPM_RUNNER_VALUE_FLAGS if npm_registry else PYPI_RUNNER_VALUE_FLAGS, first_only=True)
+    if value_flags is None:
+        value_flags = NPM_RUNNER_VALUE_FLAGS if npm_registry else PYPI_RUNNER_VALUE_FLAGS
+    items, _ = _scan(args, value_flags, first_only=True)
     parse = _parse_npm if npm_registry else _pypi_parser()
     found = []
     for flag, value in items:
@@ -351,55 +437,134 @@ def _runner_intents(prog, runner, args, ecosystem):
     return found
 
 
-def _yarn_workspace_inner(sub, rest):
-    """-> (wrapper_words, sub, rest) for the command inside a yarn workspace wrapper. `yarn workspace
+def _yarn_wrapper(prog, sub, rest, budget):
+    """-> [(wrapper words, inner sub, inner rest)]: one yarn workspace wrapper removed. `yarn workspace
     <name> <rest>` and `yarn workspaces foreach [options] <rest>` run `yarn <rest>`. yarn 1 `workspaces
-    run` is a script run and `workspaces info|list` only read, so they carry no inner command (sub None)."""
-    if sub == "workspace":
-        _name, rest = _subcommand(rest, NODE_VALUE_FLAGS)
-        inner, rest = _subcommand(rest, NODE_VALUE_FLAGS)
-        return ["workspace"], inner, rest
-    verb, rest = _subcommand(rest, NODE_VALUE_FLAGS)
-    if verb != "foreach":
-        return [], None, []
-    i = 0
-    while i < len(rest) and rest[i].startswith("-") and len(rest[i]) > 1:
-        i += 2 if rest[i] in FOREACH_VALUE_FLAGS else 1
-    inner, rest = _subcommand(rest[i:], NODE_VALUE_FLAGS)
-    return ["workspaces", "foreach"], inner, rest
+    run` is a script run and `workspaces info|list` only read, so they carry no inner command (sub None).
+    The `foreach` option loop keeps its single reading (R9: `--since main up` must stay allowed)."""
+    found = []
+    for first, after, _flags in _sub_readings(prog, rest, budget):  # the workspace name, or the verb
+        if sub == "workspace":
+            words, tail = ["workspace"], after
+        elif first == "foreach":
+            i = 0
+            while i < len(after) and _is_option(after[i]):
+                i += 2 if after[i] in FOREACH_VALUE_FLAGS else 1
+            words, tail = ["workspaces", "foreach"], after[i:]
+        else:
+            found.append(([], None, []))
+            continue
+        found += [(words, inner, inner_rest) for inner, inner_rest, _f in _sub_readings(prog, tail, budget)]
+    return found
 
 
-def _node_manager(prog, args):
+def _unwrap(prog, words, sub, rest, flags, budget):
+    """R4: -> [(words, sub, rest, flags)] with yarn workspace wrappers removed until none is left, in any
+    order. `words` keeps every wrapper word, never a workspace name (R5). `yarn global add` is `add`."""
+    if prog in YARN_PROGRAMS and sub in ("workspace", "workspaces"):
+        return [r for inner, sub2, rest2 in _yarn_wrapper(prog, sub, rest, budget)
+                for r in _unwrap(prog, words + inner, sub2, rest2, flags, budget)]
+    if prog in YARN_PROGRAMS and sub == "global":
+        return [(words + ["global", sub2], sub2, rest2, flags) for sub2, rest2, _f in _sub_readings(prog, rest, budget)]
+    return [(words + [sub], sub, rest, flags)]
+
+
+def _alias_readings(prog, reading, budget):
+    """R10: pnpm's `recursive`/`multi`/`m` is `--recursive` while another positional follows, and adds no word."""
+    sub, rest, flags = reading
+    if prog in PNPM_PROGRAMS and sub in PNPM_RECURSIVE_ALIASES:
+        inner = [r for r in _sub_readings(prog, rest, budget, flags) if r[0] is not None]
+        if inner:
+            return [r for each in inner for r in _alias_readings(prog, each, budget)]
+    return [reading]
+
+
+def _cannot_read_intent(prog):
+    """R2/R3: the guard's cannot-read ask, for an exec string the lexer cannot read or a spent budget."""
+    return {"ecosystem": ECO_NPM, "name": prog, "version": None, "pinned": False, "tool": prog, "runner": None,
+            "form": "add", "source": CANNOT_READ, "exempt": None, "via_package_option": False}
+
+
+def _exec_readings(prog, args, shell, budget):
+    """R3: -> [(shell mode, command words)], every reading of the words after `exec`. One `--` is dropped; a
+    pnpm -c/--shell-mode turns shell mode on (a known boolean); any other option that may take a value is
+    read as standing alone (the next word is the command) and as taking it."""
+    found, i = [], 0
+    while i < len(args):
+        if args[i] == "--":
+            i += 1
+            break
+        if not _is_option(args[i]):
+            break
+        if prog in PNPM_PROGRAMS and args[i] in SHELL_MODE_FLAGS:
+            shell = True
+        elif _may_take_value(args, i):
+            budget.spend()
+            found.append((shell, args[i + 1:]))
+            i += 1
+        i += 1
+    if i < len(args):
+        budget.spend()
+        found.append((shell, args[i:]))
+    return found
+
+
+def _exec_command(prog, shell, words, budget):
+    """R2: the command word is shell code (as in yarn 4): lexed, the arguments appended to the argv of its last
+    segment, every segment classified. Shell mode joins all the words with single spaces first (as pnpm does)."""
+    text, extra = (" ".join(words), []) if shell else (words[0], words[1:])
+    parsed = segments(text)
+    if text.strip() and not parsed:
+        return [_cannot_read_intent(prog)] if mentions_install_tool(" ".join(words)) else []
+    last = len(parsed) - 1
+    return [intent for n, (_assigns, argv) in enumerate(parsed)
+            for intent in _classify_argv(argv + (extra if n == last else []), budget)]
+
+
+def _exec_intents(prog, args, flags, budget):
+    shell = prog in PNPM_PROGRAMS and any(flag in SHELL_MODE_FLAGS for flag in flags)
+    return _merge_readings([_exec_command(prog, sh, words, budget)
+                            for sh, words in _exec_readings(prog, args, shell, budget)])
+
+
+def _node_intents(prog, reading, budget):
+    """The intents of one reading (words, sub, rest, flags). pnpm's own words get two widths (R9)."""
+    words, sub, rest, flags = reading
     install_words, run_words = NODE_MANAGERS[prog]
-    sub, rest = _subcommand(args, NODE_VALUE_FLAGS)
-    wrapper = []
-    if sub in ("workspace", "workspaces") and prog in YARN_PROGRAMS:
-        wrapper, sub, rest = _yarn_workspace_inner(sub, rest)
-    words = wrapper + [sub]
-    if sub == "global" and prog in YARN_PROGRAMS:  # `yarn global add` is `add`, `yarn global upgrade` an update
-        sub, rest = _subcommand(rest, NODE_VALUE_FLAGS)
-        words = wrapper + ["global", sub]
+    pnpm = prog in PNPM_PROGRAMS
+    widths = [NODE_VALUE_FLAGS] + ([PNPM_VALUE_FLAGS] if pnpm else [])
+    if sub == "exec" and prog in EXEC_PROGRAMS:
+        return _exec_intents(prog, rest, flags, budget)
     if sub in run_words:
-        return _runner_intents(prog, _runner_name(prog, sub), rest, ECO_NPM)
+        runner = _runner_name(prog, sub)
+        return _merge_readings([_runner_intents(prog, runner, rest, ECO_NPM, w)
+                                for w in [NPM_RUNNER_VALUE_FLAGS] + ([PNPM_RUNNER_VALUE_FLAGS] if pnpm else [])])
     if sub in NODE_UPDATE_WORDS[prog]:
-        return _plain_update(prog, words, rest, NODE_VALUE_FLAGS)
+        return _merge_readings([_plain_update(prog, words, rest, w) for w in widths])
     if sub == "audit":
-        return _audit_fix(prog, rest)
+        return _audit_fix(prog, rest, budget)
     if sub not in install_words:
         return []
-    items, _ = _scan(rest, NODE_VALUE_FLAGS)
-    return _intents(ECO_NPM, _positionals(items), _parse_npm, prog)
+    return _merge_readings([_intents(ECO_NPM, _positionals(_scan(rest, w)[0]), _parse_npm, prog) for w in widths])
 
 
-def _audit_fix(prog, rest):
+def _node_manager(prog, args, budget):
+    """npm, yarn, pnpm, bun: every reading of the words before the subcommand (R9, R10, R4), merged (R3)."""
+    if budget.outer is None:
+        budget.outer = prog
+    aliased = [r for first in _sub_readings(prog, args, budget) for r in _alias_readings(prog, first, budget)]
+    readings = [r for sub, rest, flags in aliased for r in _unwrap(prog, [], sub, rest, flags, budget)]
+    return _merge_readings([_node_intents(prog, reading, budget) for reading in readings])
+
+
+def _audit_fix(prog, rest, budget):
     """npm `audit fix` (any options) and pnpm/pn `audit --fix` rewrite installed versions."""
     if prog == "npm":
-        fix, fix_rest = _subcommand(rest, NODE_VALUE_FLAGS)
-        return _plain_update(prog, ["audit", "fix"], fix_rest, NODE_VALUE_FLAGS) if fix == "fix" else []
+        return _merge_readings([_plain_update(prog, ["audit", "fix"], fix_rest, NODE_VALUE_FLAGS)
+                                for fix, fix_rest, _f in _sub_readings(prog, rest, budget) if fix == "fix"])
     if prog in PNPM_PROGRAMS:
-        items, _ = _scan(rest, NODE_VALUE_FLAGS)
-        if any(flag == "--fix" for flag, _value in items):
-            return _plain_update(prog, ["audit", "--fix"], rest, NODE_VALUE_FLAGS)
+        return _merge_readings([_plain_update(prog, ["audit", "--fix"], rest, w) for w in (NODE_VALUE_FLAGS, PNPM_VALUE_FLAGS)
+                                if any(flag == "--fix" for flag, _value in _scan(rest, w)[0])])
     return []
 
 
@@ -564,12 +729,12 @@ def _brew(prog, args):
     return _intents(ECO_BREW, _positionals(items), _brew_parser, prog)
 
 
-def _corepack(args):
+def _corepack(args, budget):
     """`corepack <manager>[@<version>] <args>` runs that manager; read it as the manager."""
     sub, rest = _subcommand(args, frozenset())
     if sub is None:
         return []
-    return _classify_argv([sub.split("@", 1)[0]] + rest)
+    return _classify_argv([sub.split("@", 1)[0]] + rest, budget)
 
 
 # -------------------------------------------------------------------------------------- dispatch
@@ -628,7 +793,7 @@ def _xargs(args):
     return []
 
 
-def _classify_argv(argv):
+def _classify_argv(argv, budget):
     argv = _strip_wrappers(argv)
     if not argv:
         return []
@@ -637,7 +802,7 @@ def _classify_argv(argv):
     if prog == "xargs":
         return _xargs(args)
     if prog in NODE_MANAGERS:
-        return _node_manager(prog, args)
+        return _node_manager(prog, args, budget)
     if prog in WHOLE_PROGRAM_RUNNERS:
         return _runner_intents(prog, _runner_name(prog), args, WHOLE_PROGRAM_RUNNERS[prog])
     if family == "pip":
@@ -647,7 +812,7 @@ def _classify_argv(argv):
     handlers = {"uv": _uv, "poetry": _poetry, "pipx": _pipx, "cargo": _cargo, "go": _go, "gem": _gem,
                 "brew": _brew}
     if prog == "corepack":
-        return _corepack(args)
+        return _corepack(args, budget)
     return handlers[prog](prog, args) if prog in handlers else []
 
 
@@ -659,13 +824,23 @@ def _exempt_value(assigns):
     return value if EXEMPT_VALUE_RE.fullmatch(value) else None
 
 
+def _classify_segment(argv):
+    """The intents of one segment. One that needs more than MAX_READINGS readings (R3) is replaced, whole, by
+    the cannot-read intent: asking is the fail-safe answer, and it can never hide a deny."""
+    budget = _Readings()
+    try:
+        return _classify_argv(argv, budget)
+    except _ReadingCapExceeded:
+        return [_cannot_read_intent(budget.outer)]
+
+
 def classify(src):
     """Return the install intents of every segment of `src`, in command order. [] when there are none
     -- including when the lexer cannot read `src` (see is_unreadable)."""
     intents = []
     for assigns, argv in segments(src):
         exempt = _exempt_value(assigns)
-        intents.extend(dict(intent, exempt=exempt) for intent in _classify_argv(argv))
+        intents.extend(dict(intent, exempt=exempt) for intent in _classify_segment(argv))
     return intents
 
 
