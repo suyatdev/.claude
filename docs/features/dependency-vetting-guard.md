@@ -1089,7 +1089,7 @@ Scenario: an update beside a pinned install still reaches the strongest decision
   started is not read, so a command built to put its install there gets only the ask. With
   several hundred value-taking options before the subcommand, the reader runs out of Python
   recursion depth. Measured: `npm`, then 950 copies of `--tag t`, then `install left-pad` still
-  denies; with 1000 copies (about 7.7 KB) the guard asks with "dependency-guard is broken:
+  denies; with 1000 copies (8,020 bytes) the guard asks with "dependency-guard is broken:
   RecursionError" instead of denying.
   It never allows (exec-wrappers card, round-2 implementation judge; Mark chose to disclose it).
 - Among a pnpm subcommand's own words, only `-w`, `--workspace`, `--config` and the runner's `-c`
