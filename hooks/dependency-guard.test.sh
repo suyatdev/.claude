@@ -608,6 +608,10 @@ deny_cmd "R7: an option read both ways: pnpm exec --filter npm i x" "pnpm exec -
 deny_cmd "R7 over-read: pnpm -r run add x is no longer allowed" "pnpm -r run add x" "$NOTHING_X" "x@<exact-version>"
 deny_cmd "R7 over-read: pnpm --filter add test is no longer allowed" "pnpm --filter add test" "npm test has no exact version" "test@<exact-version>"
 deny_cmd "R7 over-read: npm --prefix add test is no longer allowed" "npm --prefix add test" "npm test has no exact version" "test@<exact-version>"
+# Task 2 found the runner-alias spelling of the same over-read; Mark's stop rule made it a Known gap.
+deny_cmd "Known gap (over-read): npm --prefix x ci reads x as npm's runner alias" "npm --prefix x ci" "npm ci has no exact version" "ci@<exact-version>"
+deny_cmd "Known gap (over-read): npm --prefix exec ci reads exec as the runner" "npm --prefix exec ci" "npm ci has no exact version" "ci@<exact-version>"
+allow_cmd "Known gap (kept): an ordinary --prefix directory is unaffected: npm --prefix frontend ci" "npm --prefix frontend ci"
 allow_cmd "R7 (kept): bun exec 'npm i x' stays allowed (bun is out of scope)" "bun exec 'npm i x'"
 allow_cmd "R7 (kept): yarn add -w x stays allowed (yarn's own subcommand words keep one reading)" "yarn add -w x"
 allow_cmd "R7 (kept): bun --cwd add x stays allowed (bun is outside R9)" "bun --cwd add x"
