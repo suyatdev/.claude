@@ -580,7 +580,21 @@ to say that past `MAX_READINGS`, the intents found before the cap are kept and t
 intent is added to them. A deny already found therefore still denies. Tests at the 63/64 edge and
 a decider unit test for the cannot-read branch come first.
 
-The new Known-gaps lines add 16 lines above the parent card's Verification. As a result,
-`docs/features/permission-ask-answerer.md:20`, which cites `dependency-vetting-guard.md:1367-1392`,
-now points 16 lines early: the cited text is at `:1383-1408`. That card belongs to another
+Cap fix (2026-10-25): the red tests are in `75ebf42` and the fix in `5dddf6b`. Suites: hook
+536 passed, 0 failed; classifier 1199/0; decider 179/0. The classifier is 858 lines, within the
+900 cap. The cap now stops *starting* readings rather than throwing away the ones already made.
+The all-values reading of an option is now spent first, so it is the one kept. Re-measured: `npm`,
+then N copies of `--tag t`, then `install left-pad` denies for N = 5, 31, 32, 63 and 64.
+
+This supersedes two earlier statements. The seven-deep `yarn exec -y exec … npm i x` chain listed
+above as "now get the cannot-read ask" now **denies**, because `npm i x` is found before the cap;
+its pre-existing test was flipped in `75ebf42`. The same chain ending in `echo hi`, where nothing
+is found, still gets the ask. What remains is a Known gap in the parent card: a reading the cap
+never starts is not read, so a command built to put its install there gets only the ask. R3's
+text ("in place of the intents found so far") is amended by the ruling above, not edited.
+
+The new Known-gaps lines add 18 lines above the parent card's Verification (16 in `14a2ac5`, plus
+2 with the cap fix). As a result, `docs/features/permission-ask-answerer.md:20`, which cites
+`dependency-vetting-guard.md:1367-1392`, now points 18 lines early: the cited text is at
+`:1385-1410`. That card belongs to another
 feature, so it is left for its owner and flagged in the PR.

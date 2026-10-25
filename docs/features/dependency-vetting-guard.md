@@ -1084,7 +1084,9 @@ Scenario: an update beside a pinned install still reaches the strongest decision
   `-w` was not checked against yarn's source.
 - `bun --cwd add x` is allowed silently: bun is outside the both-ways reading.
 - A command that needs more than 64 readings (`MAX_READINGS`, e.g. seven nested
-  `yarn exec -y exec`) is not read; it gets the cannot-read ask instead.
+  `yarn exec -y exec`) is read only up to the cap. Anything found by then still applies, so a deny
+  found before the cap still denies, and the cannot-read ask is added. A reading the cap never
+  started is not read, so a command built to put its install there gets only the ask.
 - Among a pnpm subcommand's own words, only `-w`, `--workspace`, `--config` and the runner's `-c`
   were checked against pnpm. Any other `NODE_VALUE_FLAGS` entry that is a boolean in pnpm still
   swallows the package after it there.
