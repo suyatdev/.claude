@@ -257,6 +257,31 @@ def test_update_decisions_end_to_end():
               ["ask", "deny"])
 
 
+def test_cannot_read():
+    """Step 0b: a cannot-read intent (an exec string the lexer cannot read, or a spent reading budget) is an ask
+    with the fixed text and the cannot-read log word; beside a deny it never lowers it (Mark, 2026-10-25)."""
+    with tempfile.TemporaryDirectory() as store:
+        ctx = D.Context(LIBS, store, NOW, VETTER)
+        d = D.decide_intent(ctx, intent(name="yarn", version=None, pinned=False, tool="yarn", source="cannot-read"))
+        check("a cannot-read intent is an ask", d.kind, "ask")
+        check("its text is CANNOT_READ_TEXT", d.text, D.CANNOT_READ_TEXT)
+        check("its log word is LOG_CANNOT_READ", d.log_decision, D.LOG_CANNOT_READ)
+
+        def kinds(command):
+            decisions, _ = D.decide_command(ctx, command)
+            return sorted(x.kind for x in decisions)
+
+        capped = "npm" + " --tag t" * 64 + " install left-pad"
+        check("past the reading cap: the unpinned install still denies beside the cannot-read ask",
+              kinds(capped), ["ask", "deny"])
+        rc, out = run_emit(D.decide_command(ctx, capped)[0])
+        check("the strongest wins: exit 2", rc, 2)
+        check_in("the deny names left-pad", "left-pad has no exact version", out)
+        check("the cannot-read ask is not in the deny output", "cannot read this command" in out, False)
+        check("under the cap there is no cannot-read ask", kinds("npm" + " --tag t" * 63 + " install left-pad"), ["deny"])
+        check("nothing found before the cap: the cannot-read ask alone", kinds("yarn exec -y exec " * 7 + "echo hi"), ["ask"])
+
+
 def test_git_source():
     def other(name, version=None, eco="npm"):
         return intent(ecosystem=eco, name=name, version=version, pinned=False, source="other")
@@ -335,7 +360,7 @@ def test_session_id():
 
 def main():
     for fn in (test_clean, test_format_age, test_spellings, test_local_copy_advice, test_decide_intent,
-               test_update_and_indirect, test_update_decisions_end_to_end, test_git_source, test_emit, test_logging, test_session_id):
+               test_update_and_indirect, test_update_decisions_end_to_end, test_cannot_read, test_git_source, test_emit, test_logging, test_session_id):
         fn()
     print("\ndecide-dependency unit: {} passed, {} failed".format(PASSED, FAILED))
     return 1 if FAILED else 0

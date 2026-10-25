@@ -1065,10 +1065,39 @@ def _cannot_read_intent_ok(command, program):
     return ok, "want one intent with {!r}\n       got  {!r}".format(want, got)
 
 
-_MAX_READINGS_CAP_COMMAND = "yarn exec -y exec " * 7 + "npm i x"  # 2^7 = 128 readings > MAX_READINGS (64)
+_MAX_READINGS_CAP_PREFIX = "yarn exec -y exec " * 7  # 2^7 = 128 readings > MAX_READINGS (64)
+# Nothing is found before the cap here, so the cannot-read intent stands alone.
+_MAX_READINGS_CAP_COMMAND = _MAX_READINGS_CAP_PREFIX + "echo hi"
 for _cmd, _program in [("yarn exec \"npm i 'x\"", "yarn"), ("pnpm exec -c \"npm i 'x\"", "pnpm"),
                        ("pnpm -c exec npm i \"'x\"", "pnpm"), (_MAX_READINGS_CAP_COMMAND, "yarn")]:
     add_check("exec cannot-read intent: {!r}".format(_cmd), lambda c=_cmd, p=_program: _cannot_read_intent_ok(c, p))
+
+
+def _cap_keeps_ok(command, found_name, want_cannot_read):
+    """Mark's ruling (2026-10-25): past MAX_READINGS the intents already found are kept and ONE cannot-read intent
+    is added; under the cap there is none. The kept intent is the plain command's own."""
+    got = classify(command)
+    cannot = [i for i in got if i.get("source") == "cannot-read"]
+    kept = [i for i in got if i.get("source") != "cannot-read" and i.get("name") == found_name]
+    ok = len(kept) == 1 and len(cannot) == (1 if want_cannot_read else 0)
+    return ok, "want one {!r} intent and {} cannot-read intent\n       got  {!r}".format(
+        found_name, 1 if want_cannot_read else 0, got)
+
+
+def _tag_command(copies):
+    return "npm" + " --tag t" * copies + " install left-pad"
+
+
+add_check("reading cap keeps the intent found before it: 7 x 'yarn exec -y exec ' then npm i x",
+          lambda: _cap_keeps_ok(_MAX_READINGS_CAP_PREFIX + "npm i x", "x", True))
+add_check("reading cap keeps left-pad: npm + 64 x '--tag t' + install left-pad (64 copies = 65 readings)",
+          lambda: _cap_keeps_ok(_tag_command(64), "left-pad", True))
+add_check("reading cap keeps left-pad: 200 copies", lambda: _cap_keeps_ok(_tag_command(200), "left-pad", True))
+add_check("reading cap edge: 63 copies = 64 readings is under the cap, no cannot-read intent",
+          lambda: _cap_keeps_ok(_tag_command(63), "left-pad", False))
+add_check("reading cap: the kept left-pad intent equals the plain command's", lambda: (
+    [i for i in classify(_tag_command(64)) if i.get("source") != "cannot-read"] == classify("npm install left-pad"),
+    "want exactly the plain command's intents plus a cannot-read one"))
 add_check("exec reading cap: MAX_READINGS is the named constant 64", lambda: (
     getattr(_MOD, "MAX_READINGS", None) == 64, "want a module constant MAX_READINGS = 64"))
 

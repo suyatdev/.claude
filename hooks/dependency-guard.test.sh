@@ -599,8 +599,19 @@ for c in 'pnpm -c exec' 'pnpm --shell-mode exec'; do
     "$c npm i \"${SQ}x\"" "pnpm exec -c npm i \"${SQ}x\""
 done
 # R3: the reading cap. 7 repeats of `yarn exec -y exec ` double the readings 7 times, 128 > MAX_READINGS (64)
-cap_cmd=""; for _i in 1 2 3 4 5 6 7; do cap_cmd="${cap_cmd}yarn exec -y exec "; done; cap_cmd="${cap_cmd}npm i x"
-cannot_read_like_top_level "reading cap: 7 x 'yarn exec -y exec ' then npm i x gets the cannot-read ask" "$cap_cmd"
+# Mark's ruling (2026-10-25): past the cap, the intents already found are KEPT and the cannot-read intent is added,
+# so a deny found before the cap still denies. The 7x command's `npm i x` is found before the cap, so it now denies;
+# it used to get the cannot-read ask, which hid that deny. Where nothing was found, the cannot-read ask stays.
+cap_pre=""; for _i in 1 2 3 4 5 6 7; do cap_pre="${cap_pre}yarn exec -y exec "; done
+deny_cmd "reading cap: 7 x 'yarn exec -y exec ' then npm i x keeps the deny it found before the cap" "${cap_pre}npm i x" "$NOTHING_X" "x@<exact-version>"
+cannot_read_like_top_level "reading cap: 7 x 'yarn exec -y exec ' then echo hi (nothing found) gets the cannot-read ask" "${cap_pre}echo hi"
+# The 63/64 edge: `npm`, N copies of `--tag t`, then `install left-pad`. N = 64 passed the cap and used to ask instead of deny.
+tag_cmd() { local n="$1" out="npm" i; for ((i = 0; i < n; i++)); do out="${out} --tag t"; done; printf '%s install left-pad' "$out"; }
+for n in 63 64 65 200; do
+  deny_cmd "reading cap: npm + $n x '--tag t' + install left-pad is denied like npm install left-pad" "$(tag_cmd "$n")" \
+    "npm left-pad has no exact version" "left-pad@<exact-version>"
+done
+same_result "reading cap: npm + 64 x '--tag t' + install left-pad has the exact result of npm install left-pad" "$(tag_cmd 64)" "npm install left-pad"
 # R7: pins for the Known-gaps lines that name a command
 deny_cmd "R7: \$@ is not special-cased, the args are appended and x is installed: yarn exec 'npm i \"\$@\"' x" \
   "yarn exec 'npm i \"\$@\"' x" "$NOTHING_X" "x@<exact-version>"
