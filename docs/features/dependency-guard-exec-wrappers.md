@@ -546,3 +546,32 @@ Task 2 (2026-10-24): both suites green (hook 527 passed, 0 failed; classifier 11
   `npm --prefix web install`, `npm --prefix web run build`, `pnpm --filter web build`,
   `pnpm --dir web test`, `yarn exec tsc --noEmit` and `pnpm exec prettier --write .` still
   allow. Task 3 records it in the parent card's Known gaps, and a test pins it.
+
+Task 2 probes, re-run after the fix with the Task 0 harness and expectations (those are the
+pre-fix results): 28 of 75 unchanged and 47 changed.
+
+- **Unchanged:** the three controls; every allow row (`yarn exec echo hi`, `pnpm m`,
+  `pnpm recursive`, `npm ci`, and the `bun exec`, `yarn add -w x` and `bun --cwd add x` Known-gaps
+  pins); every already-denied row; and every "must stay" deny and ask row.
+- **Changed, all as the card intends:**
+  - every hole row, including `pnpm --reporter silent exec npm i x`, now denies like the plain
+    command;
+  - `yarn exec npm update`, `yarn workspace web workspaces foreach -A up` and `pnpm m up` now ask
+    like the plain update;
+  - `pnpm -c exec npm i "'x"`, `pnpm exec -c npm i "'x"` and the seven-deep `yarn exec -y exec`
+    chain now get the cannot-read ask;
+  - the R7 pins and the three over-reads now deny.
+
+The one row that changed outside that pattern is `npm --prefix x ci` (above).
+`yarn exec 'npm i "$@"' x` denies naming both `$` and `x` (stderr re-read).
+
+Task 3 (2026-10-24): the parent card's Known-gaps edits and Verification pointer are in
+`14a2ac5`. Three pins were added there: `npm --prefix x ci` and `npm --prefix exec ci` (deny),
+and `npm --prefix frontend ci` (allow). They are not part of Task 1's red suite: the two deny pins
+pin post-fix behaviour, which Task 0 measured as allowed before the fix. Hook suite: 530 passed,
+0 failed.
+
+The new Known-gaps lines add 16 lines above the parent card's Verification. As a result,
+`docs/features/permission-ask-answerer.md:20`, which cites `dependency-vetting-guard.md:1367-1392`,
+now points 16 lines early: the cited text is at `:1383-1408`. That card belongs to another
+feature, so it is left for its owner and flagged in the PR.
