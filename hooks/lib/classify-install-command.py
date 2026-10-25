@@ -77,7 +77,8 @@ EXEC_PROGRAMS = YARN_PROGRAMS | PNPM_PROGRAMS  # `<program> exec <command>` runs
 WIDTH_PROGRAMS = EXEC_PROGRAMS | {"npm"}  # R9: the programs whose option widths are read both ways (bun is not)
 PNPM_RECURSIVE_ALIASES = frozenset(["recursive", "multi", "m"])  # pnpm rewrites these to --recursive
 SHELL_MODE_FLAGS = frozenset(["-c", "--shell-mode"])
-# R3: the most readings one command may start, over every scan and every nested exec; past it, the cannot-read ask
+# R3: the most readings one command may start, over every scan and every nested exec; past it, no more start and
+# the cannot-read ask is added to the intents of those that did
 MAX_READINGS = 64
 UV_UPGRADE_FLAGS = frozenset(["-U", "--upgrade"])
 UV_UPGRADE_PACKAGE_FLAGS = frozenset(["-P", "--upgrade-package"])
@@ -210,21 +211,21 @@ def _subcommand(args, value_flags):
 
 
 # ------------------------------------------------------------------------------------ readings
-class _ReadingCapExceeded(Exception):
-    """One command needed more than MAX_READINGS readings (R3)."""
-
-
 class _Readings:
     """Counts the readings started for one command, across every scan and nested exec (R3). `outer` is the
-    first node package manager reached; it names the cannot-read intent a spent budget turns into."""
+    first node package manager reached; it names the cannot-read intent a spent budget adds. `capped` is set
+    the first time a reading is refused: every reading already started is still classified."""
 
     def __init__(self):
-        self.count, self.outer = 0, None
+        self.count, self.outer, self.capped = 0, None, False
 
     def spend(self):
+        """True when one more reading may start. Past MAX_READINGS it is False, from then on, and counts nothing."""
+        if self.count >= MAX_READINGS:
+            self.capped = True
+            return False
         self.count += 1
-        if self.count > MAX_READINGS:
-            raise _ReadingCapExceeded()
+        return True
 
 
 def _merge_readings(readings):
@@ -252,7 +253,8 @@ def _may_take_value(args, i):
 
 
 def _end_reading(budget, words, flags):
-    budget.spend()
+    if not budget.spend():
+        return []
     return [(words[0], words[1:], tuple(flags))] if words else [(None, [], tuple(flags))]
 
 
@@ -262,7 +264,8 @@ def _sub_readings(prog, args, budget, flags=()):
     alone, so a width the lists get wrong cannot hide the subcommand; one branch ends at the next word, so
     k such options give k + 1 readings. A program outside WIDTH_PROGRAMS (bun) keeps its single reading."""
     if prog not in WIDTH_PROGRAMS:
-        budget.spend()
+        if not budget.spend():
+            return []
         sub, rest = _subcommand(args, NODE_VALUE_FLAGS)
         return [(sub, rest, ())]
     flags, i = list(flags), 0
@@ -274,8 +277,8 @@ def _sub_readings(prog, args, budget, flags=()):
         flag, _value, step = _read_option(args, i, NODE_VALUE_FLAGS)
         flags.append(flag)
         if _may_take_value(args, i):
+            valued = _sub_readings(prog, args[i + 2:], budget, flags)  # first, so the cap keeps today's reading
             alone = _end_reading(budget, args[i + 1:], flags)
-            valued = _sub_readings(prog, args[i + 2:], budget, flags)
             return valued + alone if step == 2 else alone + valued
         i += step
     return _end_reading(budget, [], flags)
@@ -499,12 +502,11 @@ def _exec_readings(prog, args, shell, budget):
         if prog in PNPM_PROGRAMS and args[i] in SHELL_MODE_FLAGS:
             shell = True
         elif _may_take_value(args, i):
-            budget.spend()
-            found.append((shell, args[i + 1:]))
+            if budget.spend():
+                found.append((shell, args[i + 1:]))
             i += 1
         i += 1
-    if i < len(args):
-        budget.spend()
+    if i < len(args) and budget.spend():
         found.append((shell, args[i:]))
     return found
 
@@ -825,13 +827,15 @@ def _exempt_value(assigns):
 
 
 def _classify_segment(argv):
-    """The intents of one segment. One that needs more than MAX_READINGS readings (R3) is replaced, whole, by
-    the cannot-read intent: asking is the fail-safe answer, and it can never hide a deny."""
+    """The intents of one segment. One that needs more than MAX_READINGS readings (R3) keeps the intents of the
+    readings it did start, and gains one cannot-read intent for the rest: a deny found before the cap still
+    denies, and the ask covers only what was never read."""
     budget = _Readings()
-    try:
-        return _classify_argv(argv, budget)
-    except _ReadingCapExceeded:
-        return [_cannot_read_intent(budget.outer)]
+    intents = _classify_argv(argv, budget)
+    if not budget.capped:
+        return intents
+    marker = _cannot_read_intent(budget.outer)
+    return intents if marker in intents else intents + [marker]
 
 
 def classify(src):
