@@ -544,6 +544,128 @@ done
 # Evidence row 8: --cwd was already handled
 deny_cmd "control: yarn --cwd web add lodash is already denied" "yarn --cwd web add lodash" "npm lodash has no exact version" "lodash@<exact-version>"
 
+# ---- yarn exec, pnpm exec, nested yarn wrappers, pnpm option widths (docs/features/dependency-guard-exec-wrappers.md, R1-R10)
+# `exec` runs what follows; a yarn wrapper inside a yarn wrapper is unwrapped until none is left; pnpm's -w, --workspace
+# and --config are booleans; an option the guard does not know gets both widths; pnpm's m/multi/recursive is -r.
+# Every "like" row goes through same_result, so its plain command must itself decide. Rows marked (kept) in their
+# comment pass before the fix too: they pin behaviour the fix must not change.
+new_state
+SQ="'"
+NOTHING_X="npm x has no exact version"
+cannot_read_like_top_level() { # $1 desc, $2 command: the cannot-read ask a top-level unreadable command gets, and the cannot-read log word
+  local rc_p out_p err_p before
+  run "$(bash_payload "${unreadable_pre}npm i zod@3.23.8")"; rc_p=$RC; out_p=$OUT; err_p=$ERR
+  if [ -z "$out_p" ]; then say_bad "$1" "control (a top-level unreadable command) was not asked about"; return; fi
+  before="$(log_count)"; run "$(bash_payload "$2")"
+  if [ "$RC" -ne "$rc_p" ] || [ "$OUT" != "$out_p" ] || [ "$ERR" != "$err_p" ]; then
+    say_bad "$1" "want the cannot-read ask (rc=$rc_p out=[$out_p]); got rc=$RC out=[$OUT] err=[$ERR]"; return; fi
+  if [ $(( $(log_count) - before )) -ne 1 ]; then say_bad "$1" "want exactly one log line; gained $(( $(log_count) - before ))"; return; fi
+  case "$(tail -n 1 "$STATE/dependency-guard.log")" in
+    *"${TAB}cannot-read${TAB}"*) say_ok "$1" ;;
+    *) say_bad "$1" "the log word is not cannot-read: $(tail -n 1 "$STATE/dependency-guard.log")" ;; esac
+}
+
+# R1, R2, R3, R4 + Evidence table 1 + Scenarios: the exec'd command decides like the same command typed alone
+for row in 'yarn exec npm i x|npm i x' 'yarn exec npm update|npm update' 'yarn exec yarn add x|yarn add x' \
+           'yarn exec npx cowsay|npx cowsay' "yarn exec 'npm i x'|npm i x" \
+           'yarn workspace web exec npm i x|npm i x' 'yarn workspaces foreach -A exec npm i x|npm i x' \
+           'yarnpkg exec npm i x|npm i x' 'corepack yarn exec npm i x|npm i x' \
+           'pnpm exec npm i x|npm i x' 'pn exec npm i x|npm i x' 'pnpm -r exec npm i x|npm i x' \
+           "yarn exec 'cd web && npm i x'|npm i x" "yarn exec 'cd web && npm' i x|npm i x" \
+           'yarn exec -- npm i x|npm i x' 'pnpm exec -- npm i x|npm i x' \
+           'pnpm exec --filter web npm i x|npm i x' 'pnpm exec -r npm i x|npm i x' 'pnpm exec --dir=web npm i x|npm i x' \
+           "pnpm exec -c 'npm i x'|npm i x" 'pnpm exec -c npm i x|npm i x' 'pnpm --shell-mode exec npm i x|npm i x' \
+           'pnpm --reporter silent exec npm i x|npm i x' 'pnpm -w exec npm i x|npm i x' 'pnpm m exec npm i x|npm i x' \
+           'VET_EXEMPT=reason yarn exec npm i x@1.0.0|VET_EXEMPT=reason npm i x@1.0.0' \
+           "yarn exec 'VET_EXEMPT=reason npm i x@1.0.0'|npm i x@1.0.0"; do
+  same_result "exec: [${row%|*}] has the exact result of [${row##*|}]" "${row%|*}" "${row##*|}"
+done
+# R4: a yarn wrapper inside a yarn wrapper
+for row in 'yarn workspace web workspaces foreach -A add x|yarn add x' 'yarn workspace a workspace b add x|yarn add x' \
+           'yarn workspaces foreach -A workspace b add x|yarn add x'; do
+  same_result "nested wrappers: [${row%|*}] has the exact result of [${row##*|}]" "${row%|*}" "${row##*|}"
+done
+# R5: an update behind nested wrappers keeps every wrapper word, never the workspace name
+ask_cmd "nested wrappers keep every wrapper word in an update ask: yarn workspace web workspaces foreach -A up" \
+  "yarn workspace web workspaces foreach -A up" "yarn workspace workspaces foreach up everything: $UPDATE_NOTE"
+# R2: a string the lexer cannot read, and the pnpm shell-mode string; both compare with a top-level unreadable command
+cannot_read_like_top_level "cannot-read: yarn exec \"npm i 'x\"" "yarn exec \"npm i ${SQ}x\""
+cannot_read_like_top_level "cannot-read: pnpm exec -c \"npm i 'x\"" "pnpm exec -c \"npm i ${SQ}x\""
+cannot_read_like_top_level "cannot-read: pnpm exec -c npm i \"'x\"" "pnpm exec -c npm i \"${SQ}x\""
+cannot_read_like_top_level "cannot-read: pnpm -c exec npm i \"'x\"" "pnpm -c exec npm i \"${SQ}x\""
+cannot_read_like_top_level "cannot-read: pnpm --shell-mode exec npm i \"'x\"" "pnpm --shell-mode exec npm i \"${SQ}x\""
+for c in 'pnpm -c exec' 'pnpm --shell-mode exec'; do
+  same_result "shell mode typed before exec: [$c npm i \"'x\"] has the exact result of [pnpm exec -c npm i \"'x\"]" \
+    "$c npm i \"${SQ}x\"" "pnpm exec -c npm i \"${SQ}x\""
+done
+# R3: the reading cap. 7 repeats of `yarn exec -y exec ` double the readings 7 times, 128 > MAX_READINGS (64)
+# Mark's ruling (2026-10-25): past the cap, the intents already found are KEPT and the cannot-read intent is added,
+# so a deny found before the cap still denies. The 7x command's `npm i x` is found before the cap, so it now denies;
+# it used to get the cannot-read ask, which hid that deny. Where nothing was found, the cannot-read ask stays.
+cap_pre=""; for _i in 1 2 3 4 5 6 7; do cap_pre="${cap_pre}yarn exec -y exec "; done
+deny_cmd "reading cap: 7 x 'yarn exec -y exec ' then npm i x keeps the deny it found before the cap" "${cap_pre}npm i x" "$NOTHING_X" "x@<exact-version>"
+cannot_read_like_top_level "reading cap: 7 x 'yarn exec -y exec ' then echo hi (nothing found) gets the cannot-read ask" "${cap_pre}echo hi"
+# The 63/64 edge: `npm`, N copies of `--tag t`, then `install left-pad`. N = 64 passed the cap and used to ask instead of deny.
+tag_cmd() { local n="$1" out="npm" i; for ((i = 0; i < n; i++)); do out="${out} --tag t"; done; printf '%s install left-pad' "$out"; }
+for n in 63 64 65 200; do
+  deny_cmd "reading cap: npm + $n x '--tag t' + install left-pad is denied like npm install left-pad" "$(tag_cmd "$n")" \
+    "npm left-pad has no exact version" "left-pad@<exact-version>"
+done
+same_result "reading cap: npm + 64 x '--tag t' + install left-pad has the exact result of npm install left-pad" "$(tag_cmd 64)" "npm install left-pad"
+# R7: pins for the Known-gaps lines that name a command
+deny_cmd "R7: \$@ is not special-cased, the args are appended and x is installed: yarn exec 'npm i \"\$@\"' x" \
+  "yarn exec 'npm i \"\$@\"' x" "$NOTHING_X" "x@<exact-version>"
+deny_cmd "R7: an option read both ways: pnpm exec --filter npm i x" "pnpm exec --filter npm i x" "$NOTHING_X" "x@<exact-version>"
+deny_cmd "R7 over-read: pnpm -r run add x is no longer allowed" "pnpm -r run add x" "$NOTHING_X" "x@<exact-version>"
+deny_cmd "R7 over-read: pnpm --filter add test is no longer allowed" "pnpm --filter add test" "npm test has no exact version" "test@<exact-version>"
+deny_cmd "R7 over-read: npm --prefix add test is no longer allowed" "npm --prefix add test" "npm test has no exact version" "test@<exact-version>"
+# Task 2 found the runner-alias spelling of the same over-read; Mark's stop rule made it a Known gap.
+deny_cmd "Known gap (over-read): npm --prefix x ci reads x as npm's runner alias" "npm --prefix x ci" "npm ci has no exact version" "ci@<exact-version>"
+deny_cmd "Known gap (over-read): npm --prefix exec ci reads exec as the runner" "npm --prefix exec ci" "npm ci has no exact version" "ci@<exact-version>"
+allow_cmd "Known gap (kept): an ordinary --prefix directory is unaffected: npm --prefix frontend ci" "npm --prefix frontend ci"
+allow_cmd "R7 (kept): bun exec 'npm i x' stays allowed (bun is out of scope)" "bun exec 'npm i x'"
+allow_cmd "R7 (kept): yarn add -w x stays allowed (yarn's own subcommand words keep one reading)" "yarn add -w x"
+allow_cmd "R7 (kept): bun --cwd add x stays allowed (bun is outside R9)" "bun --cwd add x"
+
+# R9: pnpm's -w, --workspace and --config are booleans; an option the guard does not know gets both widths
+for row in 'pnpm -w add x|pnpm add x' 'pn -w add x|pnpm add x' 'pnpm add -w x|pnpm add x' 'pnpm add -w x@1.0.0|pnpm add x@1.0.0' \
+           'pnpm i -w x|pnpm i x' 'pnpm add --workspace x|pnpm add x' 'pnpm --workspace add x|pnpm add x' \
+           'pnpm add --config x|pnpm add x' 'pnpm add --config x@1.0.0|pnpm add x@1.0.0' \
+           'pnpm --reporter silent add x|pnpm add x' 'pnpm --store-dir /s add x|pnpm add x' 'pnpm --state-dir /s add x|pnpm add x' \
+           'yarn --mutex file:/tmp/m add x|yarn add x' 'yarn -w add x|yarn add x' \
+           'pnpm dlx -w cowsay|pnpm dlx cowsay' 'pnpm dlx -c cowsay|pnpm dlx cowsay'; do
+  same_result "R9 widths: [${row%|*}] has the exact result of [${row##*|}]" "${row%|*}" "${row##*|}"
+done
+# R10: pnpm's recursive/multi/m alias is --recursive
+for row in 'pnpm m add x|pnpm -r add x' 'pnpm multi add x|pnpm -r add x' 'pnpm recursive add x|pnpm -r add x' 'pnpm m up|pnpm -r up'; do
+  same_result "R10 alias: [${row%|*}] has the exact result of [${row##*|}]" "${row%|*}" "${row##*|}"
+done
+allow_cmd "R10 (kept): pnpm m with nothing after it installs nothing" "pnpm m"
+allow_cmd "R10 (kept): pnpm recursive with nothing after it installs nothing" "pnpm recursive"
+
+# (kept) today's reading stays one of the readings, so nothing denied or asked today can become an allow
+for c in 'pnpm -w web add x' 'pn -w web add x' 'pnpm --workspace web add x' 'pnpm --config foo add x' 'pnpm add -w --filter x'; do
+  deny_cmd "kept: still denied, naming x: $c" "$c" "$NOTHING_X" "x@<exact-version>"
+done
+ask_cmd "kept: still asked: pnpm -w web update" "pnpm -w web update" "pnpm update everything: $UPDATE_NOTE"
+ask_cmd "kept: still asked: pnpm -w foo audit --fix" "pnpm -w foo audit --fix" "pnpm audit --fix everything: $UPDATE_NOTE"
+ask_cmd "kept: still asked: pnpm -r up" "pnpm -r up" "pnpm up everything: $UPDATE_NOTE"
+deny_cmd "kept: npm's -w still takes a value, so x is named: npm -w web install x" "npm -w web install x" "$NOTHING_X" "x@<exact-version>"
+run "$(bash_payload "npm -w web install x")"; lacks "kept: npm -w web install x never names web" "$ERR" "npm web" "$NOTHING_X"
+# (kept) rows of the Evidence tables that are already handled
+same_result "kept: yarn workspace web add x has the exact result of yarn add x" "yarn workspace web add x" "yarn add x"
+deny_cmd "kept: npm exec -- npm i x is refused as a runner naming a package manager" "npm exec -- npm i x" \
+  "dependency-guard: npm exec would fetch the package manager npm"
+for c in 'pnpm --workspace-root add x' 'pnpm --filter web add x' 'pnpm -r add x' "pnpm -c exec cd web '&&' npm i x" \
+         'pnpm --reporter=silent add x' 'pnpm add --store-dir /s x'; do
+  deny_cmd "kept: already denied, naming x: $c" "$c" "$NOTHING_X" "x@<exact-version>"
+done
+deny_cmd "kept: pnpm dlx cowsay is denied" "pnpm dlx cowsay" "npm cowsay has no exact version" "cowsay@<exact-version>"
+# R6 (kept): an exec whose inner command installs nothing, or with nothing after it, stays allowed
+for c in 'yarn exec echo hi' 'yarn exec tsc' 'pnpm exec eslint .' 'yarn exec' 'pnpm exec -c' "yarn exec \"echo ${SQ}hi\""; do
+  allow_cmd "R6 (kept): stays allowed: $c" "$c"
+done
+
 # ---- log forging
 new_state
 before="$(log_count)"

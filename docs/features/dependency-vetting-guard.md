@@ -1064,16 +1064,37 @@ Scenario: an update beside a pinned install still reaches the strongest decision
   `bundle` (not a recognised tool at all), `uv export -U` and `uv tree -U` (both re-lock),
   `find … -exec npm i` and GNU `parallel npm i ::: …` (neither is `xargs`).
   Extending the table is a deliberate edit, not drift.
-- `yarn exec <cmd>` — including `yarn workspace <name> exec …` and `yarn workspaces foreach … exec
-  …` — is allowed with no output, so `yarn exec npm i x` installs unvetted; and a yarn workspace
-  wrapper nested in another (`yarn workspace web workspaces foreach -A add x`) is unwrapped only
-  once. Both measured ALLOW on `d19d46b` and on `03cac59` (2026-10-22, by the
-  `dependency-guard-yarn-workspaces` observability judge, then re-run against an archived hook with
-  a deny control) — pre-existing, not introduced by that fix.
 - An install inside a script file, a Makefile target, or a `package.json` `scripts` entry.
 - `bash -c "…"`, `sh -c`, `eval "…"` (quoted), backticks — including under `xargs` (`xargs sh -c
   'npm i {}'`) — the lexer keeps the body as one token
-  (`hooks/lib/shell_segments.py:63-69`).
+  (`hooks/lib/shell_segments.py:63-69`). `bun exec '<string>'` is the same case: bun runs one
+  quoted shell string, so `bun exec 'npm i x'` is allowed silently.
+- `yarn exec` with a string that refers to its own arguments (`yarn exec 'npm i "$@"' x`) is read
+  as if the arguments were appended, so the guard also names a package `$`. yarn 4 would
+  substitute instead. Either way `x` is installed, and the command is denied.
+- An option the guard does not know the width of (whether it takes a value) is read both ways, so
+  `pnpm exec --filter npm i x` is denied whether `npm` is the filter value or the program.
+- Because of that both-ways reading, a command whose option value is spelled like an npm, yarn or
+  pnpm subcommand can be over-read and refused: `pnpm -r run add x`, `pnpm --filter add test`,
+  `npm --prefix add test`, and a directory named like npm's runner alias, `npm --prefix x ci` and
+  `npm --prefix exec ci` (`ci` read as the package to run; found by
+  `dependency-guard-exec-wrappers` Task 2, recorded under Mark's stop rule). Everyday forms
+  (`npm --prefix frontend ci`, `pnpm --filter web build`) are unaffected.
+- `yarn add -w x` is allowed silently: yarn's own subcommand words keep one reading, and yarn's
+  `-w` was not checked against yarn's source.
+- `bun --cwd add x` is allowed silently: bun is outside the both-ways reading.
+- A command that needs more than 64 readings (`MAX_READINGS`, e.g. seven nested
+  `yarn exec -y exec`) is read only up to the cap. Anything found by then still applies, so a deny
+  found before the cap still denies, and the cannot-read ask is added. A reading the cap never
+  started is not read, so a command built to put its install there gets only the ask. With
+  several hundred value-taking options before the subcommand, the reader runs out of Python
+  recursion depth. Measured: `npm`, then 950 copies of `--tag t`, then `install left-pad` still
+  denies; with 1000 copies (8,020 bytes) the guard asks with "dependency-guard is broken:
+  RecursionError" instead of denying.
+  It never allows (exec-wrappers card, round-2 implementation judge; Mark chose to disclose it).
+- Among a pnpm subcommand's own words, only `-w`, `--workspace`, `--config` and the runner's `-c`
+  were checked against pnpm. Any other `NODE_VALUE_FLAGS` entry that is a boolean in pnpm still
+  swallows the package after it there.
 - Variable indirection (`P=zod; npm i $P@1`).
 - A command substitution inside double quotes or backticks in an ordinary command — e.g.
   `echo "$(npm i left-pad)"` — is kept as one token by the lexer, so the install inside it is not
@@ -1331,6 +1352,8 @@ Scenario: an update beside a pinned install still reaches the strongest decision
 
 - yarn workspace forms: fixed on `fix/dependency-guard-yarn-workspaces` — see
   `docs/features/dependency-guard-yarn-workspaces.md`.
+- `yarn exec`, `pnpm exec`, nested yarn wrappers, option widths and the pnpm `m` alias: fixed on
+  `fix/dependency-guard-exec-wrappers` — see `docs/features/dependency-guard-exec-wrappers.md`.
 
 **Task 11, after merge (2026-10-15).** #109 merged as `281a1c5`; `git merge-base --is-ancestor
 102b3b0 origin/main` → 0.
