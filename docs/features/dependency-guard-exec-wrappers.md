@@ -593,8 +593,17 @@ is found, still gets the ask. What remains is a Known gap in the parent card: a 
 never starts is not read, so a command built to put its install there gets only the ask. R3's
 text ("in place of the intents found so far") is amended by the ruling above, not edited.
 
-The new Known-gaps lines add 18 lines above the parent card's Verification (16 in `14a2ac5`, plus
-2 with the cap fix). As a result, `docs/features/permission-ask-answerer.md:20`, which cites
-`dependency-vetting-guard.md:1367-1392`, now points 18 lines early: the cited text is at
-`:1385-1410`. That card belongs to another
+Round-2 implementation judge (on `699fbb9`, risk low, confidence high). It found that a very long
+chain of value-taking options exhausts Python's recursion depth before the cap is checked. Re-measured:
+`npm`, then 1000 copies of `--tag t`, then `install left-pad` gets the ask "dependency-guard is
+broken: RecursionError"; with 950 copies it denies. The guard never allows in this case. Mark chose
+on 2026-10-25 to disclose this in the parent card's Known gaps rather than rework the reader, with
+no further judge round on behaviour. The `_sub_readings` comment that claimed "the cap keeps
+today's reading" now says only that the value reading is spent first. Classifier suite after that
+comment edit: 1199 passed, 0 failed.
+
+The new Known-gaps lines add 23 lines above the parent card's Verification (16 in `14a2ac5`, 2
+with the cap fix, 5 with the recursion note). As a result, `docs/features/permission-ask-answerer.md:20`, which cites
+`dependency-vetting-guard.md:1367-1392`, now points 23 lines early: the cited text is at
+`:1390-1415`. That card belongs to another
 feature, so it is left for its owner and flagged in the PR.

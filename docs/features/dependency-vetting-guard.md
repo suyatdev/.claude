@@ -1086,7 +1086,12 @@ Scenario: an update beside a pinned install still reaches the strongest decision
 - A command that needs more than 64 readings (`MAX_READINGS`, e.g. seven nested
   `yarn exec -y exec`) is read only up to the cap. Anything found by then still applies, so a deny
   found before the cap still denies, and the cannot-read ask is added. A reading the cap never
-  started is not read, so a command built to put its install there gets only the ask.
+  started is not read, so a command built to put its install there gets only the ask. With
+  several hundred value-taking options before the subcommand, the reader runs out of Python
+  recursion depth. Measured: `npm`, then 950 copies of `--tag t`, then `install left-pad` still
+  denies; with 1000 copies (about 7.7 KB) the guard asks with "dependency-guard is broken:
+  RecursionError" instead of denying.
+  It never allows (exec-wrappers card, round-2 implementation judge; Mark chose to disclose it).
 - Among a pnpm subcommand's own words, only `-w`, `--workspace`, `--config` and the runner's `-c`
   were checked against pnpm. Any other `NODE_VALUE_FLAGS` entry that is a boolean in pnpm still
   swallows the package after it there.

@@ -277,7 +277,7 @@ def _sub_readings(prog, args, budget, flags=()):
         flag, _value, step = _read_option(args, i, NODE_VALUE_FLAGS)
         flags.append(flag)
         if _may_take_value(args, i):
-            valued = _sub_readings(prog, args[i + 2:], budget, flags)  # first, so the cap keeps today's reading
+            valued = _sub_readings(prog, args[i + 2:], budget, flags)  # the value reading is spent first, so the cap keeps it
             alone = _end_reading(budget, args[i + 1:], flags)
             return valued + alone if step == 2 else alone + valued
         i += step
