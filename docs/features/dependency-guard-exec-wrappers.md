@@ -571,6 +571,15 @@ and `npm --prefix frontend ci` (allow). They are not part of Task 1's red suite:
 pin post-fix behaviour, which Task 0 measured as allowed before the fix. Hook suite: 530 passed,
 0 failed.
 
+**Ruling (Mark, 2026-10-25): the reading cap keeps the denies it found.** The implementation-stage
+observability judge (on `280000a`) found that the cap replaced every intent the command had
+produced with the cannot-read intent. Measured: `npm`, then 64 copies of `--tag t`, then
+`install left-pad` asked where it used to deny; with 63 copies it still denied. So R3's "can
+never hide a deny" was false as built. Mark chose to fix it rather than disclose it. R3 is amended
+to say that past `MAX_READINGS`, the intents found before the cap are kept and the cannot-read
+intent is added to them. A deny already found therefore still denies. Tests at the 63/64 edge and
+a decider unit test for the cannot-read branch come first.
+
 The new Known-gaps lines add 16 lines above the parent card's Verification. As a result,
 `docs/features/permission-ask-answerer.md:20`, which cites `dependency-vetting-guard.md:1367-1392`,
 now points 16 lines early: the cited text is at `:1383-1408`. That card belongs to another
