@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: fix/dependency-guard-exec-wrappers
 ---
@@ -466,12 +466,12 @@ Scenario: an exec with nothing after it is allowed
 
 ## Tasks
 
-- [ ] 0. Re-measure on the branch base: re-run every Evidence-table probe and re-check each
+- [x] 0. Re-measure on the branch base: re-run every Evidence-table probe and re-check each
   file:line under "What the tools actually do" at the pinned versions. Nothing in the spec is
   edited here: if any result differs, stop and announce "GATE: Spec change needed" (the phase gate
   forbids spec edits during implementation). Source is read only as a tarball or via `gh api` into
   a `mktemp -d` directory, never installed or run.
-- [ ] 1. Tests first, in `hooks/dependency-guard.test.sh` (hook level) and the classifier's own
+- [x] 1. Tests first, in `hooks/dependency-guard.test.sh` (hook level) and the classifier's own
   suite: one assertion per Evidence-table row, per scenario, and per R7 pin, and replace any pin
   found under R7. Every "like `<plain command>`" row uses the existing `same_result`
   (`hooks/dependency-guard.test.sh:444`), which compares exit code, stdout and stderr with the plain
@@ -497,10 +497,12 @@ Scenario: an exec with nothing after it is allowed
 
   Pass condition: exactly the first group fails, and nothing else does. Commit the red suite on
   its own (`TEST_EXEMPT`, since a red suite writes no marker).
-- [ ] 2. Classifier change (R1–R6, R8–R10) and the R2 decider branch. Re-run both suites: green; the pre-existing assertion count
+- [x] 2. Classifier change (R1–R6, R8–R10) and the R2 decider branch. Re-run both suites: green; the pre-existing assertion count
   is unchanged apart from replaced pins. Re-run the Evidence-table probes.
-- [ ] 3. Parent card Known-gaps edits and the pointer line (R7).
-- [ ] 4. Verification section; observability judge (implementation stage, Opus high); PR.
+- [x] 3. Parent card Known-gaps edits and the pointer line (R7).
+- [x] 4. Verification section; observability judge (implementation stage, Opus high); PR.
+  Merged as PR #117 (merge commit `aead357`); `git merge-base --is-ancestor 84e404f origin/main`
+  exits 0.
 
 ## Gotchas
 
