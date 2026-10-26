@@ -4,199 +4,196 @@ model_tier: low
 branch: none  # planning card on docs/git-guard-quiet-spec; implementation branch is created at `gate confirmed`
 ---
 
-# git-guard: real blocks for `git -C`, then a session toggle for the leftover prompt
+# git-guard quiet — a session toggle that lets `git -C` through unless it lands on `main`
 
-> **Phase: planning — revision 3 (2026-10-26).** Revision 1 (`64b6232`) proposed silencing the
-> `-C` prompt alone; round 1 of both judges measured that for a `-C` command the prompt is the
-> **only** check, so Mark chose option B. Revision 2 (`4bc66cb`) did that for single commands;
-> round 2 (compliance: fail, 4; observability: risk medium) found it still treated a line as having
-> one directory — mixed lines, a `cd` before `-C`, and option order could each reopen the hole —
-> and that changing the shared classifier facts would move doc-guard and feature-sync-guard onto
-> the wrong repository. This revision evaluates **each segment** with **new** facts only git-guard
-> reads, and reuses worktree-guard's resolver. No code exists. Next: judges round 3 → Mark reviews
-> → `gate confirmed`.
+> **Phase: planning — revision 4 (2026-10-26).** History: rev 1 (`64b6232`) silenced the `-C`
+> prompt outright; round 1 measured that for a `-C` command the prompt is the **only** check, so a
+> commit to `main` would have gone through. Revs 2–3 (`4bc66cb`, `8780b3f`) tried to give every
+> `-C` command the real blocks in every session; rounds 2–3 kept finding new holes in that
+> (mixed lines, `cd` composition, a resolver that exits instead of returning, `GIT_DIR=`), and the
+> round-3 cap escalated to Mark. Mark then set the rule this revision implements, in his words:
+> with quiet on, *"let every `-C` command through … including commit and push as long as it is"*
+> not committing *"to a main/master or any main/master of any other repository"*. **Default
+> behaviour is now unchanged** — everything new happens only while quiet is on. No code exists.
+> Next: judges round 4 → Mark reviews → `gate confirmed`.
 
 ## Why
 
 `hooks/git-guard.sh` asks for confirmation whenever a git command carries an option ahead of the
-subcommand that it cannot account for — in practice `git -C <dir> …`, which this setup uses
-constantly to work in worktrees without moving the session's cwd. Mark reports being prompted
-several times per session and approving "almost all the time". A prompt that is always approved
-trains approval without reading.
+subcommand that it cannot account for — in practice `git -C <dir> …`. Mark reports several prompts
+per session, approved "almost all the time". His two most recent, verbatim in shape:
 
-Measured on `origin/main` `9cc42f4` (`hooks/lib/classify-git-command.py:537-540`): when a segment
-carries a blocking option, the classifier `continue`s before emitting any `COMMIT*`/`PUSH*` fact
-(`# denying: no COMMIT*/PUSH* fact for THIS segment`). So for `git -C . commit -m x` on `main`
-and `git -C . push --force`, git-guard emits only the ask — the deny checks at
-`hooks/git-guard.sh:316` (`PUSH_FORCE`) and `:379` (`COMMIT && on_main`) have nothing to fire on.
-Both judges reproduced this against the live hook in a scratch repo.
+- `W=~/.worktrees/Snatch-Bracket/roadmap-lane-updater; git -C "$W" status --short; git -C "$W" hash-object docs/features/roadmap-lane-updater.md; …`
+- `git -C /Users/marksuyat/.worktrees/Snatch-Bracket/round-config-validation-gaps cat-file -t <sha>`
 
-Mark's rulings (2026-10-26): **silence only the prompt, keep the real blocks on**; and, once told
-the blocks don't currently cover `-C`, **option B** — make them cover `-C`, then add the toggle.
+Both are read-only. A prompt that is always approved trains approval without reading.
+
+Measured on `origin/main` `9cc42f4` (`hooks/lib/classify-git-command.py:537-540`): a segment with a
+blocking option gets **no** `COMMIT*`/`PUSH*` fact, so for `git -C <repo on main> commit` and
+`git -C <repo> push --force` the ask is the only thing git-guard does. Silencing it naively would
+open those. This card silences it only where the command provably cannot land on `main`/`master`.
 
 ## Decisions
 
 | # | Question | Decision | Whose |
 |---|---|---|---|
-| D1 | Order of work | Part 1 (`-C` gets the real blocks) lands before Part 2 (the toggle) and is a precondition for it | Mark (option B) |
-| D2 | Unit of evaluation | **Each git segment on the line is judged on its own**, against its own effective directory. A line is denied if any segment is denied. Never "the line's `-C` directory" | Claude's call, from round-2 `writing-specs/unambiguous-requirements` |
-| D3 | How a segment's directory is found | `resolve_effective_repo` in `hooks/lib/worktree_guard_bash_arms.sh` — the existing rule that composes earlier `cd`s, then the segment's own `-C`, and returns the owning repository or "unresolvable". **No second copy**: git-guard calls it (moving it to a shared lib is allowed if worktree-guard's GROUP S substitution still binds) | Claude's call, from round-2 observability finding 4 |
-| D4 | Shared facts | **Unchanged.** `COMMIT*`, `PUSH*`, `SCOPE_UNKNOWN` and `SEG_GIT_C` keep exactly today's meaning, so doc-guard (`:144`) and feature-sync-guard (`:111`), which read `has_fact COMMIT`, see no difference. Part 1 adds **new** segment-indexed facts that only git-guard reads | Claude's call, from round-2 `core-conduct/extend-not-alter-shared-interface` |
-| D5 | A `-C` segment that commits or pushes but can't be resolved | Still asks, and quiet never silences it — for it the ask is the only check. Exception: a bare `--force` push is **denied** whether or not its directory resolves, since that block holds on every branch | Claude's call, from Mark's "keep the real blocks on" and round-2 observability finding 7 |
-| D6 | What the toggle silences | A line's ask only when **every** reason for it is a `-C` segment that neither commits nor pushes. Any other option **anywhere on the line** (`-c`, `--git-dir`, `--work-tree`, `--namespace`, unrecognised) makes the ask unsilenceable — `-c core.hooksPath=/dev/null` switches off git's own hooks, including layer 2 | Claude's call, from round-1 and round-2 `writing-specs/edge-cases`; Mark only ever asked about `-C` |
-| D7 | How quiet is switched on | Mark types the fixed phrase `git-guard quiet` | Mark |
-| D8 | How it is switched back on | The fixed phrase `git-guard on` | Claude's call, offered to Mark, not objected to |
-| D9 | Default | Every session starts with the prompt **on**; nothing carried over can turn it off | Mark |
-| D10 | Who flips the flag | A `UserPromptSubmit` hook that sees Mark's message — not Claude via a tool call | Claude's proposal; Mark chose the fixed phrase on that basis |
-| D11 | Lifetime | Until `git-guard on` or the session ends; keyed to `session_id` | Mark (D9) |
-| D12 | What counts as the phrase | The **whole** message, surrounding whitespace trimmed, equals the phrase exactly (case-sensitive) | Claude's call — a pasted document, or this card, contains the phrase and must not flip it |
-| D13 | Trail | Each silenced ask appends one line to a log, recording the option and a hash of the command — **never** the command text | Claude's call, from round-1 `writing-secure-code/no-secret-logging` |
-| D14 | Where state lives | `$HOME/.claude/hooks/state/git-guard-quiet/` (already gitignored, `.gitignore:17`), directory mode `0700`, files `0600` | Claude's call, from round-1 `core-conduct/default-deny-data-store` |
+| D1 | When anything changes | Only while quiet is on for the session. With quiet off, git-guard's behaviour is byte-for-byte today's | Mark (rev-4 rule; "every session starts on") |
+| D2 | `-C` commands that neither commit nor push | Allowed under quiet, whatever folder they name (including `"$W"`) | Mark |
+| D3 | `-C` commits and pushes | Allowed under quiet when the target folder is checked and is **not** on `main`/`master`; **denied** if it is; **asks** if the folder can't be checked | Mark (rule); "asks when unknown" is Claude's call, so a commit is never waved through blind |
+| D4 | When a commit/push folder counts as "checked" | The segment has exactly one `-C`; its operand is a literal path (absolute, `~`, `~/…`, or relative — relative resolves against the payload's `cwd`) with no `$`, backtick, glob or `~user`; **no `cd` anywhere earlier on the line**; no `GIT_*=` assignment on the segment; no grouping (`SEG_GROUPED`). Otherwise it can't be checked → ask | Claude's call — deliberately narrower than worktree-guard's `resolve_effective_repo`, which round 3 measured exits the hook (an allow in `log` mode) instead of returning |
+| D5 | How "not on `main`/`master`" is read | `git -C <dir> symbolic-ref --short HEAD` in that folder — its **own** HEAD, so a linked worktree reads its own branch. Detached HEAD, not a repository, a rebase/merge in progress, or any error → ask | Claude's call, from round-3 `writing-specs/unambiguous-requirements` (EFF_DIR vs EFF_ROOT) |
+| D6 | Pushes to `main` from a feature branch | A `-C` push is allowed only if, besides D5, none of its arguments after the subcommand names `main` or `master` as a destination (`main`, `master`, `*:main`, `*:master`, `refs/heads/main`, `refs/heads/master`); otherwise ask | Claude's call — Mark's rule covers pushes *to* `main`, not just pushes *from* it |
+| D7 | Bare `--force` / `-f` push with `-C` | **Denied**, quiet or not — that block holds on every branch | Claude's call, consistent with the existing every-branch rule |
+| D8 | Other options and prefixes | Any non-`-C` blocking option **anywhere on the line** (`-c`, `--git-dir`, `--work-tree`, `--namespace`, unrecognised), or a `GIT_*=` prefix on any git segment, keeps the ask even under quiet — `-c core.hooksPath=/dev/null` switches off git's own hooks | Claude's call, from rounds 1–3 `writing-specs/edge-cases` |
+| D9 | Switching on | Mark types the fixed phrase `git-guard quiet` | Mark |
+| D10 | Switching back | The fixed phrase `git-guard on` | Claude's call, offered to Mark, not objected to |
+| D11 | Default | Every session starts with the prompt **on**; nothing carried over can turn it off | Mark |
+| D12 | Who flips the flag | A `UserPromptSubmit` hook that sees Mark's message — not Claude via a tool call | Claude's proposal; Mark chose the fixed phrase on that basis |
+| D13 | Lifetime | Until `git-guard on` or the session ends; keyed to `session_id` | Mark (D11) |
+| D14 | What counts as the phrase | The **whole** message, surrounding whitespace trimmed, equals the phrase exactly (case-sensitive) | Claude's call — a pasted document, or this card, contains the phrase and must not flip it |
+| D15 | Trail | Each silenced ask appends one log line with the outcome and a hash of the command — **never** the command text | Claude's call, from round-1 `writing-secure-code/no-secret-logging` |
+| D16 | Where state lives | `$HOME/.claude/hooks/state/git-guard-quiet/` (gitignored, `.gitignore:17`), directory `0700`, files `0600` | Claude's call, from round-1 `core-conduct/default-deny-data-store` |
+| D17 | Shared facts | Existing facts keep exactly today's meaning; doc-guard (`:144`) and feature-sync-guard (`:111`) see no change. New segment-indexed facts are added that only git-guard reads | Claude's call, from round-2 `core-conduct/extend-not-alter-shared-interface` |
 
 ## Scope
 
-In: Part 1 — new classifier facts, per-segment evaluation in git-guard. Part 2 — one new
-`UserPromptSubmit` hook, the quiet check in git-guard, the `settings.json` registration. Tests,
-including rewriting the existing assertions Part 1 deliberately reverses. One ADR. A
-`rules/gates.md` edit.
+In: new classifier facts; the quiet decision in git-guard; one new `UserPromptSubmit` hook; its
+`settings.json` registration; tests; one ADR; a `rules/gates.md` edit.
 
-Out: changing what any existing fact means (D4); any option other than `-C`; resolving more than
-one `-C` per segment; pane agents (each is its own session and starts with the prompt on — D9);
-a per-command or per-repo toggle. doc-guard and feature-sync-guard are **out of scope because D4
-leaves their input unchanged** — and Task 2 asserts that rather than assuming it.
+Out: any change with quiet off (D1); doc-guard, feature-sync-guard, worktree-guard and every
+other guard; resolving `cd` or variables for commits/pushes (D4 — those ask); pane agents (each
+its own session, starting with the prompt on).
 
 ## Design
 
 ```mermaid
 flowchart TD
-    L[command line] --> S[for each git segment i]
-    S --> R{resolve_effective_repo i}
-    R -->|resolved dir| K[run main / lease / force checks with git -C dir]
-    R -->|unresolvable| U{segment commits or pushes?}
-    K -->|fails| DENY[deny line]
-    K -->|passes| NEXT[next segment]
-    U -->|bare --force| DENY
-    U -->|yes| HARD[unsilenceable ask]
-    U -->|no| SOFT[silenceable ask]
-    S -->|other option on segment| HARD
-    NEXT --> END{any asks?}
-    HARD --> END
-    SOFT --> END
-    END -->|none| ALLOW[allow]
-    END -->|any unsilenceable| ASK[ask]
-    END -->|only silenceable + flag for session| LOG[log, allow]
-    END -->|only silenceable, no flag| ASK
+    A[git-guard: every existing deny runs first, unchanged] --> B{SCOPE_UNKNOWN ask due?}
+    B -->|no| OK[exit as today]
+    B -->|yes| Q{quiet flag for this session_id?}
+    Q -->|no| ASK[ask, as today]
+    Q -->|yes| O{any non -C option or GIT_* prefix on the line?}
+    O -->|yes| ASK
+    O -->|no| S[for each -C segment]
+    S -->|bare --force| DENY[deny]
+    S -->|commits or pushes| C{folder checked? D4}
+    C -->|no| ASK
+    C -->|yes| M{on main/master, or push names main/master?}
+    M -->|on main/master| DENY
+    M -->|push names main/master| ASK
+    M -->|no| NEXT[segment ok]
+    S -->|neither| NEXT
+    NEXT --> ALL{all segments ok?}
+    ALL -->|yes| LOG[log line, allow]
 ```
 
-### Part 1 — `-C` gets the real blocks, per segment
+### Classifier — new facts only (D17)
 
-- **`hooks/lib/classify-git-command.py`.** For every git segment whose only blocking option is
-  `-C`, add new facts (names are the builder's; meaning is fixed here):
-  - `SEG_DIRECTED<tab><i>` — segment `i` carries exactly one `-C` and no other blocking option.
-  - `SEG_COMMIT<tab><i>`, `SEG_PUSH_FORCE<tab><i>`, `SEG_PUSH_LEASE<tab><i>` — what segment `i`
-    does, by the same rules the line-level `COMMIT`/`PUSH_FORCE`/`PUSH_LEASE` use today, plus the
-    pathspec facts git-guard's commit check reads, indexed to `i`.
-  - Existing facts: no change (D4). `SCOPE_UNKNOWN` is still emitted as today.
-  - Two `-C` in one segment, or any other blocking option: no `SEG_DIRECTED` for it (today's ask).
-- **`hooks/git-guard.sh`.** For each `SEG_DIRECTED` segment `i`, call `resolve_effective_repo i`
-  (D3). If it resolves to repository `D`, run the existing checks for that segment's own
-  `SEG_COMMIT`/`SEG_PUSH_*` facts with **every** git call they make pointed at `D` (`git -C "$D"`):
-  `current_branch`/`on_main` (`:129`), the sequencer and rebase-marker checks (`:144`, `:161`,
-  `:192`, `:217`, `:232`, `:244`), and the staged-file read (`:388`). A `D` that is not a
-  repository, or whose branch cannot be read, fails closed exactly as the session cwd does today
-  (ADR 0026). Segments without `-C` are checked exactly as today.
-- **The ask.** Emitted when `SCOPE_UNKNOWN` is present, **unless** every segment that caused it is
-  a `SEG_DIRECTED` segment that resolved and passed. Marked **unsilenceable** if any segment
-  carries a non-`-C` blocking option (`SEG_SCOPE_OPT`), or any unresolved `SEG_DIRECTED` segment
-  commits or pushes (D5, D6); otherwise **silenceable**.
-- Expected effect: `git -C <worktree> …` stops asking in **every** session, with no phrase,
-  whenever its directory resolves and passes.
+`hooks/lib/classify-git-command.py`. For every git segment `i` that carries a blocking option
+(names are the builder's; meaning is fixed here):
 
-### Part 2 — the toggle
+- `SEG_DIRECTED<tab><i>` — the segment's only blocking option is exactly one `-C`.
+- `SEG_LANDS<tab><i><tab><kind>` — the segment's subcommand is `commit` (`kind=commit`) or `push`
+  (`kind=push`, `push_force` for a bare `--force`/`-f` without `--force-with-lease`, by the same
+  rule the line-level `PUSH_FORCE` uses today).
+- `SEG_PUSH_ARGS<tab><i><tab><arg>` — each argument after `push` and its options, for D6.
 
-- **`hooks/git-quiet-toggle.sh`** (new, `UserPromptSubmit`). Reads the payload's `prompt` and
-  `session_id` (field names confirmed in Task 0). On an exact `git-guard quiet` it creates the flag
-  `$HOME/.claude/hooks/state/git-guard-quiet/<session_id>`; on an exact `git-guard on` it deletes
-  it. It then **re-checks** the flag's presence and prints, on stdout as plain text (which
-  `UserPromptSubmit` adds to Claude's context; Claude relays it to Mark), exactly one of:
-  - `git-guard quiet: ON for this session (the -C prompt is silenced; real blocks still apply).`
-  - `git-guard quiet: OFF for this session (the -C prompt is back).`
-  - `git-guard quiet: FAILED to change state — the prompt is <ON|OFF>. <error>`
-  The state printed is the one measured after the change, never the one intended. Any other
-  message: no output, no file touched.
-- **`hooks/git-guard.sh`.** When the ask is silenceable **and** the flag for the payload's
-  `session_id` exists, append the log line and `exit 0` instead of asking. Sits after every deny.
-- **Log line** — `$HOME/.claude/hooks/state/git-guard-quiet.log`, one line per silenced ask,
-  tab-separated, in this order: ISO-8601 UTC timestamp (`YYYY-MM-DDTHH:MM:SSZ`), `session_id`,
-  the option (`-C`), SHA-256 of the raw command (hex). No command text, so no newline or tab from
-  the command can reach the file. **If the log append fails, git-guard asks.**
+Every existing fact — `COMMIT*`, `PUSH*`, `SCOPE_UNKNOWN`, `SEG_GIT_C`, `SEG_SCOPE_OPT`,
+`SEG_ENV`, `SEG_CD`, `SEG_GROUPED` — is emitted exactly as today.
+
+### git-guard — the quiet decision
+
+`hooks/git-guard.sh`, at the point the `SCOPE_UNKNOWN` ask is about to be emitted (after every
+existing deny), and **only if** the flag for the payload's `session_id` exists:
+
+1. If the line has any `SEG_SCOPE_OPT`, any git segment with a `SEG_ENV` `GIT_*` assignment, or any
+   git segment with a blocking option but no `SEG_DIRECTED` → ask (D8).
+2. For each `SEG_DIRECTED` segment `i`:
+   - `SEG_LANDS i push_force` → deny with today's bare-force message (D7).
+   - `SEG_LANDS i commit|push` → apply D4; not checkable → ask. Checkable → read the folder's
+     branch per D5; `main`/`master` → deny with today's main message; error/detached/in-progress →
+     ask. For `push`, any `SEG_PUSH_ARGS` naming `main`/`master` per D6 → ask.
+   - no `SEG_LANDS` → fine (D2).
+3. All segments fine → append the log line and `exit 0`.
+
+With no flag, the ask is emitted exactly as today.
+
+### The toggle
+
+`hooks/git-quiet-toggle.sh` (new, `UserPromptSubmit`). Reads the payload's `prompt` and
+`session_id` (names confirmed in Task 0). On an exact `git-guard quiet` it creates
+`$HOME/.claude/hooks/state/git-guard-quiet/<session_id>`; on an exact `git-guard on` it deletes it.
+It then **re-checks** the flag and prints, on stdout as plain text (added to Claude's context;
+Claude relays it to Mark), exactly one of:
+
+- `git-guard quiet: ON for this session (-C commands pass unless they would land on main/master).`
+- `git-guard quiet: OFF for this session (the -C prompt is back).`
+- `git-guard quiet: FAILED to change state — the prompt is <ON|OFF>. <error>`
+
+The state printed is the one measured after the change. Any other message: no output, no file
+touched.
+
+### Log line
+
+`$HOME/.claude/hooks/state/git-guard-quiet.log`, one line per silenced ask, tab-separated, in this
+order: ISO-8601 UTC timestamp (`YYYY-MM-DDTHH:MM:SSZ`), `session_id`, `read` or `lands` (whether
+any segment committed or pushed), SHA-256 of the raw command (hex). No command text. **If the
+append fails, git-guard asks.**
 
 ## Requirements
 
-Part 1 (session cwd on `main` unless stated; `W` is a worktree on `feat/x`; `M` a repo on `main`):
-- R1. `git -C M commit -m x` is **denied**.
-- R2. `git -C M push --force-with-lease` is denied; `git -C W push --force` is denied;
-  `git -C "$D" push --force` (unresolvable) is denied.
-- R3. From a session cwd on `feat/x`, `git -C W commit -m x -- f` and `git -C W status` are
-  allowed without asking.
-- R4. **Mixed lines stay refused:** `git -C W status && git commit -m y` and
-  `git commit -m y && git -C W status` are denied (the plain commit is on `main`).
-- R5. **`cd` composes:** `cd M && git -C . commit -m x`, from a session cwd on `feat/x`, is denied.
-- R6. A `-C` operand `resolve_effective_repo` cannot resolve, or two `-C` in one segment, keeps the
-  ask; if that segment commits or pushes, the ask is unsilenceable.
-- R7. A `-C` directory that is not a repository fails closed, matching the cwd behaviour.
-- R8. doc-guard and feature-sync-guard return the same decision as on `origin/main` for every
-  Part 1 scenario command (asserted, not assumed).
+`F` is a worktree on `feat/x`; `M` a repository on `main`; the session cwd is `~/.claude` on `main`.
 
-Part 2:
-- R9. With no flag for the current session, every ask fires exactly as after Part 1.
-- R10. With the flag present, a silenceable ask is allowed and one log line is written.
-- R11. A flag for a **different** `session_id` has no effect.
-- R12. With the flag present, R1, R2, R4, R5 and R7 still deny, and every unsilenceable ask still
-  asks — each asserted with a `-C` command.
-- R13. With the flag present, these still ask: `git -C "$D" -c core.hooksPath=/dev/null status`,
-  `git -c core.hooksPath=/dev/null -C "$D" status`, and
-  `git -C "$D" status && git -c core.hooksPath=/dev/null status` (option order and position).
-- R14. `session_id` is validated (`^[A-Za-z0-9-]{1,128}$`) before becoming a path component, in
+With quiet **off**:
+- R1. Every command in R3–R11 gets exactly today's decision (asserted against `origin/main`'s
+  git-guard on the same fixtures).
+
+With quiet **on**:
+- R2. `git -C "$W" status` (variable) and `git -C F cat-file -t <sha>` → allowed, one `read` log line.
+- R3. `git -C F commit -m x -- f` → allowed, one `lands` log line.
+- R4. `git -C M commit -m x` → **denied**.
+- R5. `git -C F push -u origin HEAD` → allowed; `git -C F push origin HEAD:main` → asks;
+  `git -C M push` → denied.
+- R6. `git -C F push --force` and `git -C "$W" push --force` → **denied**;
+  `git -C F push --force-with-lease` → allowed.
+- R7. `git -C "$W" commit -m x` and `cd F && git -C . commit -m x` → ask (folder not checkable, D4).
+- R8. A `-C` folder that is detached, mid-rebase, or not a repository, on a commit → asks.
+- R9. `git -C F -c core.hooksPath=/dev/null status`, `git -c core.hooksPath=/dev/null -C F status`,
+  and `git -C F status && git -c core.hooksPath=/dev/null status` → ask.
+- R10. `GIT_DIR=M/.git git -C F commit -m x` → asks.
+- R11. `git -C F status && git commit -m y` → **denied** (the plain commit is on `main` — an
+  existing deny, unchanged).
+- R12. A flag for a **different** `session_id` has no effect.
+
+Toggle and failure handling:
+- R13. `session_id` is validated (`^[A-Za-z0-9-]{1,128}$`) before becoming a path component, in
   both hooks. Invalid or missing ⇒ the toggle prints the FAILED line and changes nothing; git-guard
   behaves as if no flag exists.
-- R15. Only a whole-message exact match flips the flag (D12).
-- R16. The toggle hook never blocks Mark's message: on any error it prints the FAILED line and
-  exits 0.
-- R17. Any error reading the flag, or writing the log, makes git-guard ask.
+- R14. Only a whole-message exact match flips the flag (D14).
+- R15. The toggle hook never blocks Mark's message: on any error it prints the FAILED line, exits 0.
+- R16. Any error reading the flag, resolving a folder, or writing the log makes git-guard ask.
 
 ## Scenarios
 
 ```gherkin
-Scenario: a -C commit to main is blocked (Part 1, no quiet involved)
-  Given the repository at M is on branch main
-  When Claude runs "git -C M commit -m x"
-  Then git-guard denies it
-
-Scenario: a mixed line still refuses the plain commit
-  Given the session cwd is on main and W is a worktree on feat/x
-  When Claude runs "git -C W status && git commit -m y"
-  Then git-guard denies it
-
-Scenario: a cd before -C is honoured
-  Given the session cwd is on feat/x and M is on main
-  When Claude runs "cd M && git -C . commit -m x"
-  Then git-guard denies it
-
-Scenario: a -C command in a worktree stops prompting (Part 1)
-  Given the worktree at W is on branch feat/x
-  When Claude runs "git -C W status"
-  Then git-guard allows it without asking
-
-Scenario: quiet silences a leftover -C prompt
+Scenario: quiet lets a read-only -C lookup through
   Given Mark has typed "git-guard quiet" in session S
-  When Claude runs "git -C \"$DIR\" status" in session S
+  When Claude runs a line setting W and running "git -C \"$W\" status --short" in session S
   Then git-guard allows it without asking
-  And one log line naming session S and a command hash is appended
 
-Scenario: quiet never silences a commit it cannot check
+Scenario: quiet lets a worktree commit through
+  Given the flag is set for session S and F is on feat/x
+  When Claude runs "git -C F commit -m x -- f" in session S
+  Then git-guard allows it without asking
+
+Scenario: quiet never lets a commit land on main
+  Given the flag is set for session S and M is on main
+  When Claude runs "git -C M commit -m x" in session S
+  Then git-guard denies it
+
+Scenario: quiet asks when it cannot see the folder of a commit
   Given the flag is set for session S
-  When Claude runs "git -C \"$DIR\" commit -m x" in session S
+  When Claude runs "git -C \"$W\" commit -m x" in session S
   Then git-guard asks
 
 Scenario Outline: quiet never silences -c, wherever it sits
@@ -204,20 +201,20 @@ Scenario Outline: quiet never silences -c, wherever it sits
   When Claude runs "<line>" in session S
   Then git-guard asks
   Examples:
-    | line                                                            |
-    | git -c core.hooksPath=/dev/null commit -m x                      |
-    | git -C "$DIR" -c core.hooksPath=/dev/null status                 |
-    | git -C "$DIR" status && git -c core.hooksPath=/dev/null status   |
+    | line                                                     |
+    | git -C F -c core.hooksPath=/dev/null status              |
+    | git -c core.hooksPath=/dev/null -C F status              |
+    | git -C F status && git -c core.hooksPath=/dev/null status |
 
 Scenario: a new session starts loud
   Given a flag exists for session S
-  When session T runs "git -C \"$DIR\" status"
+  When session T runs "git -C F status"
   Then git-guard asks
 
 Scenario: on restores the prompt
   Given the flag is set for session S
   When Mark types "git-guard on"
-  Then the toggle prints the OFF line and the next leftover -C command asks
+  Then the toggle prints the OFF line and the next -C command asks
 
 Scenario: the phrase inside other text does nothing
   When Mark's message is "should I type git-guard quiet?"
@@ -228,57 +225,51 @@ Scenario: the phrase inside other text does nothing
 
 - **Claude can forge the flag.** It is a plain file; a Bash or Write call can create it without
   Mark's phrase, and unlike `secret_approval.py` (one command, deleted on use) it covers the whole
-  session. D10 makes the honest path the hook, not the only path. A momentum guardrail, not a
+  session. D12 makes the honest path the hook, not the only path. A momentum guardrail, not a
   security boundary.
-- **Part 2 may turn out to be rarely needed.** Part 1 alone should remove most `-C` prompts; the
-  leftover is `-C` with an operand built from a variable. Mark asked for control regardless, so
-  Part 2 stays in scope; if the log shows it almost never fires, retiring it is a later decision.
-- **Stale flags accumulate** — one empty file per session that ever went quiet. Harmless (they can
-  never match again); cleanup deferred unless the directory is measured growing.
-- **Unmeasured: whether in-process subagents report the parent's `session_id`.** Task 0.
-- **Unmeasured: whether a running session picks up a new `settings.json` hook registration.**
-  Part 1 and git-guard's quiet check need no restart — every hook call runs the script file fresh
-  from `$HOME/.claude/hooks/`. The toggle hook is a new *registration*; Task 0 measures whether
-  open sessions see it without a restart.
-- **Unmeasured: whether Mark sees the toggle's confirmation line directly** or only through
-  Claude's relay. Task 0.
-- **Unmeasured by the round-2 judge:** `cd M && git -C . commit` from a feature-branch cwd was not
-  run (the live guards refused the probe text). R5 pins it as a test instead.
+- **doc-guard and feature-sync-guard never see `-C` commits** (`has_fact COMMIT || exit 0` at
+  `doc-guard.sh:144`, `feature-sync-guard.sh:111`). True today, unchanged by this card; under quiet
+  the git-guard prompt — the one moment a human sees such a commit — goes away for commits D3
+  allows. Round 3 measured doc-guard passing a 400-line `-C .` commit (rc=0) that it refuses
+  without `-C` (rc=2). Fixing that blind spot is a separate card.
+- **`-C` commits are already refused in `~/.claude`** by test-marker-guard (`FOREIGN_REPO`,
+  observed in this session), so R3's allow only shows in repos that haven't opted in to it.
+- **Stale flags accumulate** — one empty file per session that ever went quiet; harmless (they
+  can never match again). Cleanup deferred unless the directory is measured growing.
+- **Unmeasured:** whether in-process subagents report the parent's `session_id`; whether an open
+  session runs a `UserPromptSubmit` hook registered after it started; whether a `UserPromptSubmit`
+  hook's stdout is shown to Mark directly. All three: Task 0. git-guard's own change needs no
+  restart — each hook call runs the script file fresh from `$HOME/.claude/hooks/`.
 
 ## Tasks
 
-- [ ] 0. Measure: a real `UserPromptSubmit` payload (`prompt`, `session_id` names); a real
-      `PreToolUse` payload from an in-process subagent (its `session_id`); whether an open session
-      runs a `UserPromptSubmit` hook registered after it started; whether a `UserPromptSubmit`
-      hook's stdout is shown to the user. Record each under Known gaps.
-- [ ] 1. **Rewrite the reversed baseline, as its own step:** update the existing assertions that pin
-      today's `-C` asking and that Part 1 deliberately changes — `hooks/git-guard.test.sh:766-810`
-      and the exact-equality fact sets in `hooks/lib/classify-git-command.test.py` at
-      `:338`, `:349`, `:398`, `:403`, `:407` (compare at `:839-840`) — to the R1–R7 outcomes.
-      Re-locate them by content first; the line numbers are a lead. Commit red.
-- [ ] 2. Part 1 new tests, red, in a new `hooks/git-guard-dash-c.test.sh` (R1–R8), invoked from
-      `hooks/git-guard.test.sh` so the paired runner covers them (ADR 0044); the existing suite is
-      1008 lines, past the 800 cap. Falsify against always-allow and always-ask stubs.
-- [ ] 3. Implement Part 1 to green: Tasks 1–2 and every other existing suite (including
-      worktree-guard's GROUP S, doc-guard, feature-sync-guard) green, with no further test edits.
-- [ ] 4. Toggle tests, red, in `hooks/git-quiet-toggle.test.sh` (R14–R16, last scenario).
-- [ ] 5. Implement `hooks/git-quiet-toggle.sh` to green.
-- [ ] 6. git-guard quiet-check tests, red, in a new `hooks/git-guard-quiet.test.sh` (R9–R13, R17),
-      invoked from `hooks/git-guard.test.sh`.
-- [ ] 7. Implement the git-guard quiet check to green.
-- [ ] 8. Register the toggle in `settings.json` (`UserPromptSubmit`), stored `100755`.
-- [ ] 9. ADR under `docs/decisions/` (next free number checked against `origin/main`): per-segment
-      `-C` resolution, the new facts beside the unchanged ones, the ask-only toggle, and why other
-      options are never silenced.
-- [ ] 10. `rules/gates.md`: amend the existing **Default-branch safety** / **Chained commands** text
-      rather than add a new always-loaded bullet — two phrases, what stays blocked, the forge gap.
-- [ ] 11. Observability judge, then PR.
+- [ ] 0. Measure the three unknowns above and the `UserPromptSubmit` payload field names; record
+      each under Known gaps.
+- [ ] 1. **Baseline update, as its own step:** the exact-equality fact sets in
+      `hooks/lib/classify-git-command.test.py` (compare at `:839-840`) for lines carrying a
+      blocking option gain the new facts. Re-locate those cases by content. Commit red.
+- [ ] 2. New classifier tests for `SEG_DIRECTED`/`SEG_LANDS`/`SEG_PUSH_ARGS`, red; implement to
+      green; every existing classifier, git-guard, doc-guard and feature-sync-guard suite stays
+      green with no further edits.
+- [ ] 3. Quiet-decision tests, red, in a new `hooks/git-guard-quiet.test.sh` (R1–R12, R16), invoked
+      from `hooks/git-guard.test.sh` so the paired runner covers them (ADR 0044; the existing suite
+      is 1008 lines, past the 800 cap). Falsify against always-allow and always-ask stubs.
+- [ ] 4. Implement the git-guard quiet decision to green.
+- [ ] 5. Toggle tests, red, in `hooks/git-quiet-toggle.test.sh` (R13–R15, last scenario).
+- [ ] 6. Implement `hooks/git-quiet-toggle.sh` to green.
+- [ ] 7. Register the toggle in `settings.json` (`UserPromptSubmit`), stored `100755`.
+- [ ] 8. ADR under `docs/decisions/` (next free number checked against `origin/main`): the quiet
+      rule, why it is quiet-only, why D4 is narrower than worktree-guard's resolver.
+- [ ] 9. `rules/gates.md`: amend the existing **Default-branch safety** text rather than add a new
+      always-loaded bullet — the two phrases, what still asks or denies, the forge gap.
+- [ ] 10. Observability judge, then PR.
 
 ## Verification
 
 Live, after merge into the primary checkout:
-1. In any open session, `git -C <a worktree on a feature branch> status` — no prompt (Part 1).
-2. `git -C <a repo on main> commit -m x` — refused.
-3. Type `git-guard quiet`, see the ON line; run `git -C "$DIR" status` — no prompt, one log line.
-4. Run `git -C "$DIR" commit -m x` — still asks.
-5. Type `git-guard on`, see the OFF line; step 3's command asks again.
+1. Without quiet: `git -C <a worktree> status` — prompts, as today.
+2. Type `git-guard quiet`, see the ON line; repeat step 1 — no prompt, one `read` log line.
+3. `git -C <a worktree on a feature branch> commit …` in a repo without test-marker-guard — no prompt.
+4. `git -C <a repo on main> commit -m x` — refused.
+5. `git -C "$W" commit -m x` — asks.
+6. Type `git-guard on`, see the OFF line; step 2's command prompts again.
