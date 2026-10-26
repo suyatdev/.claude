@@ -6,7 +6,7 @@ branch: none  # planning card on docs/git-guard-quiet-spec; implementation branc
 
 # git-guard quiet — a session toggle that lets known-safe `git -C` commands through without a prompt
 
-> **Phase: planning — revision 6 (2026-10-26).** History: rev 1 (`64b6232`) silenced the `-C`
+> **Phase: planning — revision 7 (2026-10-26).** History: rev 1 (`64b6232`) silenced the `-C`
 > prompt outright; round 1 measured that for a `-C` command the prompt is the **only** check, so a
 > commit to `main` would have gone through. Revs 2–3 (`4bc66cb`, `8780b3f`) tried to give every
 > `-C` command the real blocks in every session; the round-3 cap escalated to Mark. Rev 4
@@ -22,8 +22,19 @@ branch: none  # planning card on docs/git-guard-quiet-spec; implementation branc
 > --no-list`, a tag named `main` fooling `symbolic-ref --short`, and a bare `push` under
 > `push.default=matching`/`remote.*.push`/mirror — plus an unstated crash path and a wrapper
 > contradiction. Two ids recurred, so it escalated; Mark approved all the proposed fixes ("yes"),
-> which this **revision 6** applies. Every fix only adds asks. No code exists.
-> Next: judges round 6 → Mark reviews → `gate confirmed`.
+> which revision 6 (`6a8a3c7`) applied. Round 6 (compliance fail 2, observability risk medium)
+> measured a case-variant branch (`Main` on a case-insensitive filesystem *is* `main`) and a
+> crash path in the new shell library that would let a command run; it also found zsh-only
+> code-running expansions and an unprompted read-only redirect. Mark approved ("yes fix them")
+> **revision 7**: fold case in D7, run the quiet decision as a child process whose only allow is
+> an explicit one, record the other two as Known gaps, and adopt the **stop rule** below.
+> Every fix only adds asks. No code exists. Next: judges round 7 → Mark reviews → `gate confirmed`.
+>
+> **Stop rule (Mark, 2026-10-26, from round 7 on):** a bypass that needs a deliberate construction
+> (a crafted expansion, an engineered repository state) gets a Known-gaps line, not a design
+> change; only a route an ordinary command could hit by accident changes the design. Reason: the
+> flag itself is forgeable (Known gaps), so quiet cannot be a boundary against deliberate misuse,
+> and patching each new construction has not converged.
 
 ## Why
 
@@ -52,7 +63,7 @@ today's prompt.
 | D4 | `git add` | Passes, whatever folder — it stages, it cannot move a branch | Claude's call |
 | D5 | Commit and push | Pass only when (a) **every** segment on the line is a git segment classed `read`, `add`, `commit` or `push` — no `cd`, `pushd`, `export`, assignment-only segment, script, or other git subcommand anywhere on the line, and the raw command text contains no `<` or `>` (no redirection), so nothing on the line can switch branch or repository. A wrapper word that `segments()` already strips (`WRAPPERS`, `hooks/lib/shell_segments.py:70`: `rtk`, `time`, `eval`, `command`, `builtin`, `exec`, `nohup`) is judged as the command it wraps, exactly as every git guard treats it today; any other prefix (`env`, `sudo`, `xargs`, …) leaves argv[0] not `git`, so the segment is `nongit` (or `SEG_OPAQUE` when a later word is `git`), and a commit/push line asks; (b) the segment has exactly one `-C` whose folder is checkable (D6); (c) that folder is on a branch other than `main`/`master` with nothing in progress (D7); (d) for a push, the push is the one allowed shape (D8). Any condition unmet → ask | Mark's rule ("not to a main/master of any repository"); conditions (a)–(d) are Claude's call, each closing a measured round-4 or round-5 hole |
 | D6 | Checkable folder | Exactly one `-C`; its operand is an absolute path, `~`, `~/…`, or relative (resolved against the payload's `cwd`, valid because D5(a) forbids anything that changes directory); no `$`, backtick, glob character (`*?[`), and no other `~` form (`~user`, `~+`, `~-`, `~0` expand to other places) | Claude's call — deliberately narrower than worktree-guard's `resolve_effective_repo`, which round 3 measured exits the hook instead of returning |
-| D7 | Branch check | `git -C <dir> symbolic-ref HEAD` (full name, **not** `--short`, which prints `heads/main` when a tag named `main` exists — measured round 5) must succeed, start with `refs/heads/`, and equal neither `refs/heads/main` nor `refs/heads/master`; and none of `rebase-merge`, `rebase-apply`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_LOG` may exist under `git -C <dir> rev-parse --git-path <name>`. Detached, not a repository, in progress, on `main`/`master`, or any error → ask | Claude's call |
+| D7 | Branch check | `git -C <dir> symbolic-ref HEAD` (full name, **not** `--short`, which prints `heads/main` when a tag named `main` exists — measured round 5) must succeed and start with `refs/heads/`, and the name — **compared case-insensitively** (lower-cased first) — must equal neither `refs/heads/main` nor `refs/heads/master`, because on a case-insensitive filesystem (macOS APFS default) a checkout of `Main` writes to the very file `refs/heads/main` (measured round 6). A branch whose name differs from `main`/`master` only in case therefore asks; and none of `rebase-merge`, `rebase-apply`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_LOG` may exist under `git -C <dir> rev-parse --git-path <name>`. Detached, not a repository, in progress, on `main`/`master`, or any error → ask | Claude's call |
 | D8 | Allowed push shape | One shape only: options only from `-u`, `--set-upstream`, `-q`, `--quiet`, `-v`, `--verbose`, `--force-with-lease` (bare, no `=`), each a separate word, then exactly **`<remote> HEAD`**, where `<remote>` matches `^[A-Za-z0-9._-]+$` (git documents `push <remote> HEAD` as "push the current branch to the same name", which D7 already proved is not `main`/`master`; round 5 measured it staying on the feature branch under every push config tried). A bare `push` (no positional) **asks**: round 5 measured `@{push}` naming the feature branch while the push moved remote `main` under `push.default=matching`, a `remote.<r>.push` refspec, and a mirror remote. Anything else — `--force`, `-f`, `-uf`, `--all`, `--mirror`, `--tags`, `--delete`, `--force-with-lease=…`, `--receive-pack`/`--exec`, `--repo=`, a refspec with `:` or `+`, a branch name, any other option → ask | Claude's call, from rounds 4–5 `writing-specs/edge-cases`; dropping bare push approved by Mark (rev 6) |
 | D9 | Other options, prefixes and hidden commands | Any non-`-C` blocking option anywhere on the line (`SEG_SCOPE_OPT`), any `GIT_*` assignment (`SEG_ENV`), any `SEG_OPAQUE`, `SEG_GROUPED`, or — checked on the **raw command text**, not the lexer's parse — any `$(`, backtick, `<(` or `>(` anywhere on the line → ask, read-only lines included. A command substitution inside an argument runs a whole hidden command the classifier never sees (round 5 measured a "read-only" `status -- "$(… switch main; … commit …)"` landing on `main`). Plain variables (`"$W"`) do not trigger this | Claude's call, from rounds 1–5; raw text so the check does not inherit the lexer's blind spots |
 | D10 | Switching on | Mark types the fixed phrase `git-guard quiet` | Mark |
@@ -134,11 +145,16 @@ from the existing `SEG_GIT_C` (which is `UNRESOLVABLE` for two `-C`s).
 
 ### git-guard — the quiet decision
 
-`hooks/git-guard.sh` (488 lines) sources a new `hooks/lib/git_guard_quiet.sh`, called once, at the
-start of Guard 3, after every existing deny, and **only if** the flag for the payload's
+`hooks/git-guard.sh` (488 lines) **runs** — does not `source` — a new `hooks/lib/git_guard_quiet.sh` as
+a child process (`bash <lib>`, facts and payload fields on stdin), once, at the start of Guard 3, after every existing deny, and **only if** the flag for the payload's
 `session_id` exists. It applies the D9 raw-text checks and the line rule, running D7's git calls with `-C <dir>` for each
-`commit`/`push` segment. Allow → append the log line and `exit 0`. Anything else → fall through to
-today's ask text, unchanged. With no flag, Guard 3 runs exactly as today.
+`commit`/`push` segment. The child prints exactly `allow` (after appending the log line itself) or `ask`. git-guard
+allows **only** when the child exits 0 **and** its whole stdout is exactly `allow`; a missing or
+unreadable library, any other exit code (including an unset-variable abort under `set -u`), a
+kill, or any other output → fall through to today's ask text, unchanged. Round 6 measured why a
+`source` is not enough: a sourced function aborting under `set -u` ends git-guard itself with
+rc=1 and no decision, which Claude Code treats as a non-blocking failure — the command runs.
+With no flag, Guard 3 runs exactly as today and the library is never started.
 
 ### The toggle
 
@@ -169,7 +185,7 @@ upstream is `origin/main` with `push.default=upstream`; `T` a worktree on `main`
 that also has a **tag** named `main`; the session cwd is `~/.claude` on `main`.
 
 With quiet **off**:
-- R1. Every command in R2–R13 and R20–R23 gets exactly today's decision (asserted against
+- R1. Every command in R2–R13, R20–R23 and R25 gets exactly today's decision (asserted against
   `origin/main`'s git-guard on the same fixtures).
 
 With quiet **on** — allowed, one log line each:
@@ -215,6 +231,11 @@ Toggle and failure handling:
 - R19. With `git_quiet_class.py` absent, unimportable, or patched to raise: the classifier exits 0,
   emits `SEG_QUIET … other` for every segment and every other fact unchanged; quiet off, every
   R1 command still gets today's decision; quiet on, every line asks.
+- R24. With `git_guard_quiet.sh` absent, unreadable, exiting non-zero, aborting on an unset
+  variable, or printing anything other than exactly `allow`: quiet on, R2 and R3 ask (they are
+  allowed only when the library works); no log line is written by git-guard.
+- R25. Quiet on, a worktree on `Main` (and one on `MASTER`), in a repository on a
+  case-insensitive filesystem: `git -C <it> commit -m x` asks.
 
 ## Scenarios
 
@@ -301,6 +322,15 @@ Scenario: the phrase inside other text does nothing
 - **A raw `<`/`>` in a commit message makes a commit line ask** (`commit -m "a > b"`) — D5(a)'s
   raw-text redirect check cannot tell a quoted `>` from a redirection. Accepted: it fails toward
   the prompt you get today.
+- **zsh-only expansions can run code inside an argument** (measured round 6): a glob qualifier
+  `*(e:'…':)` and the `${(e)X}` parameter flag run a command with none of D9's four spellings
+  present, and a commit line using one switched to `main` and committed there. The Bash tool runs
+  zsh here. Not fixed, under the stop rule: these need a deliberate construction, zsh's set of
+  such forms is open-ended, and plain (non-`-C`) git-guard is equally blind to them today.
+- **A read-only line may redirect output without a prompt** (`git -C F log > some/file`). The
+  `<`/`>` ban applies only to commit/push lines (D5(a)). Such a write cannot itself land a commit
+  — every later commit is re-checked by D7 — and the same command without `-C` is allowed today.
+  Barring it would make routine `2>/dev/null` lookups prompt. Accepted.
 - **Out of scope, found in round 5:** zsh expands `=git` to git's path, and the classifier sees
   nothing in `=git commit …`, so every git guard is blind to that spelling today, quiet or not.
   Needs its own card.
@@ -325,7 +355,7 @@ Scenario: the phrase inside other text does nothing
       stubs. Implement `hooks/lib/git_quiet_class.py` and the `SEG_QUIET` emission to green; every
       existing classifier, git-guard, doc-guard and feature-sync-guard suite stays green with no
       further edits.
-- [ ] 3. Quiet-decision tests, red, in a new `hooks/git-guard-quiet.test.sh` (R1–R14, R18–R23), invoked
+- [ ] 3. Quiet-decision tests, red, in a new `hooks/git-guard-quiet.test.sh` (R1–R14, R18–R25), invoked
       from `hooks/git-guard.test.sh` so the paired runner covers them (ADR 0044; the existing suite
       is 1008 lines, past the 800 cap). Falsify against always-allow and always-ask stubs.
 - [ ] 4. Implement `hooks/lib/git_guard_quiet.sh` and its one call in Guard 3 to green.
