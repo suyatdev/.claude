@@ -172,6 +172,14 @@
             "command": "$HOME/.claude/hooks/handoff/live-handoff.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/git-quiet-toggle.sh"
+          }
+        ]
       }
     ],
     "Stop": [

@@ -416,11 +416,11 @@ Scenario: the phrase inside other text does nothing
       Red: 33/131 with no script, 34/131 against an always-ON stub.
 - [x] 6. Implement `hooks/git-quiet-toggle.sh` to green. 131/131. The FAILED line's `<ON|OFF>`
       names the `-C` prompt (ON = quiet off), read from D12 and the OFF line.
-- [ ] 7. Register the toggle in `settings.json` (`UserPromptSubmit`), stored `100755`.
-- [ ] 8. ADR under `docs/decisions/` (next free number checked against `origin/main`): the quiet
+- [x] 7. Register the toggle in `settings.json` (`UserPromptSubmit`), stored `100755`.
+- [x] 8. ADR under `docs/decisions/` (next free number checked against `origin/main`): the quiet
       rule, why an allowlist and not a denylist (round 4), why quiet never adds a deny, why D6 is
-      narrower than worktree-guard's resolver.
-- [ ] 9. `rules/gates.md`: amend the existing **Default-branch safety** text rather than add a new
+      narrower than worktree-guard's resolver. ADR 0051 (free on every ref, 2026-10-27).
+- [x] 9. `rules/gates.md`: amend the existing **Default-branch safety** text rather than add a new
       always-loaded bullet — the two phrases, what quiet lets through, that everything else still
       asks, the forge gap.
 - [ ] 10. Observability judge, then PR.
