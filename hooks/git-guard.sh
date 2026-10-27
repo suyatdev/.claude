@@ -469,7 +469,66 @@ fi
 # all `printf ... >&2`), and correct whether or not it turns out redundant.
 scope_tab=$(printf '\t')
 scope_option=$(printf '%s\n' "$facts" | grep "^SCOPE_UNKNOWN${scope_tab}" | head -1 | cut -f2-)
+
+# --- Guard 3, quiet: `git-guard quiet` (docs/features/git-guard-quiet.md) ---
+# With a quiet flag for THIS session, a line made only of the shapes the card allows (read-only
+# lookups, `git add`, a plain feature-branch commit or `push <remote> HEAD`) passes without the
+# prompt below. This is the ONLY place quiet acts, it runs after every deny above, and it can only
+# turn the ask into an allow -- never into a deny, and never touching a decision made above.
+#
+# The decision is a CHILD PROCESS (lib/git_guard_quiet.py), not a sourced function: round 6
+# measured a sourced function aborting under `set -u` ending THIS hook at rc=1 with no decision,
+# which Claude Code treats as a non-blocking failure -- the command runs. Here a crashed, missing,
+# unreadable, slow or lying child is one more way to answer "no", and "no" is today's ask.
+# Allow means exit 0 with NOTHING on stdout: a `permissionDecision: allow` would also skip Claude
+# Code's own permission check for every non-git command on the line.
+#
+# The request is JSON built by "$py", never by string concatenation here, so a multi-line command
+# cannot pose as a fact line. Without a valid session_id and a flag file for it, none of this
+# runs and Guard 3 below is byte-for-byte what it was.
+QUIET_LIB="$(cd "$(dirname "$0")" && pwd)/lib/git_guard_quiet.py"
+QUIET_STATE_SUBPATH=".claude/hooks/state/git-guard-quiet"
+
+quiet_session_id() {
+  printf '%s' "$payload" | "$py" -c '
+import json, re, sys
+try:
+    session_id = json.load(sys.stdin).get("session_id")
+except (ValueError, AttributeError):
+    sys.exit(0)
+if isinstance(session_id, str) and re.fullmatch(r"[A-Za-z0-9-]{1,128}", session_id):
+    sys.stdout.write(session_id)
+' 2>/dev/null
+}
+
+quiet_request() {
+  printf '%s' "$payload" | "$py" -c '
+import json, sys
+payload = json.load(sys.stdin)
+print(json.dumps({
+    "command": payload["tool_input"]["command"],
+    "cwd": payload.get("cwd"),
+    "session_id": payload["session_id"],
+    "facts": [line for line in sys.argv[1].split("\n") if line],
+}))
+' "$facts" 2>/dev/null
+}
+
+# Returns 0 only when the quiet child exited 0 AND its whole stdout is exactly `allow`.
+quiet_allows() {
+  local session_id request answer
+  [ -n "${HOME:-}" ] || return 1
+  session_id=$(quiet_session_id) || return 1
+  [ -n "$session_id" ] || return 1
+  [ -f "$HOME/$QUIET_STATE_SUBPATH/$session_id" ] || return 1
+  [ -r "$QUIET_LIB" ] || return 1
+  request=$(quiet_request) || return 1
+  answer=$(printf '%s' "$request" | "$py" -I "$QUIET_LIB" 2>/dev/null) || return 1
+  [ "$answer" = "allow" ]
+}
+
 if [ -n "$scope_option" ]; then
+  quiet_allows && exit 0
   reason="This command carries $scope_option ahead of the subcommand, which git-guard cannot account for -- it may point git at a different repository or change how a pathspec is read. Confirm this is intended."
   printf 'git-guard: %s\n' "$reason" >&2
   "$py" -c '

@@ -401,13 +401,17 @@ Scenario: the phrase inside other text does nothing
       stubs. Implement `hooks/lib/git_quiet_class.py` and the `SEG_QUIET` emission to green; every
       existing classifier, git-guard, doc-guard and feature-sync-guard suite stays green with no
       further edits. Done in `5d0c0ec`.
-- [ ] 3. Quiet-decision tests, red: unit tests for the child in a new `hooks/lib/git_guard_quiet.test.py`
+- [x] 3. Quiet-decision tests, red: unit tests for the child in a new `hooks/lib/git_guard_quiet.test.py`
       (paired by name; input parsing, timeouts, D6–D8), and hook-level tests in a new
       `hooks/git-guard-quiet.test.sh` (R1–R14, R15's git-guard side, R18–R27), invoked
       from `hooks/git-guard.test.sh` so the paired runner covers them (ADR 0044; the existing suite
       is 1008 lines, past the 800 cap). Falsify against always-allow and always-ask stubs.
-- [ ] 4. Implement `hooks/lib/git_guard_quiet.py` and its one call in Guard 3 to green — the JSON
-      input built by `"$py"`, the silent exit 0 on allow.
+      Done with task 4 in one commit (the marker gate refuses a red commit). Red before the
+      implementation existed: hook suite 17 failed of 203, unit suite 162 failed, 1 passed (a crash
+      truncated the run). Falsified: always-allow stub 179 failed unit / 67 failed hook; always-ask
+      stub 45 failed unit / 15 failed hook. The runner pins the hook suite at 203 assertions.
+- [x] 4. Implement `hooks/lib/git_guard_quiet.py` and its one call in Guard 3 to green — the JSON
+      input built by `"$py"`, the silent exit 0 on allow. Unit suite 196/196, hook suite 203/203.
 - [x] 5. Toggle tests, red, in `hooks/git-quiet-toggle.test.sh` (R15–R17, last scenario).
       Red: 33/131 with no script, 34/131 against an always-ON stub.
 - [x] 6. Implement `hooks/git-quiet-toggle.sh` to green. 131/131. The FAILED line's `<ON|OFF>`
