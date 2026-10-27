@@ -52,7 +52,7 @@ three guards; refuse when unattended; approval lifetime; **one shared watcher ho
 
 ⚠️ **Task 0 is a blocking gate with a real stop condition, not a warm-up.**
 
-- [ ] **0. Prove the `ask` path actually blocks a commit.** Spec §4. Never live-verified; a comment
+- [x] **0. Prove the `ask` path actually blocks a commit.** Spec §4. Never live-verified; a comment
       in `git-guard.sh` records it as a pending manual acceptance test. Measure both the interactive
       case and the pane-subagent case.
       **If the prompt does not block → STOP and return to the user. The design needs rethinking,
@@ -102,10 +102,35 @@ rests on a measurement rather than an assumption. The sharpest consequence for �
 mean **exit 2**, never `ask`, on any path required to hold under bypass mode — claims 3 and 4
 together show a `deny` blocks and an `ask` does not, in the same session, from the same hook.
 
-**What remains open.** Whether `ask` blocks in an interactive session at normal permissions. It
-cannot be measured from inside a bypass-mode session, and no subagent lane substitutes: in-process
-agents inherit the parent's mode, pane agents skip permissions by design. Put to the user
-2026-09-21; not yet answered — their reply reported an unrelated `Stop hook` failure
-(`hooks/handoff/handoff-keep-guard.sh` is registered at `settings.json:165,175` but has no execute
-bit), which fires after the turn and therefore carries no information about whether a prompt
-appeared. **Do not infer the outcome from it.**
+### Task 0 RESOLVED 2026-10-27 — the interactive half
+
+The user ran `git -c core.pager=cat status --short` in a fresh session at normal permissions (this
+session cannot: it is runtime-bypassed, re-confirmed 2026-10-27 by `touch /tmp/claude-perm-probe`
+creating a file unprompted against **0 allow-rules**). **An approval box appeared and held the
+command, and it carried the word `git-guard`.**
+
+⚠️ **The wording is the whole discriminator, and this is why.** `settings.json` `permissions` holds
+**0 allow / 0 deny / 0 ask** rules with `defaultMode: default`, so a normal session prompts for
+*every* Bash command — "a box appeared" alone would have been consistent with the ordinary
+permission prompt and proved nothing. Only the hook emits the string `git-guard`, so its presence
+is what shows the `ask` decision reached the human rather than being swallowed.
+
+**Scope this honestly — two things were NOT demonstrated.** The planned control (plain
+`git status --short` producing a *generic* box) was never cleanly run: the user's attempt used the
+`!` prefix, which goes straight to the shell and never becomes a tool call, so no hook saw it. The
+control turned out to be unnecessary — the guard-specific sentence cannot be produced by a generic
+prompt — but it was not run, and the §4 clause "declining must leave the working tree and HEAD
+unchanged" is only trivially true here, since the probe command is read-only. A mutating command
+was deliberately never used: another hook's `deny` would shadow the `ask` (see above).
+
+**Exit condition met: the prompt blocks. Proceed to spec §5 / task 1.**
+
+**History of the open half, for anyone auditing the gap between 2026-09-21 and 2026-10-27.** The
+question could not be measured from inside a bypass-mode session, and no subagent lane substitutes:
+in-process agents inherit the parent's mode, pane agents skip permissions by design. It was put to
+the user 2026-09-21 and went unanswered for five weeks. The first reply reported only an unrelated
+`Stop hook` failure (`hooks/handoff/handoff-keep-guard.sh` was registered at `settings.json:165,175`
+with no execute bit — fixed by `chmod u+x` on 2026-09-21 after its suite passed 61/61, though that
+mode is recorded as `100644` in git and so is **not** durable); a Stop hook fires after the turn and
+carried no information about whether a prompt appeared. A second attempt on 2026-10-27 used the `!`
+prefix and bypassed the hook. Neither was an answer, and neither was treated as one.
