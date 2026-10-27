@@ -283,71 +283,71 @@ CASES = [
      ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"],
      "the value is consumed; the subcommand still resolves to commit"),
     ("git --attr-source commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t-m", "SEG_SCOPE_OPT\t0\t-m"],
+     ["SCOPE_UNKNOWN\t-m", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t-m"],
      "commit is consumed as attr-source's VALUE, so git itself commits nothing; "
      "-m is left in subcommand position, unrecognised -> bucket 3"),
 
     # --- bucket 2: repo-redirecting, refused and asked. Fact level: exactly one
     # --- SCOPE_UNKNOWN fact naming the option, and no COMMIT fact for the segment.
     ("git -C commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t-C", "SEG_GIT_C\t0\tcommit", "SEG_SCOPE_OPT\t0\t-m"],
+     ["SCOPE_UNKNOWN\t-C", "SEG_GIT_C\t0\tcommit", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t-m"],
      "`commit` really is -C's operand here, so git would chdir into a directory of that "
      "name; walking past the pair leaves -m in subcommand position, which is bucket 3"),
     ("git --git-dir commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t--git-dir", "SEG_SCOPE_OPT\t0\t--git-dir"], "bucket 2 redirecting"),
+     ["SCOPE_UNKNOWN\t--git-dir", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--git-dir"], "bucket 2 redirecting"),
     ("git --work-tree commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t--work-tree", "SEG_SCOPE_OPT\t0\t--work-tree"], "bucket 2 redirecting"),
+     ["SCOPE_UNKNOWN\t--work-tree", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--work-tree"], "bucket 2 redirecting"),
     ("git --namespace commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t--namespace", "SEG_SCOPE_OPT\t0\t--namespace"], "bucket 2 redirecting"),
+     ["SCOPE_UNKNOWN\t--namespace", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--namespace"], "bucket 2 redirecting"),
     ("git --bare commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t--bare", "SEG_SCOPE_OPT\t0\t--bare"],
+     ["SCOPE_UNKNOWN\t--bare", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--bare"],
      "takes no value but still redirects the repo -- bucket 2, not bucket 1"),
     ("git -c commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t-c", "SEG_SCOPE_OPT\t0\t-c"], "bucket 2 redirecting"),
+     ["SCOPE_UNKNOWN\t-c", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t-c"], "bucket 2 redirecting"),
     ("git --config-env commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t--config-env", "SEG_SCOPE_OPT\t0\t--config-env"], "bucket 2 redirecting"),
+     ["SCOPE_UNKNOWN\t--config-env", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--config-env"], "bucket 2 redirecting"),
     ("git --literal-pathspecs commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t--literal-pathspecs", "SEG_SCOPE_OPT\t0\t--literal-pathspecs"],
+     ["SCOPE_UNKNOWN\t--literal-pathspecs", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--literal-pathspecs"],
      "changes what a pathspec MEANS, which doc-guard's exemption is decided from"),
     ("git --glob-pathspecs commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t--glob-pathspecs", "SEG_SCOPE_OPT\t0\t--glob-pathspecs"],
+     ["SCOPE_UNKNOWN\t--glob-pathspecs", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--glob-pathspecs"],
      "bucket 2, pathspec-modifying"),
     ("git --noglob-pathspecs commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t--noglob-pathspecs", "SEG_SCOPE_OPT\t0\t--noglob-pathspecs"],
+     ["SCOPE_UNKNOWN\t--noglob-pathspecs", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--noglob-pathspecs"],
      "bucket 2, pathspec-modifying"),
     ("git --icase-pathspecs commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t--icase-pathspecs", "SEG_SCOPE_OPT\t0\t--icase-pathspecs"],
+     ["SCOPE_UNKNOWN\t--icase-pathspecs", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--icase-pathspecs"],
      "bucket 2, pathspec-modifying"),
 
     # --- bucket 3: unrecognised, including an abbreviation nobody enumerated --
     # --- git honours unambiguous abbreviations, so a list of exact spellings
     # --- can never be complete.
     ("git --work-tre=/tmp commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t--work-tre", "SEG_SCOPE_OPT\t0\t--work-tre"],
+     ["SCOPE_UNKNOWN\t--work-tre", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--work-tre"],
      "an abbreviated option nobody enumerated is still refused, named without its value"),
 
     # A value-consuming bucket-2 option's value is never mistaken for the
     # subcommand or a pathspec -- the fact set has nothing but the one denial.
     ("git --git-dir /tmp/x commit -m y -- app.js",
-     ["SCOPE_UNKNOWN\t--git-dir", "SEG_SCOPE_OPT\t0\t--git-dir"],
+     ["SCOPE_UNKNOWN\t--git-dir", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--git-dir"],
      "/tmp/x is the option's value, never a subcommand or a pathspec"),
 
     # SCOPE_UNKNOWN is a DENYING fact: it suppresses PUSH*/PUSH_FORCE for its own
     # segment too, not just COMMIT*. No scenario elsewhere used push, so nothing
     # could fail if an implementer wired the suppression to commit only.
-    ("git -C . push --force", ["SCOPE_UNKNOWN\t-C", "SEG_GIT_C\t0\t."],
+    ("git -C . push --force", ["SCOPE_UNKNOWN\t-C", "SEG_GIT_C\t0\t.", "SEG_QUIET\t0\tother"],
      "force-push protection survives a global option -- no PUSH or PUSH_FORCE fact. The "
      "INDEXED fact still lands: it carries its own scope and needs no suppression"),
 
     # At most once per line, from the FIRST triggering option.
     ("git -c a=b -C /x commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t-c", "SEG_SCOPE_OPT\t0\t-c"],
+     ["SCOPE_UNKNOWN\t-c", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t-c"],
      "two triggering options in one segment -- exactly one fact, naming the first"),
 
     # SCOPE_UNKNOWN denies the whole LINE even from a non-first segment, because
     # it is a denying fact under the module's existing granting/denying rule.
     ("echo hi && git -C /x commit -m x -- app.js",
-     ["SCOPE_UNKNOWN\t-C", "SEG_GIT_C\t1\t/x"],
+     ["SCOPE_UNKNOWN\t-C", "SEG_GIT_C\t1\t/x", "SEG_QUIET\t0\tnongit", "SEG_QUIET\t1\tcommit"],
      "a redirecting option in a later segment still denies the whole line -- and the "
      "indexed fact names segment 1, so nothing can apply this -C to segment 0"),
 
@@ -396,25 +396,26 @@ CASES = [
     # --- SEG_GIT_C. Collected BEFORE the SCOPE_UNKNOWN continue, which used to
     # --- abandon a -C segment before it could emit anything.
     ("git -C /repos/other log && git switch main",
-     ["SCOPE_UNKNOWN\t-C", "SEG_BRANCH_MOVE\t1\tswitch", "SEG_GIT_C\t0\t/repos/other"],
+     ["SCOPE_UNKNOWN\t-C", "SEG_BRANCH_MOVE\t1\tswitch", "SEG_GIT_C\t0\t/repos/other",
+      "SEG_QUIET\t0\tread", "SEG_QUIET\t1\tother"],
      "THE -C-DOES-NOT-CARRY-FORWARD CASE. The -C is bound to segment 0 and the switch to "
      "segment 1, so nothing can apply one to the other -- the exact incident this feature exists "
      "to stop, which the old unindexed GIT_DIR_OPT fact would have allowed"),
     ("git -C /repos/other switch main",
-     ["SCOPE_UNKNOWN\t-C", "SEG_BRANCH_MOVE\t0\tswitch", "SEG_GIT_C\t0\t/repos/other"],
+     ["SCOPE_UNKNOWN\t-C", "SEG_BRANCH_MOVE\t0\tswitch", "SEG_GIT_C\t0\t/repos/other", "SEG_QUIET\t0\tother"],
      "THE DISCRIMINATING -C CASE: same index on both facts, so this switch IS judged against "
      "/repos/other. Compare the row above -- identical fact NAMES, opposite meaning"),
     ("git -C /repos/other worktree add /tmp/x",
-     ["SCOPE_UNKNOWN\t-C", "SEG_GIT_C\t0\t/repos/other", "SEG_WORKTREE_ADD\t0\t/tmp/x"],
+     ["SCOPE_UNKNOWN\t-C", "SEG_GIT_C\t0\t/repos/other", "SEG_QUIET\t0\tother", "SEG_WORKTREE_ADD\t0\t/tmp/x"],
      "the indexed facts survive the -C bail. Stopping at it would leave Arm B2 with nothing "
      "but SCOPE_UNKNOWN, which no arm denies on -- a silent fail-open"),
-    ("git -C", ["SCOPE_UNKNOWN\t-C", "SEG_GIT_C\t0\tUNRESOLVABLE"], "-C with no operand"),
+    ("git -C", ["SCOPE_UNKNOWN\t-C", "SEG_GIT_C\t0\tUNRESOLVABLE", "SEG_QUIET\t0\tother"], "-C with no operand"),
     ("git -C=/x commit -m y",
-     ["SCOPE_UNKNOWN\t-C", "SEG_GIT_C\t0\tUNRESOLVABLE", "SEG_SCOPE_OPT\t0\t-m"],
+     ["SCOPE_UNKNOWN\t-C", "SEG_GIT_C\t0\tUNRESOLVABLE", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t-m"],
      "an ATTACHED spelling. git's own short-option grammar puts the value at `=/x`, and "
      "modelling that grammar is the trap this file exists to avoid -- so it is unresolvable"),
     ("git -C /a -C /b switch main",
-     ["SCOPE_UNKNOWN\t-C", "SEG_BRANCH_MOVE\t0\tswitch", "SEG_GIT_C\t0\tUNRESOLVABLE"],
+     ["SCOPE_UNKNOWN\t-C", "SEG_BRANCH_MOVE\t0\tswitch", "SEG_GIT_C\t0\tUNRESOLVABLE", "SEG_QUIET\t0\tother"],
      "git composes repeated -C; the shared rule resolves ONE operand per segment, so two is "
      "unresolvable rather than quietly resolved to the wrong one"),
 
@@ -478,15 +479,15 @@ CASES = [
     # --- two-clause test, never from a list of option names, so an option git
     # --- adds tomorrow lands in "cannot tell" rather than in "allow".
     ("git --git-dir /tmp/o/.git switch main",
-     ["SCOPE_UNKNOWN\t--git-dir", "SEG_SCOPE_OPT\t0\t--git-dir"],
+     ["SCOPE_UNKNOWN\t--git-dir", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--git-dir"],
      "the redirect denies rather than joining the cd/-C resolution path, because the fact "
      "stream carries the option NAME and never its value"),
     ("git --git-dir=/tmp/o/.git switch main",
-     ["SCOPE_UNKNOWN\t--git-dir", "SEG_SCOPE_OPT\t0\t--git-dir"],
+     ["SCOPE_UNKNOWN\t--git-dir", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--git-dir"],
      "measured: byte-identical output to the separate-token form above. The value survives "
      "only in argv, which is precisely why this class cannot be resolved"),
     ("git --future-option switch main",
-     ["SCOPE_UNKNOWN\t--future-option", "SEG_SCOPE_OPT\t0\t--future-option"],
+     ["SCOPE_UNKNOWN\t--future-option", "SEG_QUIET\t0\tother", "SEG_SCOPE_OPT\t0\t--future-option"],
      "bucket 3. Nothing in this file names --future-option, and it still denies"),
 
     # --- SEG_ENV. A PREFIX test over the namespace git owns, so a variable added

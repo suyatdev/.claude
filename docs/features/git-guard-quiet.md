@@ -381,10 +381,10 @@ Scenario: the phrase inside other text does nothing
       confirm that the `PreToolUse` payload's `cwd` is the directory the Bash command starts in
       (D6 resolves relative `-C` folders against it). Record each under Known gaps; if `cwd` is not
       the start directory, relative folders become not checkable (ask) before Task 2.
-- [ ] 1. **Baseline update, as its own step:** the exact-equality fact sets in
+- [x] 1. **Baseline update, as its own step:** the exact-equality fact sets in
       `hooks/lib/classify-git-command.test.py` (compare at `:839-840`) for lines carrying
       `SCOPE_UNKNOWN` gain the new `SEG_QUIET` facts. Re-locate those cases by content. Commit red.
-- [ ] 2. Class tests, red, in a new `hooks/lib/git_quiet_class.test.py` (paired by name with the
+- [x] 2. Class tests, red, in a new `hooks/lib/git_quiet_class.test.py` (paired by name with the
       new module, so the marker gate covers it); falsify against always-`read` and always-`other`
       stubs. Implement `hooks/lib/git_quiet_class.py` and the `SEG_QUIET` emission to green; every
       existing classifier, git-guard, doc-guard and feature-sync-guard suite stays green with no
