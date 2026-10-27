@@ -370,10 +370,20 @@ Scenario: the phrase inside other text does nothing
   Needs its own card.
 - **Stale flags accumulate** — one empty file per session that ever went quiet; harmless (they
   can never match again). Cleanup deferred unless the directory is measured growing.
-- **Unmeasured:** whether in-process subagents report the parent's `session_id`; whether an open
-  session runs a `UserPromptSubmit` hook registered after it started; whether a `UserPromptSubmit`
-  hook's stdout is shown to Mark directly. All three: Task 0. git-guard's own change needs no
-  restart — each hook call runs the script file fresh from `$HOME/.claude/hooks/`.
+- **Measured in Task 0 (2026-10-27, temporary dump hook, this worktree only):**
+  - In-process subagents report the **parent's** `session_id` (their payload adds `agent_id` and
+    `agent_type`), so quiet covers the session's subagents too.
+  - An open session runs `UserPromptSubmit` and `PreToolUse` hooks registered after it started.
+  - `UserPromptSubmit` keys: `cwd`, `hook_event_name`, `permission_mode`, `prompt`, `prompt_id`,
+    `scratchpad_dir`, `session_id`, `session_title`, `transcript_path`. It also fires on
+    background-task notifications (`prompt` starts `<task-notification>`); D15 makes those no-ops.
+  - Its stdout reaches Claude's context; whether Mark sees it directly: pending his answer.
+  - **`PreToolUse` `cwd` is not always the directory the command starts in:** after `cd hooks`,
+    a second Bash call in the same turn ran in `hooks/` while its payload `cwd` still named the
+    worktree root. Per Task 0, a relative `-C` folder on a commit/push segment is therefore
+    **not checkable** (D6) and asks; absolute, `~` and `~/…` folders are unaffected.
+  git-guard's own change needs no restart — each hook call runs the script file fresh from
+  `$HOME/.claude/hooks/`.
 
 ## Tasks
 
