@@ -1,12 +1,12 @@
 ---
-phase: planning
+phase: implementation
 model_tier: low
-branch: none  # planning card on docs/git-guard-quiet-spec; implementation branch is created at `gate confirmed`
+branch: feat/git-guard-quiet
 ---
 
 # git-guard quiet — a session toggle that lets known-safe `git -C` commands through without a prompt
 
-> **Phase: planning — revision 8 (2026-10-26).** History: rev 1 (`64b6232`) silenced the `-C`
+> **Phase: implementation (`gate confirmed` by Mark, 2026-10-27) — spec frozen at revision 8 (2026-10-26).** History: rev 1 (`64b6232`) silenced the `-C`
 > prompt outright; round 1 measured that for a `-C` command the prompt is the **only** check, so a
 > commit to `main` would have gone through. Revs 2–3 (`4bc66cb`, `8780b3f`) tried to give every
 > `-C` command the real blocks in every session; the round-3 cap escalated to Mark. Rev 4
