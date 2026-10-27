@@ -398,8 +398,10 @@ Scenario: the phrase inside other text does nothing
       is 1008 lines, past the 800 cap). Falsify against always-allow and always-ask stubs.
 - [ ] 4. Implement `hooks/lib/git_guard_quiet.py` and its one call in Guard 3 to green — the JSON
       input built by `"$py"`, the silent exit 0 on allow.
-- [ ] 5. Toggle tests, red, in `hooks/git-quiet-toggle.test.sh` (R15–R17, last scenario).
-- [ ] 6. Implement `hooks/git-quiet-toggle.sh` to green.
+- [x] 5. Toggle tests, red, in `hooks/git-quiet-toggle.test.sh` (R15–R17, last scenario).
+      Red: 33/131 with no script, 34/131 against an always-ON stub.
+- [x] 6. Implement `hooks/git-quiet-toggle.sh` to green. 131/131. The FAILED line's `<ON|OFF>`
+      names the `-C` prompt (ON = quiet off), read from D12 and the OFF line.
 - [ ] 7. Register the toggle in `settings.json` (`UserPromptSubmit`), stored `100755`.
 - [ ] 8. ADR under `docs/decisions/` (next free number checked against `origin/main`): the quiet
       rule, why an allowlist and not a denylist (round 4), why quiet never adds a deny, why D6 is
