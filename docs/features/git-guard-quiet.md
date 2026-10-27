@@ -384,11 +384,13 @@ Scenario: the phrase inside other text does nothing
 - [x] 1. **Baseline update, as its own step:** the exact-equality fact sets in
       `hooks/lib/classify-git-command.test.py` (compare at `:839-840`) for lines carrying
       `SCOPE_UNKNOWN` gain the new `SEG_QUIET` facts. Re-locate those cases by content. Commit red.
+      Done in `5d0c0ec`, together with task 2 and not as a separate red commit: test-marker-guard
+      refuses any commit whose paired suite has not passed, so a red commit cannot be made.
 - [x] 2. Class tests, red, in a new `hooks/lib/git_quiet_class.test.py` (paired by name with the
       new module, so the marker gate covers it); falsify against always-`read` and always-`other`
       stubs. Implement `hooks/lib/git_quiet_class.py` and the `SEG_QUIET` emission to green; every
       existing classifier, git-guard, doc-guard and feature-sync-guard suite stays green with no
-      further edits.
+      further edits. Done in `5d0c0ec`.
 - [ ] 3. Quiet-decision tests, red: unit tests for the child in a new `hooks/lib/git_guard_quiet.test.py`
       (paired by name; input parsing, timeouts, D6–D8), and hook-level tests in a new
       `hooks/git-guard-quiet.test.sh` (R1–R14, R15's git-guard side, R18–R27), invoked
