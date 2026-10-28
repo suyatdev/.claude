@@ -4,6 +4,15 @@
 Branch `feat/guard-loosening-approval` (transition commit `ba3ab3c`). Written 2026-09-20.
 Card: `docs/features/guard-loosening-approval.md`.
 
+> ⚠️ **§4's blocking spike is RESOLVED — added 2026-10-27, status only.** §4 below still reads as
+> an open decision point, because **no design content in this document is edited under
+> `phase: implementation`**. It was answered on 2026-10-27: the `ask` path **blocks** in an
+> interactive session and its reason text reaches the human, so §4's first exit condition applies
+> and work proceeds to §5. **The card is the status of record — read it, not this header, for where
+> the work stands.** ⚠️ The measurement is scoped: under bypass permissions the same `ask` is
+> *ignored and the command runs*, while a `deny` (exit 2) blocks in both. Full evidence and the two
+> things deliberately **not** demonstrated are in the card's Verification section.
+
 > **Status corrected 2026-09-21.** This header and §12 previously read "awaiting human review / no
 > implementation branch exists / no branch, no code until the user types `gate confirmed`". The user
 > typed the phrase on 2026-09-20 and the branch was created, so both statements had become false —
