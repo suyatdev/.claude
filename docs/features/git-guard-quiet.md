@@ -1,12 +1,12 @@
 ---
 phase: review
 model_tier: low
-branch: feat/git-guard-quiet
+branch: docs/git-guard-quiet-followups  # feat/git-guard-quiet merged via PR #119 (5fba281) 2026-10-28; this branch: review follow-ups
 ---
 
 # git-guard quiet — a session toggle that lets known-safe `git -C` commands through without a prompt
 
-> **Phase: review (implemented 2026-10-27/28; `gate confirmed` by Mark 2026-10-27) — spec frozen at revision 8 (2026-10-26), amended once in review (below).** History: rev 1 (`64b6232`) silenced the `-C`
+> **Phase: review (implemented 2026-10-27/28; `gate confirmed` by Mark 2026-10-27) — spec frozen at revision 8 (2026-10-26), amended once in review, then a review follow-up (below).** History: rev 1 (`64b6232`) silenced the `-C`
 > prompt outright; round 1 measured that for a `-C` command the prompt is the **only** check, so a
 > commit to `main` would have gone through. Revs 2–3 (`4bc66cb`, `8780b3f`) tried to give every
 > `-C` command the real blocks in every session; the round-3 cap escalated to Mark. Rev 4
@@ -38,6 +38,12 @@ branch: feat/git-guard-quiet
 > running a bare push that moved remote `main` under `push.default=upstream`, contradicting the
 > "failed harmlessly" gap line. D8's remote pattern now refuses a leading `-` (only adds asks); the
 > judge's other unrecorded items are now Known-gaps lines; D6 carries Task 0's relative-folder rule.
+>
+> **Review follow-up (Mark, 2026-10-28, "Yes"):** the four doc slips PR #119 listed are fixed on
+> `docs/git-guard-quiet-followups` — R8 names `push -o HEAD`, the two hook rows for it are
+> relabelled R8, Task 3's pinned count is corrected, and the timeout gap line names what is
+> unmeasured. The live § Verification results are added, with the two Known-gaps lines and the
+> stale-flags measurement they produced.
 >
 > **Stop rule (Mark, 2026-10-26, from round 7 on):** a bypass that needs a deliberate construction
 > (a crafted expansion, an engineered repository state) gets a Known-gaps line, not a design
@@ -228,7 +234,9 @@ With quiet **on** — still asks (each was a measured or named round-4 or round-
   `git -C F symbolic-ref HEAD refs/heads/main`; `git -C F config core.hooksPath /dev/null`.
 - R7. `git -C F push origin HEAD:refs/heads/main`; `git -C F push origin HEAD:main`;
   `git -C F push --all`; `git -C F push --mirror`; `git -C F push origin feat/x`.
-- R8. `git -C U push`; `git -C F push` (any bare push, whatever its upstream or push config).
+- R8. `git -C U push`; `git -C F push` (any bare push, whatever its upstream or push config);
+  `git -C U push -o HEAD`; `git -C U push --push-option HEAD` (git reads `HEAD` there as a push
+  option, so both are bare pushes).
 - R9. `git -C F push --force`; `git -C F push -uf origin HEAD`; `git -C F push --force-with-lease=feat/x`.
 - R10. `export GIT_DIR=M/.git; git -C F commit -m x`; `pushd M && git -C . commit -m x`;
   `cd M && git -C . commit -m x`; `git -C "$W" commit -m x`; `GIT_DIR=M/.git git -C F status`.
@@ -339,6 +347,17 @@ Scenario: the phrase inside other text does nothing
   without `-C` (rc=2). Fixing that blind spot is a separate card.
 - **`-C` commits are already refused in `~/.claude`** by test-marker-guard (`FOREIGN_REPO`,
   observed in this session), so R3's allow only shows in repos that haven't opted in to it.
+- **…and so is a read-only `-C` command whose request mentions `commit`.** Measured live
+  2026-10-28: test-marker-guard's pre-filter matches `commit` anywhere in the raw payload
+  (`test-marker-guard.sh:43-46`), the Bash call's `description` included, then treats any global
+  option ahead of the subcommand as a commit it cannot see into (`classify-commit-command.py:218`).
+  `git -C <wt> log --oneline` was refused (`FOREIGN_REPO`) under a description that said "commit",
+  and ran under a neutral one. So in an opted-in repo quiet's `read` allow is shadowed by that
+  deny, depending on wording. test-marker-guard's code, not this card's:
+  `docs/features/test-marker-commit-word-prefilter.md`.
+- **The log counts silenced asks, not commands that ran.** Measured live 2026-10-28: a `lands` line
+  was written for a `-C` commit that test-marker-guard then refused, so it never ran. As the
+  § Log line spec says ("one line per silenced ask"); read the log as decisions, not outcomes.
 - **Check-then-run race.** D7 reads the folder's branch when the hook runs; another session could
   switch that worktree's branch before the command executes. Nothing on the *same* line can
   (D5(a)); a parallel session can.
@@ -375,7 +394,9 @@ Scenario: the phrase inside other text does nothing
   timeout but then waits for it to exit; a git stuck in uninterruptible disk wait (a dead mount)
   could hold the hook past 3 s. Accidental rather than deliberate, but unlikely, and the command
   itself would hang on that mount anyway. Read from the Python source, not measured. Recorded, not
-  fixed (Mark, 2026-10-28).
+  fixed (Mark, 2026-10-28). If the wait outlasts Claude Code's own hook timeout, what the harness
+  then does with the command is **not measured** here (§ Timeouts cites this repo's notes, not
+  re-measured, that it runs).
 - **R1's differential half stops discriminating after merge:** it compares against `origin/main`'s
   git-guard, which becomes this same file. Its fixed expected-decision column keeps guarding the
   quiet-off path.
@@ -383,7 +404,9 @@ Scenario: the phrase inside other text does nothing
   nothing in `=git commit …`, so every git guard is blind to that spelling today, quiet or not.
   Needs its own card.
 - **Stale flags accumulate** — one empty file per session that ever went quiet; harmless (they
-  can never match again). Cleanup deferred unless the directory is measured growing.
+  can never match again). Cleanup deferred unless the directory is measured growing. Measured
+  2026-10-28: `/clear` starts a new `session_id`, so a flag does not carry across a clear;
+  whether `--resume` reuses an old `session_id` (and so its flag) is **not measured**.
 - **Measured in Task 0 (2026-10-27, temporary dump hook, this worktree only):**
   - In-process subagents report the **parent's** `session_id` (their payload adds `agent_id` and
     `agent_type`), so quiet covers the session's subagents too.
@@ -424,7 +447,9 @@ Scenario: the phrase inside other text does nothing
       Done with task 4 in one commit (the marker gate refuses a red commit). Red before the
       implementation existed: hook suite 17 failed of 203, unit suite 162 failed, 1 passed (a crash
       truncated the run). Falsified: always-allow stub 179 failed unit / 67 failed hook; always-ask
-      stub 45 failed unit / 15 failed hook. The runner pins the hook suite at 203 assertions.
+      stub 45 failed unit / 15 failed hook. The runner pins the hook suite's assertion count
+      (`QUIET_EXPECTED_ASSERTIONS` in `hooks/git-guard.test.sh`): 203 at this task, 209 since
+      `c502634`.
 - [x] 4. Implement `hooks/lib/git_guard_quiet.py` and its one call in Guard 3 to green — the JSON
       input built by `"$py"`, the silent exit 0 on allow. Unit suite 196/196, hook suite 203/203.
 - [x] 5. Toggle tests, red, in `hooks/git-quiet-toggle.test.sh` (R15–R17, last scenario).
@@ -438,7 +463,8 @@ Scenario: the phrase inside other text does nothing
 - [x] 9. `rules/gates.md`: amend the existing **Default-branch safety** text rather than add a new
       always-loaded bullet — the two phrases, what quiet lets through, that everything else still
       asks, the forge gap.
-- [ ] 10. Observability judge, then PR.
+- [x] 10. Observability judge, then PR. Rounds 1–2 risk=low (ledger rows at `b9ff10a`,
+      `c502634`); PR #119 merged 2026-10-28 as `5fba281`.
 
 ## Verification
 
@@ -449,3 +475,32 @@ Live, after merge into the primary checkout:
 4. `git -C <a repo on main> commit -m x` — prompts.
 5. `git -C <a worktree> merge <x>` — prompts.
 6. Type `git-guard on`, see the OFF line; step 2's command prompts again.
+
+**Results (2026-10-28, session `3132bf29`, primary `~/.claude` at `5fba281`).** Measured at the
+hook-decision level, **not** as on-screen prompts: the session ran in `bypassPermissions`, which
+ignores `ask`. Fixture: a throwaway repo on `main` plus a worktree on `feat/verify`, in a `mktemp -d`
+folder; decisions read by piping a `PreToolUse` payload carrying the session's real `session_id`
+to `~/.claude/hooks/git-guard.sh`; real runs went through the live hooks.
+
+| Step | Result |
+|---|---|
+| 1. quiet off | PASS — status, worktree commit, `main` commit, merge: all `ask`; no flag, no log |
+| 2. quiet on, status | PASS — ON line relayed (it reaches Claude only); flag created for this session only; real run wrote one `read` line (hash, no command text; log `0600`) |
+| 3. worktree commit | git-guard allows (empty stdout, rc 0) — but the real run was **refused by test-marker-guard** (`FOREIGN_REPO`) and did not land, as Known gaps says for `~/.claude` |
+| 4. `main` commit | PASS — `ask` |
+| 5. merge | PASS — `ask` |
+| 6. `git-guard on` | PASS — OFF line relayed; this session's flag removed; status `ask`; log line count unchanged |
+
+- **Not measured:** whether a prompt appears on screen (needs an interactive, non-bypass session;
+  the `ask` path itself was shown to block on 2026-10-27 — `docs/features/guard-loosening-approval.md`
+  Task 0, on the unmerged `feat/guard-loosening-approval`), and step 3's allow from a repo that has
+  not opted in to test-marker-guard.
+- **Open question for the on-screen run:** that same Task 0 records that at `defaultMode: default`
+  with 0 allow rules *every* Bash command prompts, and a quiet allow falls through to Claude Code's
+  own check (§ "What 'allow' means"). Read together, step 2 in such a session may still show the
+  ordinary permission prompt — quiet would then change which prompt appears, not whether one does.
+  Inferred from those two texts, not measured; the on-screen run settles it.
+- **Other flags:** four other sessions' flags were present; each transcript shows Mark typing
+  `git-guard quiet` at 13:08Z and no tool call naming the flag folder.
+- **Live settings drift, not this card's:** `~/.claude/settings.json` had `defaultMode: "dontAsk"`
+  uncommitted (HEAD: `"default"`); how a hook's `ask` behaves under it was not measured.
