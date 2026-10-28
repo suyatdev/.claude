@@ -1,7 +1,7 @@
 ---
 phase: review
 model_tier: low
-branch: docs/git-guard-quiet-followups  # feat/git-guard-quiet merged via PR #119 (5fba281) 2026-10-28; this branch: review follow-ups
+branch: none  # merged via PR #119 (5fba281) and review follow-ups PR #120 (96c56fb), 2026-10-28
 ---
 
 # git-guard quiet — a session toggle that lets known-safe `git -C` commands through without a prompt
