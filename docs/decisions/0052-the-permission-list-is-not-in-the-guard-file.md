@@ -75,6 +75,17 @@ prompts" holds for entry-level list edits and nothing else.** Refactors and some
 will prompt. That cost was not priced in the spec and is accepted deliberately here, because the
 alternative — guessing a direction — fails permissively.
 
+**Decision 2a — how the third state prompts (user decision, Mark, 2026-10-28).** It **blocks**, so
+§7's fail-closed contract is untouched, but it carries its **own distinct message** saying the
+change could not be classified — it must **not** claim a loosening it has not established. The two
+alternatives were put and declined: reusing the confirmed-loosening message for everything (*"a
+prompt that is often wrong is a prompt you stop reading"* — it would report a loosening for a
+variable rename), and prompting only on confirmed loosenings while logging the rest (declined
+because the unclassifiable set contains precisely the subtle weakenings — a dropped case-fold, an
+anchor removed — that human review also misses, so it leaves the hole where it hurts most).
+Implementations must therefore carry **two** refusal messages, not one, and the suite must
+discriminate between them.
+
 ## Decision 3 — parse per file type; never diff text
 
 - **Python:** parse with `ast`. Module-level constants emit one line per element, so quote style and
