@@ -25,6 +25,35 @@ If the user's reading produces changes to the **design**, those re-trigger the c
 before more code is written. A status line falsified by a transition is bookkeeping, not redesign —
 do not use that distinction to smuggle a design change through.
 
+**Status 2026-10-28: task 1 DONE. Still no implementation code.** The branch was merged up to
+`origin/main` first (it was 192 commits behind, and `git-guard.sh` had moved 71 lines and
+`classify-git-command.py` 83 since, when ADR 0051 / PR #119 landed — so the September measurements
+no longer held for that guard). Answer recorded in
+`docs/decisions/0052-the-permission-list-is-not-in-the-guard-file.md`.
+
+⚠️ **Task 1 falsified three statements in the spec. Do not read §5 or §9.2 as current.**
+1. §5.1's "fires only when the commit stages one of the three watched guard files" — the watch set
+   is **fourteen** files. `secret-command-guard.sh` holds **zero** permission entries; all eight
+   patterns are in `hooks/lib/classify-secret-command.py:137`. A watcher keyed on the three guard
+   filenames fails **open, silently**.
+2. §5.1's flowchart has two outcomes after a successful parse. A **third** is required —
+   *changed, but direction unknowable* — and it must prompt. Direction is derivable only for
+   whole-entry add/remove in a recognised list.
+3. §5.2's "tightening passes silently" therefore holds for list-entry edits only.
+
+⚠️ **Two requirements the task list does not yet carry.** Recorded here rather than inserted into
+the list, because the phase gate forbids checklist edits under `phase: implementation` — fold them
+into tasks 4/5 at the next phase boundary, or on the user's say-so:
+- **Extract the git file mode alongside the blob.** A `100755` → `100644` flip leaves content
+  byte-identical and a `100644` hook cannot start, so no content diff can see it.
+- **Human review of the direction tables** (ADR 0052, decision 4) is a gate before the watcher
+  ships. ALLOW/BLOCK is hand-assigned in all three extractors, never derived from the code, and a
+  mis-tag fails permissively. Nobody has reviewed that mapping.
+
+Also discharged: the "second active card may overlap" warning. `feat/git-guard-quiet` is fully
+merged into `origin/main` (its card is `phase: review`), so it is part of the baseline now, not a
+competing edit to `git-guard.sh`.
+
 ## The one-line problem
 
 Widening a security guard's permission list is caught today only by `hooks/git-guard.replay.sh`,
@@ -57,9 +86,11 @@ three guards; refuse when unattended; approval lifetime; **one shared watcher ho
       case and the pane-subagent case.
       **If the prompt does not block → STOP and return to the user. The design needs rethinking,
       not patching.** Nothing below starts until this resolves.
-- [ ] 1. Answer open question §9.2: define, **per guard**, what "the permission list" actually is,
+- [x] 1. Answer open question §9.2: define, **per guard**, what "the permission list" actually is,
       and verify each extraction against the real file rather than assuming a shape. Three different
       shapes across the three guards.
+      **Answered 2026-10-28 → `docs/decisions/0052-the-permission-list-is-not-in-the-guard-file.md`.**
+      It falsified three things the spec asserts; see the status block below before reading §5.
 - [ ] 2. Put open question §9.1 (merge commits) to the user. Do not guess a default.
 - [ ] 3. Prove the `secret_approval.py` key shape discriminates (spec §8) — falsified against an
       always-match and a never-match stub, since a non-discriminating key fails permissively.

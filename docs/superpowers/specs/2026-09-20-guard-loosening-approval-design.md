@@ -340,6 +340,19 @@ direction, which is the worst way for a security gate to break.
    exemption list in `worktree-guard.sh`. Each needs its extraction defined **and verified against
    the real file**, not assumed. ⚠️ Verify a field's or function's real name before building on it;
    a guessed one fails closed, and failing closed is indistinguishable from the feature being off.
+
+   > ⚠️ **ANSWERED 2026-10-28 — status only; the answer is `docs/decisions/0052-the-permission-list-is-not-in-the-guard-file.md`.**
+   > No design content in this document is edited under `phase: implementation`, so the answer lives
+   > in that ADR and the card is the status of record. **Read the ADR before building on the sentence
+   > above, because measurement falsified part of it:** the shapes are right, but the *locations* are
+   > not. "pattern literals in `secret-command-guard.sh`" is wrong — that file holds **zero**
+   > permission entries; all eight patterns are in `hooks/lib/classify-secret-command.py:137`, and
+   > the only mentions inside the `.sh` are four comments. The sentence is left standing rather than
+   > corrected in place, per the phase gate; the ADR supersedes it. The same measurement also
+   > falsified §5.1's "one of the three watched guard files" (the watch set is **fourteen** files)
+   > and the §5.1 flowchart's two-outcome split (a third state, *changed but direction unknowable*,
+   > is required and must prompt). Those are design consequences, recorded in the ADR and **not yet
+   > reflected in §5 — do not read §5 as current on either point.**
 3. **Does the prompt block at all?** §4. Until answered, everything downstream is provisional.
 
 ---
