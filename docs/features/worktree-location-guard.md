@@ -1,7 +1,9 @@
 ---
 phase: implementation
 model_tier: xhigh
-branch: fix/worktree-guard-tilde-path
+branch: chore/worktree-guard-criterion3
+worktree: ~/.worktrees/.claude/wg-criterion3
+previous_branch: fix/worktree-guard-tilde-path merged as PR #103 (270a0b9) on 2026-09-14
 ---
 
 # worktree-guard.sh — worktrees are mandatory, and they live in one place
@@ -4107,6 +4109,14 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       predate the code consolidating those two arms into `B2D`; they are not a currently-live
       arm and don't count for or against criterion 2.
 
+      ⚠️ **That last sentence is wrong, and so is the same claim in the 2026-09-04 note
+      below.** Measured 2026-09-16: `D` and `B2` are live labels the code emits today —
+      `refuse_command D "$EFF_ROOT"` at `hooks/lib/worktree_guard_bash_arms.sh:528` and the
+      literal `B2` at `:420` — and there was never a pre-consolidation era inside the log
+      window to predate. The rest of both notes, including the `A` and `B2D` counts, is
+      unaffected; only the sentence dismissing `D`/`B2` is. Full correction and the arm
+      inventory it came from: the 2026-09-16 progress note at the end of this task.
+
       **Layer 2 was found unarmed and has been armed today.** `git config --get
       core.hooksPath` read empty before this note — `hooks/install-layer2.sh` had been built
       (task 6e) but never run on this machine, so layer 2's arm (`D-L2`) had zero
@@ -4269,6 +4279,241 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       review. So task 10 stays open: merge this, let the fixed guard accumulate its own
       lines, re-run criterion 3 for layer 1 on those, run it for layer 2 for the first time,
       then flip.
+
+      **2026-09-16 — the fix is live and measured; the flip is still not due, and the reason
+      has changed.** Work on `chore/worktree-guard-criterion3`. Evidence committed first, at
+      `7be03dc`, under `docs/features/evidence/worktree-location-guard/`, deliberately before
+      any review ran — the 09-07/08 review lost its per-row verdicts to a session scratchpad
+      and only prose survived. Reviews and the probe script followed at `03b096c`.
+
+      **Precondition verified by blob identity, not by mtime or by the merge existing.** A
+      merge does not make a hook live: hooks run from `$HOME/.claude/hooks/`. Both layer-1
+      files in the primary hash to exactly the blobs in the merge commit `270a0b9`
+      (`hooks/worktree-guard.sh` → `186375ce`, `hooks/lib/worktree_guard_bash_arms.sh` →
+      `2ab301cf`), so the fixed code really is what runs. Layer 2's installed hook
+      (`~/.config/git/hooks/reference-transaction`) hashes identically to the repo copy
+      (`447f50bd`), so its whole log was written by the code that is live now.
+
+      **Criterion 1 — layer 1's window restarted, and is about a quarter done.** The fixed
+      guard's first line is `2026-09-14T20:41:44Z`, the same second as the guard file's mtime;
+      zero lines fall in the 44-second sliver between the merge and that mtime, so the window
+      cut is exact rather than approximate. Seven days complete **2026-09-21T20:41Z**. Layer
+      2's own window (armed 2026-09-01, code unchanged since) completed 2026-09-08 and is MET.
+
+      **Criterion 2 — met, but the card was wrong about which arms exist.** Layer 1 emits
+      **four** labels, not two: `A` (`worktree-guard.sh:543`), `B2D` (`:544`), and the literal
+      `B2` and `D` inside the Bash arms (`hooks/lib/worktree_guard_bash_arms.sh:420` and
+      `:528`). Layer 2 emits one, `D-L2` (`reference-transaction:143`). The 09-01 and 09-04
+      notes above dismiss the log's `D` and `B2` lines as predating a consolidation into
+      `B2D`; there was no such era inside the window, and both labels are live today. That is
+      marked in place at those notes. Whole-log counts **at 2026-09-16T19:45Z**: `B2D` 1690,
+      `A` 391, `D` 46, `B2` 10, `D-L2` 1226 — every arm has fired, so criterion 2 holds. In
+      the post-fix window only `B2D` (74), `A` (1) and `D` (1) have fired; `B2` has not.
+
+      These logs are live and other sessions append to them continuously, so a figure here is
+      a reading with a timestamp, never a stable fact: the same `B2D` count measured earlier
+      the same day was 1670, twenty lines lower, and that is drift rather than a disagreement.
+      Re-derive before citing — `awk -F'\t' '{print $3}' hooks/state/worktree-guard.log | sort
+      | uniq -c`. The committed extracts under `evidence/` are frozen and do not move; the
+      live logs do.
+
+      **Criterion 3, layer 1 — first pass on the 76 post-fix lines. No tilde regression, and
+      a much larger problem than the tilde ever was.** 14 distinct sessions across three
+      calendar days, no session over 21% of the lines, so the sample is not one session
+      repeating one shape. Of the 76: 2 judged correct refusals, 4 undeterminable (a real
+      HEAD-moving command whose cwd the log does not record for a refusal that fires before
+      repo resolution), and **70 refusals of commands that did no git work in a primary
+      checkout at all.**
+
+      Those 70 are not new breakage and not the tilde. Every one traces to two pre-existing
+      fail-closed paths the source already names as an accepted cost: `SEG_UNPARSED`
+      (`hooks/lib/worktree_guard_bash_arms.sh:137`, a command line the lexer cannot read) and
+      `SEG_OPAQUE` (`:186`, a segment whose `argv[0]` is neither `git` nor `cd` but which
+      mentions one — a heredoc carrying a commit message, a `python3 -` script, a diagnostic
+      pipeline). They are correct under the guard's stated "cannot inspect ⇒ do not allow"
+      policy and simultaneously useless refusals in fact, and both things need saying.
+
+      That headline does not rest on the reviewing agent alone.
+      `evidence/worktree-location-guard/classify-layer1-postfix.py` is a deliberately crude
+      independent reading of the same 76 lines: **30 of the refused commands contain no `git`
+      token anywhere** and 29 more carry only read-only git, so **59 is a floor** on the
+      false-positive count that does not depend on trusting the guard's own parse. Reproduced
+      here before the report was accepted.
+
+      The tilde hunt came back clean, and the negative is worth stating precisely: 15 of the
+      76 lines contain a `~`, of which 4 name
+      `~/.worktrees/mtg-wizard/ui-redesign-visual-restyle` — a real linked worktree — and
+      those 4 were refused by `SEG_OPAQUE`, never reaching the tilde code path at all. So "no
+      regression" here means *the tilde path was exercised and behaved*, not *no tilde
+      commands occurred*.
+
+      **Criterion 3, layer 2 — PARTIAL. Satisfied for the 19 real-repository lines, not for
+      the window.** Review at `evidence/worktree-location-guard/layer2-criterion3-review.md`.
+
+      ⚠️ **A sentence that stood here was wrong, and correcting it is the most useful thing
+      this pass produced.** It read: of 331 distinct targets, "327 are throwaway test
+      fixtures". That was inferred from path shape alone — `/private/var/folders/…` and
+      `/private/tmp/…` look like scratch — and **a temporary directory is not a test
+      fixture.** Asked to find positive evidence rather than assume it, the review found:
+      the 141 `/private/tmp` lines are **judge-subagent scratch clones doing real
+      verification work**; 95 lines are genuine test leakage but from
+      `hooks/verify-hook-wiring.test.sh`, a suite neither of us had named; and **971 lines,
+      79% of the population, remain unattributed** and are explicitly not called fixtures.
+      The two suites that looked like the obvious source are ruled out — confirmed here:
+      `verify-hook-wiring.test.sh` carries **zero** isolation directives while
+      `reference-transaction.test.sh` and `worktree-guard.test.sh` carry 14 and 19.
+
+      All **19 real-repository refusals are judged CORRECT**, each matched against that
+      repository's own reflog. Spot-checked independently: the three lines at
+      `2026-09-08T16:05:12Z` correspond exactly to three HEAD writes from a single
+      `pull --rebase origin main` in the primary `.claude` checkout — and the reflog author
+      is the **user**, not an agent. Those 19 fall between 2026-09-01 and 2026-09-08; layer 2
+      has recorded no real-repository refusal since.
+
+      **The judge-clone finding is what bears on arming, and it is new.** A judge subagent
+      clones a repo into a scratch directory to verify a commit. A fresh clone *is* a primary
+      checkout, so the `checkout` that follows it is exactly what layer 2 refuses — traced
+      through the log for `/private/tmp/obsjudge-r10/at-2cb5aec`, two would-deny lines in the
+      same second. Arming layer 2 therefore breaks the judge verification workflow, and since
+      `hooks/judge-guard.sh` gates `gh pr create` on a fresh verdict, that reaches the
+      pull-request path. Two ordinary things break on arming, not one: the user's own
+      `git pull` in a primary checkout (the 19 lines above) and every judge scratch clone.
+
+      Criterion 3 for layer 2 is therefore **not** satisfiable from this window until the 971
+      unattributed lines are attributed. Doing that is the next piece of work, and it is a
+      prerequisite for the flip, not an optional tidy-up.
+
+      **2026-09-17 — the 971 are attributed, by two independent methods that agree, and the
+      answer changes what the flip costs.** Reports:
+      `evidence/worktree-location-guard/attribution-by-source.md` (which suite builds these
+      fixtures, read out of the test sources) and `attribution-by-time.md` (which activity was
+      running, read out of burst structure and other logs). The two agents never saw each
+      other's work, by design.
+
+      **Nearly all of it is `hooks/git-guard.test.sh`.** That suite builds its per-case
+      fixtures with the literal template `mktemp -d "$TMP/repo.XXXXXX"` (`git-guard.test.sh:91`)
+      — exactly the path shape the log records — and accounts for 967 lines: 435 under the
+      shared `repo` fixture, 506 under the variants, and 26 at a bare mktemp root.
+      ⚠️ **This read 941 until 2026-10-10, and the sentence refuted itself**: 435+506+26 is
+      967, while 941 is 435+506 — the total of one fixture *shape* (`attribution-by-time.md`
+      calls it P1), reused here as the total for a whole *suite*, silently dropping the 26
+      bare-root lines. Caught by the observability judge at `87dd0f4`; re-derived from
+      `layer2-would-deny.tsv` itself rather than from the summary table, which was right. The
+      dependent figure `967 + 95 = 1062` holds; `941 + 95` would have been 1036. The
+      remaining 95 are the `rebasing` and `detached` scenarios in
+      `hooks/verify-hook-wiring.test.sh`, matching what the layer-2 review had already found.
+      **Four lines, under directories named `full` and `shallow`, are still unattributed** and
+      are deliberately left that way rather than guessed at.
+
+      The agreement is stronger than two reports saying the same thing, which can always be
+      one error repeated. Each side produced a fixture fingerprint in different units — the
+      source side as a population (23 directories with one lock, 46 with two, 69 with three,
+      46 with four), the timing side as a single run (8 variant directories with locks
+      `{4,4,3,3,3,2,2,1}`, recurring 23 times) — and those are the same claim only if one
+      scales into the other. `evidence/worktree-location-guard/verify-fixture-fingerprint.py`
+      checks both against **the log** rather than against either report, so the log is the
+      third party: 184 directories, 506 lines, distribution `{1:23, 2:46, 3:69, 4:46}`,
+      184 = 23 × 8, 506 = 23 × 22. Five of five checks pass.
+
+      **Where they disagreed, and how it resolves.** The timing side attributed the bursts to
+      `git-guard.test.sh` *and* `worktree-guard.test.sh` being re-run back-to-back. Both
+      suites did run together — but only one of them can have emitted these lines.
+      `worktree-guard.test.sh:29` exports `GIT_CONFIG_GLOBAL=/dev/null
+      GIT_CONFIG_SYSTEM=/dev/null` suite-wide, and the later cases that override it point at
+      their own fixture configs (`$TMP/live/gc-armed` and friends), never at the machine's.
+      Since `core.hooksPath` is set in the **global** config only (verified), that suite is
+      severed from layer 2 and cannot leak. Timing could see co-occurrence but not emission;
+      source could see emission. The source reading stands, and the disagreement is a limit
+      of the timing method rather than a contradiction.
+
+      **The leak has a one-line fix, and it is worth doing whether or not the guard is ever
+      armed.** Both leaking suites carry **zero** isolation directives;
+      `reference-transaction.test.sh` and `worktree-guard.test.sh` carry 14 and 19. Adding the
+      same `export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null` line the working
+      suites already use would sever both from layer 2, removing 1062 of 1066 lines from a
+      machine-wide log they have been quietly contaminating.
+
+      **And arming has one more cost, the sharpest yet: it would disable another guard's
+      regression suite.** `git-guard.test.sh` exists because `git-guard.sh` once silently
+      stopped matching chained commands and nothing caught it. Its fixtures are primary
+      checkouts by construction, so under `deny` nearly every one of them fails to build.
+      Arming this guard would switch off the alarm on that one. Fixing the isolation removes
+      this too — which is why the isolation fix should come first, and the flip should be
+      re-measured on a clean log afterwards.
+
+      **Standing recommendation, unchanged and now better supported: do not flip.** In order:
+      isolate the two leaking suites, let the log re-accumulate on clean data, re-run
+      criterion 3 for both layers, and only then revisit arming — with the layer-1
+      `SEG_UNPARSED`/`SEG_OPAQUE` false-denial rate as its own separate blocker.
+
+      **2026-09-26 status check, no new analysis.** Criterion 1 for layer 1 has now **elapsed**
+      — the window opened `2026-09-14T20:41:44Z` and its seven days completed 2026-09-21.
+      Layer 1's post-fix window is **577 lines** (555 `B2D`, 17 `A`, 5 `D`), up from the 76 the
+      2026-09-17 first pass read. **That first pass is therefore no longer criterion 3**: it
+      covered 13% of the window that now exists, and the re-run must read all 577. Its
+      *findings* still stand as far as they went — no tilde regression, and the
+      `SEG_UNPARSED`/`SEG_OPAQUE` false-denial rate — but its *coverage* does not.
+
+      ⚠️ **Task 18 is committed and still not in effect**, because this branch is unmerged and
+      the suites run from whichever checkout a session is in. Layer 2's log went 8791 → **9774**
+      (+983) over the same nine days, which is the leak continuing exactly as the merge caveat
+      above predicted. **Merge this branch before starting the criterion-3 re-run**, or the
+      re-run will measure contaminated data again and the window start will be wrong twice
+      over.
+      ⚠️ **Correction, 2026-10-10 — this used `wc -l` as the leak signal, which is the wrong
+      population.** The direction holds (553 of the 560 new would-denies in that window were
+      fixture noise) but roughly half of the +983 was `ALLOW` lines that criterion 3 never
+      reads, and 13 other suites have no isolation line at all. Measured
+      breakdown and the right signal (`WOULD-DENY` restricted to `var/folders`, never `wc -l`):
+      task 18.
+
+      **What changed about the flip decision.** The 2026-09-04 note worried that arming would
+      block ordinary work in repos that had no worktree yet. That specific worry has eased —
+      all four repositories layer 1 has ever refused (`Snatch-Bracket`, `mtg-wizard`,
+      `vibe-scape`, `.claude`) now have linked worktrees under `~/.worktrees/`. It has been
+      replaced by a sharper one: the dominant refusal in the current window is not a misplaced
+      worktree but an **unparseable or opaque Bash line**, and arming today would block most
+      ordinary heredoc-and-pipeline work at a rate the earlier notes never measured.
+
+      Counting both layers, arming today would break three ordinary things, none of which is
+      a misplaced worktree: opaque or unlexable Bash commands (layer 1, ~70 of 76 lines in
+      the current window), the user's own `git pull` in a primary checkout (layer 2, the 19
+      real-repository lines), and every judge subagent's scratch clone (layer 2, which via
+      `judge-guard.sh` reaches `gh pr create`). Whether that cost is acceptable is a
+      judgement for the user, not a criterion this card can settle on its own. **Do not flip
+      without asking.** The recommendation from this pass is not to flip: teach the guard to
+      recognise these three shapes first, then re-measure.
+
+      **2026-10-09 — `origin/main` merged into this branch; the leak is closed on the branch
+      and measured closed.** Merge commit `c4ec0f7`, now `0` behind / `13` ahead of
+      `origin/main`, pushed. The merge was **conflict-free**, which corrects a prediction made
+      earlier the same day: `hooks/git-guard.test.sh` had been edited on both sides — task 18's
+      isolation line here, and `ab5b658 fix(jlc): act on the Copilot review` on `main` — and I
+      expected a conflict in it. Git auto-merged the two hunks; the merged blob is `41e072c`
+      and carries both changes (`grep -c GIT_CONFIG_GLOBAL` = 1, and the `main` edit intact).
+
+      Post-merge verification, run in this worktree: `hooks/git-guard.test.sh` **176 passed,
+      0 failed**; `hooks/verify-hook-wiring.test.sh` **37/37**. The falsifier is the live log,
+      not the green suites — `hooks/state/reference-transaction.log` measured **9826 lines
+      before both runs and 9826 after**, i.e. **zero growth**, where pre-fix those same two
+      runs appended 54 + 40 = 94 lines. Task 18 holds across the merge.
+
+      ⚠️ **Still not in effect on this machine.** The suites run from whichever checkout a
+      session is in, and `origin/main` is unchanged at `54129e2`; nothing on the remote
+      contains this branch. The primary checkout copy of `hooks/git-guard.test.sh` is still
+      blob `2d4282f` with **0** isolation lines. So the clean-window start is the *merge to
+      `main`*, not this merge *from* it, and layer 2 keeps accumulating fixture noise until
+      then. Growth since the fix was committed: 8791 (09-17) → 9774 (09-26) → **9826** (10-09).
+
+      The layer-1 post-fix window has meanwhile grown to the point where the 2026-09-17 first
+      pass reads **76 of over a thousand lines**. Re-measure the window size at the start of
+      the re-run rather than trusting any figure in this card — every one of them has been a
+      snapshot that aged within days.
+
+      **Next action is the observability judge**, not the PR: `hooks/judge-guard.sh` blocks
+      `gh pr create` until a fresh implementation-stage verdict matches `HEAD`, and `HEAD` is
+      now `c4ec0f7`. Opening the PR is also the implementation → review model-switch
+      checkpoint, which is its own ask.
 - [x] 11. ADR under `docs/decisions/` — this changes a machine-wide invariant and pivots the
       standing worktree rule from advisory to enforced. Verify the next free number against the
       deciding ref, not stale local `main`.
@@ -5513,3 +5758,208 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
       column and a third E4 row (a `Bash` payload), so the state the defect lived in is now
       observable. ⚠️ The probe is therefore **29 rows, not the 28** the before/after diff above
       measured — re-running it today will not reproduce that row count, and should not.
+
+- [x] 18. **Stop the two leaking test suites contaminating the machine-wide layer-2 log.**
+      Opened 2026-09-17 by task 10's attribution work. It is a **prerequisite for the flip**,
+      not a tidy-up, and should land before criterion 3 is re-run for either layer.
+      **DONE 2026-09-17 — both suites severed, measured before and after. Results at the end
+      of this task.**
+
+      `hooks/git-guard.test.sh` and `hooks/verify-hook-wiring.test.sh` build git repositories
+      under `mktemp -d` and drive real HEAD moves in them, with **zero** isolation from the
+      machine's git configuration. Because `core.hooksPath` is set in the **global** config
+      only (measured 2026-09-16: `git config --global --get core.hooksPath` returns the store,
+      `--system` returns nothing), every one of those fixtures reaches the live layer-2 hook.
+      They account for **1062 of the 1066** `var/folders` would-deny lines — 967 from
+      `git-guard.test.sh` (corrected from 941 on 2026-10-10; see the correction at task 10),
+      95 from `verify-hook-wiring.test.sh` — leaving a machine-wide log that is largely its
+      own machinery talking to itself.
+
+      **The fix is the line the two non-leaking suites already use**, at the top of each:
+
+          export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+
+      `hooks/reference-transaction.test.sh:58` and `hooks/worktree-guard.test.sh:29` both do
+      exactly this — that is why neither appears in the log, and why the timing-side
+      attribution could not have been right that `worktree-guard.test.sh` emitted any of it.
+
+      **Why this is believed safe for `git-guard.test.sh`, measured rather than assumed:** it
+      never reads the global config. Every identity it needs is set per-repository with
+      `git -C "$dir" config user.email` / `user.name` — at `:50-51`, `:116-117` and `:783-784`
+      as of 2026-10-10. ⚠️ Those three anchors have now been wrong twice. They read
+      `:27-28`, `:93-94`, `:734-735` (pre-fix positions) until the judge at `87dd0f4` flagged
+      them as `:46-47`, `:112-113`, `:779-780`; correcting the comment four lines above them
+      then shifted all three again, in the same edit that fixed them. **Re-derive rather than
+      trust them**: `grep -n 'config user\.email' hooks/git-guard.test.sh`.
+      Confirm the same for `verify-hook-wiring.test.sh` before editing it — that has **not**
+      been checked, and a suite whose whole purpose is verifying hook wiring is far more
+      likely than `git-guard.test.sh` to depend on real configuration on purpose. **If it
+      does, do not sever it** — isolate only the two fixture scenarios (`rebasing`,
+      `detached`, around `:100` and `:435-454`), or leave it alone and record that here.
+
+      Steps. Tests and implementation are never edited in the same step, and here the tests
+      **are** the thing being changed, so the check is a before/after run rather than a red
+      test:
+      1. Record both suites' current pass/fail counts, and the current line count of
+         `hooks/state/reference-transaction.log`.
+      2. Add the export to `git-guard.test.sh`. Re-run it. The counts must be **identical** —
+         a changed count means the suite was depending on the machine config, and the change
+         is not safe as written.
+      3. Re-run it a second time and confirm the log line count does **not** move. That is the
+         real falsifier for this task; a passing suite alone proves nothing about the leak.
+      4. Decide `verify-hook-wiring.test.sh` on its own evidence, per the caution above.
+      5. Only then is a clean layer-2 window available.
+
+      ⚠️ **This removes evidence as well as noise.** An empty log is not proof the guard
+      works — it is the absence of observations. Criterion 2 for `D-L2` is already satisfied
+      from the existing window and should be read as satisfied *there*, historically, rather
+      than re-litigated against a clean log that may hold nothing for weeks. Record that
+      reading here when the fix lands, or a later session will read the empty log as a
+      regression.
+
+      ⚠️ **"Afterwards layer 2's log will be nearly empty" was wrong, and the whole-line
+      count is the wrong leak signal.** Flagged by the observability judge at `87dd0f4` and
+      then measured wider than it reported. Two separate errors:
+
+      *First, these are not the only two unisolated suites.* A static scan of all 25
+      fixture-building suites under `hooks/` finds **13 with no `GIT_CONFIG_GLOBAL` line at
+      all** — among them `test-marker-guard.test.sh`, `doc-guard.test.sh`,
+      `secret-command-guard.test.sh`, `merge-guard.test.sh`, `scan-secrets.test.sh` and the
+      five `hooks/handoff/` suites. The judge measured two of them directly: one run of
+      `test-marker-guard.test.sh` appends **93** lines and `doc-guard.test.sh` **1**. So the
+      log keeps growing after this fix, and a later session comparing total line counts will
+      read that growth as a regression — the exact misreading this task warned about, arriving
+      by a route the warning did not anticipate.
+
+      **Then all 13 were run with the log redirected** (round-2 judge, 2026-10-14), which
+      narrows this and strengthens the conclusion below: **7 of the 13 add nothing at all**,
+      the other 6 add **only `ALLOW` lines**, and **not one of the 13 emits a single
+      `WOULD-DENY`**. So the earlier wording here — that 13 suites "keep producing" the lines
+      that matter — was too strong: they pollute the line *count* and are invisible to the
+      review population. That is the best available evidence that `WOULD-DENY` under
+      `var/folders` is the right leak signal, since it is the one measure none of the 13 can
+      move.
+
+      *Second, the line count conflates two populations that matter very differently.*
+      Measured on the live log at 9829 lines (2026-10-10):
+
+      | field-5 class | lines | share |
+      |---|---:|---:|
+      | `ALLOW git-init-own-repository` | 7920 | 80.6% |
+      | `WOULD-DENY primary-HEAD-lock-held` | 1797 | 18.3% |
+      | `ALLOW scope-not-primary` | 50 | 0.5% |
+      | `ALLOW no-primary-HEAD-lock` | 48 | 0.5% |
+      | `ALLOW bypass-worktree-exempt` | 14 | 0.1% |
+
+      **Criterion 3 reads only the `WOULD-DENY` subset**, so the four `ALLOW` classes — 81% of
+      the file, and all of what the other 13 suites contribute — are irrelevant to the review
+      and harmless. The leak signal is therefore `grep -c WOULD-DENY` restricted to
+      `var/folders` paths, never `wc -l`. Correcting the earlier assertion: the
+      8791 → 9774 growth recorded above was called "the leak continuing" without being traced.
+      Traced now, by timestamp bucket:
+
+      | window | ALLOW | WOULD-DENY | of which `var/folders` fixture | of which **non**-fixture |
+      |---|---:|---:|---:|---:|
+      | up to 2026-09-16 | 7367 | 1231 | 1071 | 160 |
+      | 2026-09-17 … 09-26 | 638 | 560 | 553 | 7 |
+      | 2026-09-27 … 10-10 | 27 | 6 | **0** | 6 |
+
+      ⚠️ **Read the last column as "non-fixture", not "real repository"** — it is simply
+      "path does not contain `var/folders`", so it still includes every agent scratch clone.
+      The `6` in the bottom row is **not** 6 lines to review: two of them are pane scratch
+      clones from 2026-10-09. Only the 4-genuine-root analysis below separates real
+      repositories from scratch. (Mislabelled until 2026-10-14; the column header said "real
+      repo" while the script that produced it classified on `var/folders` alone. The bottom
+      row's window label also read "… 10-09" while the bucket is "09-27 onward" and had
+      already caught a 10-10 line.)
+
+      So the direction of that claim was right — 553 of the 560 new would-denies in the
+      nine-day window were fixture noise — but roughly half the raw growth was `ALLOW` lines
+      that never mattered. And the fixture would-deny lines are driven by *running* those
+      suites, not by elapsed time: nothing ran them 09-27 onward, so that window holds zero,
+      which must **not** be read as the fix taking effect (it is still unmerged).
+
+      **The practical payoff for the layer-2 criterion-3 re-run.** Of the 173 `WOULD-DENY`
+      lines outside `var/folders`, across 63 distinct repository roots, only **four roots are
+      genuine repositories** — `Snatch-Bracket` (7), `mtg-wizard` (7), `vibe-scape` (4),
+      `.claude` (3) — totalling **21 lines**. The other 59 roots (152 lines) are agent scratch
+      clones under `/private/tmp/r10/`, `/private/tmp/obsjudge-r10/`, `/private/tmp/judge-*`
+      and pane `work/clone` directories. Split at the window cut: **19 lines before
+      `2026-09-14T20:41:44Z`** — exactly the population the 2026-09-08 layer-2 review read and
+      judged 19/19 CORRECT, which confirms that figure was right and correctly scoped — and
+      **2 lines after**, both `vibe-scape`, at `2026-10-04T04:44:29Z` and
+      `2026-10-05T20:45:46Z`.
+      ⚠️ The per-repo breakdown read `vibe-scape (6)` until 2026-10-14, which made the four
+      roots sum to 23 rather than the stated 21. The live log has **4**; the total 21 was
+      right and the digit wrong — the same species of slip as the 941 above, a part that does
+      not add up to its own total. Found by the round-2 observability judge at `386cb00`.
+
+      ⚠️ **A third unattributed group exists on the live log, and the "4 unattributed" figure
+      is extract-scoped.** The round-2 judge noticed two post-cut lines whose path shape
+      matches no suite on this branch; re-measured against the **live** log on 2026-10-14
+      rather than the committed TSV:
+
+      | fixture sub-path | lines | roots | dates | attributed |
+      |---|---:|---:|---|---|
+      | `full/` | 2 | 2 | 2026-09-05 | **none found** |
+      | `shallow/` | 2 | 2 | 2026-09-05 | **none found** |
+      | `on-feature/` | 2 | 2 | 2026-09-26 | **none found** |
+      | everything else (`repo`, `repo.*`, bare `.git`, `rebasing`, `detached`) | 1618 | — | 09-01 … 09-17 | matches a known template |
+      | **total `var/folders` WOULD-DENY, live log** | **1624** | | | |
+
+      So the honest count is **6 unattributed, not 4** — `grep -rl on-feature hooks/` returns
+      nothing, so that group is unexplained rather than demonstrated fixture noise. The
+      evidence files' "4 of 1066" stays correct *for the committed extract*, which is a
+      snapshot; the live log has since grown to 1624 such lines. State the scope with the
+      figure whenever either is quoted, because the two differ by more than the unattributed
+      count itself.
+      **The layer-2 re-run therefore has 2 new lines to read, not the
+      571 the raw delta suggests.**
+
+      **Result, 2026-09-17.** Both suites severed. The falsifier is the log line count, not a
+      green suite, and it was run as specified — measured on the **live**
+      `hooks/state/reference-transaction.log`, one suite at a time:
+
+      | run | suite result | live log | delta |
+      |---|---|---|---|
+      | baseline | — | 8697 | — |
+      | `git-guard.test.sh`, before fix | 171 passed, 0 failed | 8751 | **+54** |
+      | `git-guard.test.sh`, after fix | 171 passed, 0 failed | 8751 | **0** |
+      | `verify-hook-wiring.test.sh`, before fix | 37/37 passed | 8791 | **+40** |
+      | `verify-hook-wiring.test.sh`, after fix | 37/37 passed | 8791 | **0** |
+      | `worktree-guard.test.sh` (untouched) | 243 passed, 0 failed, 1 skipped | 8791 | **0** |
+      | `reference-transaction.test.sh` (untouched) | 182 passed, 0 failed, 1 skipped | 8791 | **0** |
+
+      Both pass counts are **identical** across the change, which is what shows neither suite
+      was depending on the machine configuration it lost. The two untouched sibling suites are
+      unchanged from their recorded figures and still contribute nothing to the live log.
+
+      **`verify-hook-wiring.test.sh` needed a different fix, and finding out why corrected a
+      wrong comment.** Its header asserted that because the fixture repos live under a fake
+      `$HOME`, "there is no `~/.gitconfig` to name a committer and no system config to
+      inherit". The second half was handled (`GIT_CONFIG_NOSYSTEM=1`); the first half is
+      **false**, and that belief is why the leak went unnoticed. `$HOME` is only ever a *path*
+      in that suite — the fixture-building commands (`git -C "$G" checkout|commit|rebase`) run
+      in the script's own environment, where `HOME` is the real one, so git read the real
+      `~/.gitconfig`, which is where `core.hooksPath` is set (`git config --global --list
+      --show-origin` → `file:/Users/marksuyat/.gitconfig core.hookspath=…`). Severing was safe
+      only because that suite takes its identity from `GIT_AUTHOR_*`/`GIT_COMMITTER_*`
+      environment variables rather than from any config file — checked before editing, exactly
+      as the caution above demanded. The comment is corrected in place.
+
+      ⚠️ **The clean window starts at MERGE, not at this commit.** These suites are normally
+      run from whichever checkout a session happens to be in, and the primary still holds the
+      leaking copies — measured immediately after committing: `hooks/git-guard.test.sh` hashes
+      to `04f2c3ce` on this branch and `7bf0e4c2` in the primary. Any run from the primary, or
+      from another worktree branched before this, keeps appending. So when the next
+      criterion-3 pass picks its window start, it must use the **merge** date, and should
+      verify the primary's blob the way task 10 verified the guard's — the same lesson as "a
+      merge does not make a hook live", pointed the other way.
+
+      **What this does NOT do.** It removes the *contamination*, not the underlying refusal:
+      layer 2 still refuses a HEAD write in any primary checkout, so the three arming costs in
+      task 10's 2026-09-17 note stand unchanged — the user's own `git pull`, every judge
+      scratch clone, and layer 1's `SEG_UNPARSED`/`SEG_OPAQUE` false-denial rate. What has
+      changed is that the layer-2 log will now record **only** those, so the next criterion-3
+      pass reads real events instead of 87% machinery. The standing recommendation not to flip
+      is unaffected by this task.

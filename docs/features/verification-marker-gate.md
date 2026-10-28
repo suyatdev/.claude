@@ -124,8 +124,8 @@ flowchart TD
     L -- no --> P
     L -- yes --> M{Marker readable and valid?}
     M -- no --> Z[MSG_NO_MARKER / MSG_BAD_MARKER]
-    M -- yes --> N{Both blobs match<br/>post-commit content?}
-    N -- no --> W[MSG_STALE_SUBJECT / MSG_STALE_TEST]
+    M -- yes --> N{Blobs and parts match<br/>post-commit content?}
+    N -- no --> W[MSG_STALE_SUBJECT / MSG_STALE_TEST / MSG_STALE_PART]
     N -- yes --> P
 ```
 
@@ -462,6 +462,27 @@ A failed marker write **fails the suite**. A silent no-marker would surface late
 }
 ```
 
+> **Amended by `docs/features/trim-safety-followups.md` item C (ADR 0050): the schema gains an
+> optional `parts` key; `version` stays `1`.** A runner `<stem>.test.sh` that has a parts folder
+> `<stem>.test.d/` also records every part, so the receipt covers the bytes the runner sources and
+> not only the runner:
+>
+> ```json
+>   "parts": [ { "path": "hooks/handoff/live-handoff.test.d/10-a.sh", "blob": "<hex>" } ]
+> ```
+>
+> - **Present only when the runner has a parts folder.** A folder holding no `NN-*.sh` file writes
+>   `"parts": []`. A runner with no folder writes **no `parts` key at all**, so every receipt on disk
+>   before this amendment stays valid for a runner without parts.
+> - **Never present for a `.test.py` runner**: nothing sources parts for one, so the writer does not
+>   look.
+> - **An absent key and `[]` are read as the same thing, the empty set.** The two never need telling
+>   apart.
+> - Entries are `{path, blob}` ordered by path; a part is a file whose last two path components are
+>   `<stem>.test.d/[0-9][0-9]-*.sh` (the glob `source_test_parts` sources). A malformed `parts` is
+>   `MSG_BAD_MARKER`, the same door as any other bad shape. Full rules and scenarios:
+>   `docs/features/trim-safety-followups.md` § "C. The receipt names every part".
+
 `written_at` is **informational only and MUST NOT influence any decision.** Freshness is decided by
 content hashes alone — a timestamp rule would re-admit the staleness problem the blob key dissolves.
 **Enforced by the `written_at` outline in §Acceptance**, which varies the timestamp independently of
@@ -605,7 +626,7 @@ the only honest answer.
 | # | field | domain |
 |---|---|---|
 | 1 | outcome | `ALLOW` \| `BLOCK` \| `EXEMPT` |
-| 2 | door | one of the **eight** `MSG_*` constants the call can report, or **`-`** when field 1 is not `BLOCK` |
+| 2 | door | one of the **nine** `MSG_*` constants the call can report *(eight through revision 21; `MSG_STALE_PART` added by trim-safety-followups item C)*, or **`-`** when field 1 is not `BLOCK` |
 | 3 | detail | door-specific, below, or **`-`** |
 | 4 | pair | `<subject>\|<test>`, or **`-`** when the decision was reached before any pair was formed |
 
@@ -616,6 +637,7 @@ the only honest answer.
 | `BLOCK` | `MSG_UNSUPPORTED_FORM` | the trigger that fired: `FOREIGN_REPO` \| `INCLUDE_OR_FROM_FILE` \| `PATCH_OR_INTERACTIVE` \| `OFF_WHITELIST` | `-` |
 | `BLOCK` | `MSG_NO_MARKER` | the remedy command, derived from the suite path and its extension | the pair |
 | `BLOCK` | `MSG_BAD_MARKER` \| `MSG_STALE_SUBJECT` \| `MSG_STALE_TEST` | `-` | the pair |
+| `BLOCK` | `MSG_STALE_PART` *(added by trim-safety-followups C)* | the first differing part path in sort order, full repo-relative | the pair |
 | `BLOCK` | `MSG_NOTHING_RUNNABLE` \| `MSG_BAD_EXEMPT` \| `MSG_GIT_FAILED` | `-` | `-` |
 
 ⚠️ **`-` for "nothing here" is load-bearing, not tidiness — an empty field is unreadable in bash.** A
@@ -656,10 +678,12 @@ read-side validation of the decision call's output is specified:
    drift apart. A constant bash does not know is indistinguishable from a corrupt line, and both are
    the same failure: a component said something this version cannot act on.
 
-**The thirteen doors partition across the boundary, five and eight, and the split is checkable.**
+**The fourteen doors partition across the boundary, five and nine, and the split is checkable.**
+*(Amended by trim-safety-followups C: thirteen and five-and-eight through revision 21; `MSG_STALE_PART`
+is a decision-call door.)*
 Bash raises `MSG_NO_PYTHON`, `MSG_CLASSIFIER_MISSING`, `MSG_BAD_PAYLOAD`, `MSG_CLASSIFIER_FAILED` and
 `MSG_CLASSIFIER_BAD_OUTPUT` — every one of them a statement about the decision call itself, which is
-why none can be reported *by* it. The other eight arrive in field 2. **No door is raised on both
+why none can be reported *by* it. The other nine arrive in field 2. **No door is raised on both
 sides**, so §The doors stays a single table with a column this section does not duplicate.
 
 **Validating the exemption in Python.** A non-empty `exempt` must be **1 to 200 bytes, every byte in
@@ -678,7 +702,8 @@ order is load-bearing rather than incidental.
 > `MSG_CLASSIFIER_MISSING`, `MSG_BAD_PAYLOAD`, `MSG_CLASSIFIER_FAILED`,
 > `MSG_CLASSIFIER_BAD_OUTPUT`) are never reachable by `TEST_EXEMPT`; recovery from one of those
 > means fixing the file with a non-`Bash` tool (`Edit`/`Write`), not typing an exemption. The
-> eight decision-call doors — every real gate *decision* — are what `TEST_EXEMPT` actually covers.
+> nine decision-call doors — every real gate *decision* — are what `TEST_EXEMPT` actually covers.
+> *(Amended by trim-safety-followups C: eight through revision 21.)*
 
 > ⚠️ **The bound is 200 bytes.** The ERE quantifier revisions 11–13 wrote, `{1,200}`, means *between
 > 1 and 200*; ADR 0026's prose "a byte-counted `1,200` bound" quotes that quantifier and is not a bound
@@ -1054,9 +1079,22 @@ path. The order is what stops `foo.test.sh` falling through to the `.sh` arm:
 |---|---|---|---|
 | 1 | `.test.sh` | test | strip `.test.sh`, append `.sh` |
 | 2 | `.test.py` | test | strip `.test.py`, append `.py` |
+| 2a | `<stem>.test.d/[0-9][0-9]-*.sh` (last two components) | part | test `<stem>.test.sh`, subject `<stem>.sh` |
 | 3 | `.sh` | subject | strip `.sh`, append `.test.sh` |
 | 4 | `.py` | subject | strip `.py`, append `.test.py` |
 | 5 | anything else | — | **forms no pair** |
+
+> **Row 2a is an amendment by `docs/features/trim-safety-followups.md` item C (ADR 0050).** It is
+> numbered `2a` so every existing row number keeps its meaning. It matches on the **last two path
+> components**, not the basename, and sits before row 3 because a part's basename is a `.sh` file
+> that row 3 would otherwise take as a subject and pair with a `<part>.test.sh` that does not exist.
+> A part joins the pair set exactly as its runner would: it forms the pair
+> `<stem>.sh`|`<stem>.test.sh`, and step 2 applies unchanged (the subject must be tracked). A file
+> under `.test.d/` that does not match `[0-9][0-9]-*.sh` (`README.sh`, `helper.sh`) is not a part and
+> falls through to the rows below.
+> ⚠️ **One latent gap, measured and recorded rather than closed:** a part whose own basename ends in
+> `.test.sh` is claimed by row 1 first, so it forms no pair and is ungated. No real part is named that
+> way today. See ADR 0050.
 
 Every path gets exactly one role, so a path is never both a subject and a test.
 
@@ -1153,6 +1191,31 @@ The row that most deserves scepticism was the last one: it now carries marker re
 calls that revision 13 would have paid for in a separate process, so it could move in *either*
 direction. Measured, it came in **under** budget at 169.3 ms — the in-process merge paid for itself.
 The two misses were rows 1 and 3 instead.
+
+> ⚠️ **Row 4's budget describes a ONE-PAIR commit only, and it was already unachievable at two —
+> measured, recorded, and deliberately not re-scoped here.** Task 10 timed a single pair, so nothing
+> pinned how the figure behaves as a commit stages more pairs. Measured 2026-10-18 by
+> `docs/features/trim-safety-followups.md` task 13, with a 1/3/5/10-pair sweep: the cost is roughly
+> linear at **≈23.7 ms per pair on this card's base (`main`)**. Each pair costs two or three git
+> subprocesses; `trim-safety-followups` item C adds roughly **8 ms per pair** on top (one
+> `ls-files --stage` in the `PLAIN` form, or an `ls-tree` plus one `hash-object` per in-set part in
+> `PATHSPEC`/`ALL`), and ADR 0050 records it.
+>
+> **The crossing point is a range, not a number — `main` crosses 200 ms somewhere around two to
+> three pairs**, and anything from four pairs up was outside 200 ms before that card as well as
+> after. An earlier revision of this note said "about 1.7 pairs — one pair fits, two do not", which
+> was **overstated and is corrected here**: that figure was derived from the 177.5 ms intercept
+> while this very note discloses the same fixture also reading 162.0 ms. Hold the measured slope and
+> shift the intercept by that documented 15.5 ms and the crossing moves to ≈2.3 pairs. Caught by the
+> round-2 observability judge on `fix/trim-safety-followups`; the honest reading is that a
+> load-dependent intercept cannot support a one-decimal crossing point, and that the *slope* is the
+> durable part — nobody has measured whether it is itself load-invariant.
+>
+> **Re-scoping this budget as a per-pair figure belongs to whoever owns this card**, not to a
+> test-receipt change that happened to measure it. Also note the absolute numbers move with machine
+> load: in one session the same unfixed fixture read 202.2 ms and 189.1 ms, and `main` itself read
+> 177.5 ms and 162.0 ms, so a single absolute reading does not settle a verdict against this budget
+> — a measured *difference* between two trees timed together does.
 
 ## Scenarios
 
@@ -1599,12 +1662,15 @@ Scenario Outline: every door that writes a line writes the constant that fired i
     And exactly one BLOCK line is appended to <repo>/hooks/state/test-marker.log
     And field 3 of that line is "<door>"
     And field 4 of that line is <field 4>
-   # ONE outline rather than twelve scenarios, and it replaces the single-door scenario that
+   # ONE outline rather than thirteen scenarios (twelve through revision 21; amended by
+   # trim-safety-followups C, which adds MSG_STALE_PART), and it replaces the single-door scenario that
    # stood here through revision 15 — that one asserted the log for MSG_NO_MARKER alone, which
    # is how seven doors came to state a MUST that nothing enforced. Do not re-add a per-door
    # copy beside this table: two spellings of one check is this spec's own named defect class.
 
-  Examples: the eight the decision call reports, read from field 2 of the TSV
+  Examples: the nine the decision call reports, read from field 2 of the TSV
+   # (eight through revision 21; the MSG_STALE_PART row is trim-safety-followups C's amendment —
+   # its field 3 is the first differing part path, and the log's reason is field 2 for a BLOCK)
     | door                 | field 4  |
     | MSG_NOTHING_RUNNABLE | -        |
     | MSG_BAD_EXEMPT       | -        |
@@ -1614,6 +1680,7 @@ Scenario Outline: every door that writes a line writes the constant that fired i
     | MSG_BAD_MARKER       | the pair |
     | MSG_STALE_SUBJECT    | the pair |
     | MSG_STALE_TEST       | the pair |
+    | MSG_STALE_PART       | the pair |
    # MSG_UNSUPPORTED_FORM is the row that discriminates the mapping: the TSV puts the TRIGGER
    # in field 3 and the constant in field 2, so a uniform reason=$f3 logs a trigger name here
    # and MSG_NO_MARKER's row logs a remedy command. Both still parse. Neither errors.
@@ -1627,7 +1694,7 @@ Scenario Outline: every door that writes a line writes the constant that fired i
    # these four are statements ABOUT the decision call (§The doors, rows 4, 1, 5, 6), so no TSV
    # line exists to map from and the case-based mapping never runs for them. They are the half
    # of the log the field-2/field-3 rule cannot reach, which is why they need their own table.
-   # The thirteenth door, MSG_NO_PYTHON, is absent by design — it writes no line, and the
+   # The fourteenth door (thirteenth through revision 21), MSG_NO_PYTHON, is absent by design — it writes no line, and the
    # scenario asserting that absence stands separately below.
 
 Scenario: a block with no pair still writes a well-formed line
@@ -1635,9 +1702,11 @@ Scenario: a block with no pair still writes a well-formed line
    When "git commit -m msg -i -- docs/notes.md" runs
    Then the hook exits 2 with MSG_UNSUPPORTED_FORM
     And one BLOCK line is appended with "-" in field 4
-   # nine of the thirteen doors fire before a pair exists, and eight of those can still write a
+   # nine of the fourteen doors fire before a pair exists, and eight of those can still write a
    # line (MSG_NO_PYTHON knows no repo); field 4 is total because it has a defined value for
-   # them, not because every door reaches one
+   # them, not because every door reaches one. (Amended by trim-safety-followups C: "fourteen"
+   # was "thirteen" through revision 21. MSG_STALE_PART names a pair, so the nine and the eight
+   # are unchanged.)
 
 Scenario: an allowed commit writes no log line
   Given docs/notes.md is staged and has no sibling test
@@ -1793,7 +1862,7 @@ registered today and all print a message and `exit 2` when `python3` is absent. 
 already blocks every commit on this machine. (`doc-guard.sh:54` is the one that fails open, on the
 stated ground that a documentation reminder is not worth blocking a commit over.)
 
-**Every other door — all twelve — is downstream of node `G`.** This matters most for
+**Every other door — all thirteen (twelve through revision 21; amended by trim-safety-followups C) — is downstream of node `G`.** This matters most for
 `MSG_CLASSIFIER_MISSING`, `MSG_CLASSIFIER_FAILED` and `MSG_CLASSIFIER_BAD_OUTPUT`, because
 `classify-commit-command.py` is a file *this feature introduces*: no sibling guard's precedent covers
 it, and a missing or corrupt copy of it firing before the opt-in check would be a machine-global
@@ -1802,7 +1871,8 @@ literally true instead of approximately true.
 
 ### The doors
 
-`exit 2` is not one door; it is **thirteen** — counted off the flowchart, one per `MSG_*` constant.
+`exit 2` is not one door; it is **fourteen** — counted off the flowchart, one per `MSG_*` constant.
+*(Thirteen through revision 21; row 14, `MSG_STALE_PART`, is trim-safety-followups C's amendment.)*
 
 | # | constant | fires when |
 |---|---|---|
@@ -1819,9 +1889,11 @@ literally true instead of approximately true.
 | 11 | `MSG_BAD_MARKER` | the marker exists but fails schema or path validation |
 | 12 | `MSG_STALE_SUBJECT` | the marker is valid but the subject blob does not match |
 | 13 | `MSG_STALE_TEST` | the marker is valid but the test blob does not match, or the test is ABSENT |
+| 14 | `MSG_STALE_PART` | the marker is valid and its `parts` are well-formed, but the set of `(path, blob)` parts the commit ships differs from the receipt's (an absent key counts as the empty set); the detail names the first differing path in sort order *(added by trim-safety-followups C)* |
 
-**Five doors are bash's, eight are the decision call's, and no door is both** — the split is stated
-once, in §3 → "The thirteen doors partition across the boundary". Rows 3, 4, 1, 5 and 6 are bash's:
+**Five doors are bash's, nine are the decision call's, and no door is both** — the split is stated
+once, in §3 → "The fourteen doors partition across the boundary". *(Eight and thirteen through
+revision 21; amended by trim-safety-followups C.)* Rows 3, 4, 1, 5 and 6 are bash's:
 each is a statement *about* the decision call, which is why the call itself cannot report them.
 
 **Each row names its trigger, and no row restates a rule specified elsewhere.** Rows 1 and 5 partition
@@ -1847,7 +1919,15 @@ one per Python file: emptying the **entry point** (exit 0, no output → `MSG_CL
 emptying the **classifier** (the import succeeds, the call raises → `MSG_CLASSIFIER_FAILED`). It was 24
 through revision 13, when there was one file; the two mutants reach the same door by different routes,
 and a suite that only ever empties one of them never exercises the import path ADR 0026 introduced. A
-two-mutant minimum against thirteen doors establishes nothing about the other eleven.
+two-mutant minimum against thirteen doors establishes nothing about the other eleven. *(Those are
+the v1 figures and are left as written, per the note below; against today's fourteen doors the same
+sentence reads "the other twelve". The argument is unchanged either way.)*
+
+> **Not re-derived by trim-safety-followups C.** The floor of 25 and the "thirteen doors" above are the
+> v1 figures. This card's `MSG_STALE_PART` makes the door count fourteen, so a floor rebuilt by the
+> same rule ("one per door") would be 26. C did not change the mutation requirement; its door is
+> asserted by `hooks/lib/decide-commit-gate.test.py` (the only suite that names it, including one
+> assertion that drives the real hook), not by a re-run of the 25-mutant exercise.
 
 `MSG_NO_MARKER`'s remedy string is derived from the suite path and its extension — `bash <path>` for
 `.sh`, `python3 <path>` for `.py` — never hardcoded to `bash`.
@@ -1893,10 +1973,12 @@ line and §3's table defines the wire line, and an implementer holding both stil
 field 3 means different things on either side of the boundary:
 
 ```sh
-# WRONG — the log's reason is not TSV field 3. Measured against the eight doors
-# field 2 can carry: six of them put `-` in field 3, MSG_NO_MARKER puts the
-# REMEDY COMMAND there and MSG_UNSUPPORTED_FORM puts the TRIGGER NAME there.
-# So this logs the door name for zero of the eight — and never errors.
+# WRONG — the log's reason is not TSV field 3. Measured against the nine doors
+# field 2 can carry (eight through revision 21; MSG_STALE_PART added by
+# trim-safety-followups C): six of them put `-` in field 3, MSG_NO_MARKER puts the
+# REMEDY COMMAND there, MSG_UNSUPPORTED_FORM puts the TRIGGER NAME there, and
+# MSG_STALE_PART puts the first differing PART PATH there.
+# So this logs the door name for zero of the nine — and never errors.
 reason=$f3
 
 # CORRECT — the reason switches on the outcome, because a bypass is identified
@@ -1916,16 +1998,17 @@ pair=$f4                             # the only straight copy
 printf '%s\t%s\t%s\t%s\n' "$ts" BLOCK "$msg" - >> "$LOG"
 ```
 
-**Twelve doors write a line, not eight** — the mapping above covers only the eight the decision
+**Thirteen doors write a line, not nine** — the mapping above covers only the nine the decision
 call reports, and stating it without its counterpart is what round 8 caught. The four above are
-the other half, and `MSG_NO_PYTHON` is the thirteenth, which writes nothing because it fires
-before a `<repo>` is known. All twelve are asserted by one Scenario Outline in §Acceptance, whose
+the other half, and `MSG_NO_PYTHON` is the fourteenth, which writes nothing because it fires
+before a `<repo>` is known. *(Through revision 21 this read: twelve doors write a line, not eight, and
+`MSG_NO_PYTHON` was the thirteenth. Amended by trim-safety-followups C.)* All thirteen are asserted by one Scenario Outline in §Acceptance, whose
 two Examples tables are that same partition; **field 4 is `-` for every one of the four**, since
 each fires long before a pair could be formed.
 
 ⚠️ **A test that asserts a line was written does not catch any of this.** The failure is a
 well-formed line carrying the wrong text, so the scenarios that pin this section **MUST assert the
-value of field 3 for every one of the twelve doors that writes a line**, not for one representative
+value of field 3 for every one of the thirteen doors that writes a line** (twelve through revision 21), not for one representative
 door and not merely that the log grew by a line — that MUST is discharged by the Scenario Outline
 in §Acceptance and nowhere else, and revision 15 stated it here while leaving eleven of the twelve
 unasserted. The six doors that carry `-` in the wire's field 3 are the ones that
@@ -1948,14 +2031,16 @@ split, and the bypass-rate query silently reports nothing at all.
 > caught all three is the same one: **ask which interpreter the artifact meets in production before
 > trusting any probe of it.**
 
-**Field 4 is total, and the `-` is the reason.** Counted against the **thirteen** doors, not inherited
-from a superseded revision: exactly four — `MSG_NO_MARKER`, `MSG_BAD_MARKER`, `MSG_STALE_SUBJECT`,
-`MSG_STALE_TEST` — run after pair formation and can name a pair. **Eight** write `-`, as does every
+**Field 4 is total, and the `-` is the reason.** Counted against the **fourteen** doors, not inherited
+from a superseded revision: exactly five — `MSG_NO_MARKER`, `MSG_BAD_MARKER`, `MSG_STALE_SUBJECT`,
+`MSG_STALE_TEST`, `MSG_STALE_PART` — run after pair formation and can name a pair. *(Thirteen doors
+and four through revision 21; `MSG_STALE_PART` is trim-safety-followups C's amendment, and it leaves
+the next count unchanged.)* **Eight** write `-`, as does every
 `EXEMPT` line, since the exemption is honoured at node `H` before the path set is collected. Collecting
 the path set early just to populate the field is rejected: it would spend git calls on a commit the
 user has already exempted, and could raise `MSG_GIT_FAILED` on one.
 
-**One door writes no line at all, and it is the thirteenth:** `MSG_NO_PYTHON` fires before any repo is
+**One door writes no line at all, and it is the fourteenth** (thirteenth through revision 21): `MSG_NO_PYTHON` fires before any repo is
 known, so there is no `<repo>` to write to. That is a consequence of the opt-in ordering rather than an
 oversight, and it is not a silent failure — it announces itself on stderr and blocks outright. (The
 allow-on-unreadable-payload path also resolves no toplevel, but allows are not logged at all, so it

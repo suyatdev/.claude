@@ -46,6 +46,13 @@ def _load(name, filename):
 _CLASSIFIER = _load("classify_commit_command", "classify-commit-command.py")
 classify = _CLASSIFIER.classify
 
+# The parts-folder convention is defined once, in parts_convention.py, so the receipt and this gate
+# cannot drift on what counts as "the suite". It is its own module, not the writer, because loading
+# the whole writer here cost ~18 ms on every gate call. Same uncaught-import stance as above.
+_PARTS = _load("parts_convention", "parts_convention.py")
+parts_folder_for = _PARTS.parts_folder_for
+is_part = _PARTS.is_part
+
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 # 1-200 bytes, every byte 0x20-0x7E. A `bytes` pattern checked with fullmatch, not `$` -- Python's
@@ -156,6 +163,10 @@ def _classify_role(path):
         return "test", path[: -len(".test.sh")] + ".sh"
     if path.endswith(".test.py"):
         return "test", path[: -len(".test.py")] + ".py"
+    # Row 2a, before row 3: the match is on the path (last two components), not the basename, and
+    # a part's basename would otherwise be taken as a subject. The sibling is the runner.
+    if is_part(path):
+        return "part", os.path.dirname(path)[: -len(".test.d")] + ".test.sh"
     if path.endswith(".sh"):
         return "subject", path[: -len(".sh")] + ".test.sh"
     if path.endswith(".py"):
@@ -181,6 +192,11 @@ def _form_pairs(toplevel, path_set):
             if not (_tracked(toplevel, test) or on_disk):
                 continue  # no sibling test at all -- never gated, per Scope
         else:
+            if role == "part":
+                # A part joins the pair set as its runner would: take the runner as the test and
+                # derive the subject from it, so the tracked-subject rule applies unchanged.
+                path = sibling
+                _, sibling = _classify_role(path)
             test, subject = path, sibling
             if not _tracked(toplevel, subject):
                 continue  # the three orphan suites land here
@@ -230,8 +246,36 @@ def _absent_and_blob(toplevel, path, in_set, form, base):
 _BLOB_RE = re.compile(r"^([0-9a-f]{40}|[0-9a-f]{64})$")
 
 
+def _read_parts(data, test):
+    """The receipt's `parts` as a set of (path, blob), or None when it is malformed.
+
+    An absent key and `[]` are the same thing -- the empty set. Every entry must be an object
+    with a string `path` under this pair's `<stem>.test.d/` folder matching the parts glob, a
+    string `blob` passing _BLOB_RE, and no path may repeat."""
+    raw = data.get("parts", [])
+    if not isinstance(raw, list):
+        return None
+    folder = parts_folder_for(test)
+    seen = set()
+    for entry in raw:
+        if not isinstance(entry, dict):
+            return None
+        path, blob = entry.get("path"), entry.get("blob")
+        if not isinstance(path, str) or not isinstance(blob, str):
+            return None
+        if not _BLOB_RE.match(blob):
+            return None
+        if folder is None or os.path.dirname(path) != folder or not is_part(path):
+            return None
+        if any(path == seen_path for seen_path, _blob in seen):
+            return None
+        seen.add((path, blob))
+    return seen
+
+
 def _read_marker(toplevel, subject, test):
-    """None (no marker), "BAD" (unreadable or invalid), or {"subject": sha, "test": sha}."""
+    """None (no marker), "BAD" (unreadable or invalid), or
+    {"subject": sha, "test": sha, "parts": {(path, blob), ...}}."""
     key = subject.replace("%", "%25").replace("/", "%2F")
     path = os.path.join(toplevel, "hooks", "state", "test-markers", key)
     try:
@@ -256,7 +300,58 @@ def _read_marker(toplevel, subject, test):
         return "BAD"
     if not isinstance(test_blob, str) or not _BLOB_RE.match(test_blob):
         return "BAD"
-    return {"subject": subject_blob, "test": test_blob}
+    parts = _read_parts(data, test)
+    if parts is None:
+        return "BAD"
+    return {"subject": subject_blob, "test": test_blob, "parts": parts}
+
+
+def _git_lines(toplevel, args):
+    """NUL-separated records of a git call, raising _GitFailure on a non-zero exit."""
+    proc = _git(args, toplevel)
+    if proc.returncode != 0:
+        raise _GitFailure()
+    return [rec for rec in proc.stdout.split("\0") if rec]
+
+
+def _parts_shipped(toplevel, test, path_set, form, base):
+    """The set of (path, blob) for the parts a commit ships, per the commit form.
+
+    PLAIN reads the index. PATHSPEC and ALL take each part in the path set from disk and every
+    other part from <base>; ALL also drops a base part missing on disk (a deletion)."""
+    folder = parts_folder_for(test)
+    if folder is None:
+        return set()
+
+    def is_direct_part(path):
+        return os.path.dirname(path) == folder and is_part(path)
+
+    if form == "PLAIN":
+        shipped = set()
+        for record in _git_lines(toplevel, ["ls-files", "--stage", "-z", "--", folder + "/"]):
+            meta, _tab, path = record.partition("\t")
+            if is_direct_part(path):
+                shipped.add((path, meta.split()[1]))
+        return shipped
+
+    shipped = set()
+    in_set = {path for path in path_set if is_direct_part(path)}
+    for path in in_set:
+        if not os.path.exists(os.path.join(toplevel, path)):
+            continue
+        proc = _git(["hash-object", "--", path], toplevel)
+        if proc.returncode != 0:
+            raise _GitFailure()
+        shipped.add((path, proc.stdout.strip()))
+    for record in _git_lines(toplevel, ["ls-tree", "-z", base, "--", folder + "/"]):
+        meta, _tab, path = record.partition("\t")
+        _mode, kind, blob = meta.split()
+        if kind != "blob" or path in in_set or not is_direct_part(path):
+            continue
+        if form == "ALL" and not os.path.exists(os.path.join(toplevel, path)):
+            continue
+        shipped.add((path, blob))
+    return shipped
 
 
 def _remedy(test_path):
@@ -362,6 +457,7 @@ def _decide(payload):
             subject_absent, subject_blob = _absent_and_blob(
                 toplevel, subject, subject in path_set_set, result.form, base
             )
+            shipped_parts = _parts_shipped(toplevel, test, path_set, result.form, base)
         except _GitFailure:
             _emit("BLOCK", "MSG_GIT_FAILED")
             return
@@ -370,6 +466,13 @@ def _decide(payload):
             return
         if subject_absent or subject_blob != marker["subject"]:
             _emit("BLOCK", "MSG_STALE_SUBJECT", pair=pair_field)
+            return
+        # Checked last: the runner and subject are the receipt's stronger claims. A part differing
+        # in path or in blob (changed, new, deleted, or never recorded) names the first by path.
+        differing = shipped_parts ^ marker["parts"]
+        if differing:
+            first = min(path for path, _blob in differing)
+            _emit("BLOCK", "MSG_STALE_PART", first, pair_field)
             return
 
     _emit("ALLOW")

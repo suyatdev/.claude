@@ -211,12 +211,14 @@ allow_silent "A1.6 path outside the repository root (step 5)"   "$OPTED"  "$(pay
 # is on it because it holds this hook's own registration — a guard that can block edits
 # to its own off switch is a footgun.
 
+# The trailing top-level-markdown entries exercise the rule stated with the deny controls below.
 for rel in docs/features/a.md docs/decisions/0011.md CODING_MEMORY.md coding-memory/x.md \
            .claude/session-state.md settings.json \
            projects/-Users-x--claude/memory/feedback_x.md \
            projects/-Users-x--claude/memory/MEMORY.md \
            rules/gates.md rules/core-conduct.md \
-           skills/writing-specs/SKILL.md skills/_standards/authoring.md; do
+           skills/writing-specs/SKILL.md skills/_standards/authoring.md \
+           CLAUDE.md README.md AGENTS.md PORTS.md initial-brainstorm.md; do
   allow_silent "unguarded path: $rel" "$OPTED" "$(payload Write file_path "$OPTED/$rel")"
 done
 
@@ -231,6 +233,14 @@ done
 # file merely named for them, and mid-planning that source is what this hook guards.
 deny "a file merely NAMED rules is not exempt" "$OPTED" "$(payload Write file_path "$OPTED/rules.sh")"
 deny "a file merely NAMED skills is not exempt" "$OPTED" "$(payload Write file_path "$OPTED/skills.sh")"
+
+# The top-level-markdown exemption is any *.md file in the repository's top-level
+# directory -- scoped to the top level, not to markdown anywhere. These three prove
+# that scope: markdown nested in a subdirectory stays guarded, and a top-level file
+# that isn't markdown stays guarded too.
+deny "nested markdown stays guarded: frontend/README.md" "$OPTED" "$(payload Write file_path "$OPTED/frontend/README.md")"
+deny "nested markdown stays guarded: agents/judge.md" "$OPTED" "$(payload Write file_path "$OPTED/agents/judge.md")"
+deny "a top-level non-markdown file stays guarded: setup.py" "$OPTED" "$(payload Write file_path "$OPTED/setup.py")"
 
 # projects/*/memory/* is where the harness's own memory tool writes. Omitting it
 # meant EVERY memory write was refused while any feature file sat at planning --
@@ -510,6 +520,29 @@ allow_silent "B4 a planning file superseded by implementation stops denying" "$B
 BREV="$TMP/b-superseded-review"; supersede_repo "$BREV" review review/x
 allow_silent "B5 a planning file superseded by review stops denying too" "$BREV" \
   "$(payload Write file_path "$BREV/src/x.sh")"
+
+# B5a-c: a card at phase review claims the branch it names, exactly as implementation does (a
+# review-phase card is still that branch's open gate). Unlike B5, the planning file P stays
+# un-superseded: the review card is a SEPARATE file (r.md) that only ever exists in the working
+# tree, so no other branch's committed copy of P reads a non-planning phase.
+review_claim_repo() { # $1 dir, $2 branch to end up on, $3 branch value on the review card ("" omits the key)
+  mkrepo "$1"
+  feature_file "$1" docs/features/a.md planning
+  feature_file "$1" docs/features/r.md review "$3"
+  ( cd "$1" && git checkout -q -b "$2" )
+}
+BRC1="$TMP/b-review-claims"; review_claim_repo "$BRC1" feat/r feat/r
+allow_silent "B5a a review card unlocks the branch it names" "$BRC1" \
+  "$(payload Write file_path "$BRC1/src/x.sh")"
+
+BRC2="$TMP/b-review-other-branch"; review_claim_repo "$BRC2" feat/other feat/r
+deny "B5b a review card does not unlock any other branch" "$BRC2" \
+  "$(payload Write file_path "$BRC2/src/x.sh")"
+err_has "B5b the deny names the planning card, not the review one" 'docs/features/a\.md.*phase: planning'
+
+BRC3="$TMP/b-review-no-branch"; review_claim_repo "$BRC3" feat/r ""
+deny "B5c a review card with no branch: key claims nothing" "$BRC3" \
+  "$(payload Write file_path "$BRC3/src/x.sh")"
 
 # The regression test for the file_path-only bug: NotebookEdit carries notebook_path and nothing
 # else, so reading file_path alone would silently exempt an entire tool.

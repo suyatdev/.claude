@@ -12,6 +12,29 @@
 #
 # The commands below are DATA fed to the hook on stdin. Nothing here executes them.
 set -u
+
+# Sever this suite from the machine's git configuration before it builds anything.
+#
+# Not cosmetic, and not about config values: `core.hooksPath` is set in the GLOBAL config
+# on this machine, and it points at the layer-2 `reference-transaction` hook of the worktree
+# guard. Without this line every fixture repository below inherits that hook, so each
+# fixture `commit`/`checkout` is judged — and, in `log` mode, RECORDED — as a HEAD write in a
+# primary checkout. Measured 2026-09-17: one run of this suite appended 54 lines to
+# `hooks/state/reference-transaction.log`, and this suite alone accounted for 967 of the 1066
+# fixture lines in that machine-wide log — 435 under the shared `repo` fixture, 506 under the
+# per-case `repo.XXXXXX` variants, and 26 at a bare mktemp root. (This read 941 until
+# 2026-10-10: 941 is 435+506, the total of one fixture *shape*, and reusing it as the suite
+# total silently dropped the 26 bare-root lines. Re-derived from the raw log, not the table.)
+# See `docs/features/worktree-location-guard.md` task 18.
+#
+# It is also what stops this suite going red the day that guard is armed: a refused fixture
+# checkout is a fixture that never gets built. `reference-transaction.test.sh:58` and
+# `worktree-guard.test.sh:29` have carried this same line from the start, which is exactly
+# why neither of them appears in that log.
+#
+# Safe here because nothing in this file reads global config: every identity it needs is set
+# per-repository with `git -C "$dir" config user.email` / `user.name` below.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 MARKER_SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 MARKER_ROOT="$(git rev-parse --show-toplevel)" || exit 1
 
@@ -975,6 +998,34 @@ if [ -s "$PE_EXTRACT" ]; then
     '/usr/bin/git --version commit -m x' '--version'
 else
   printf 'FAIL — argv0-spelling RED: could not extract prints_and_exits_option() from git-guard.sh (extraction markers drifted) -- unmeasured\n'
+  fail=$((fail+1))
+fi
+
+# =============================================================================
+# The quiet-decision suite, hook level (docs/features/git-guard-quiet.md; split out because this
+# file is past the 800-line cap). Per ADR 0044 this file stays the runner at the paired name: the
+# test-marker gate pairs git-guard.sh with THIS file only, so the split suite is invoked by
+# explicit name, its assertion lines are re-emitted here and counted here, its non-zero exit is
+# folded into `fail`, and its `N passed, M failed` line is required as a completion sentinel and
+# reconciled against the lines counted -- a child that stops quietly at rc=0 is not a green run.
+# =============================================================================
+QUIET_SUITE="$(cd "$(dirname "$0")" && pwd)/git-guard-quiet.test.sh"
+quiet_out="$(bash "$QUIET_SUITE" 2>&1)"; quiet_rc=$?
+printf '%s\n' "$quiet_out"
+quiet_ok=$(printf '%s\n' "$quiet_out" | grep -c '^ok   — ')
+quiet_bad=$(printf '%s\n' "$quiet_out" | grep -c '^FAIL — ')
+quiet_sentinel=$(printf '%s\n' "$quiet_out" | grep -E '^git-guard-quiet: [0-9]+ passed, [0-9]+ failed$' | tail -1)
+pass=$((pass+quiet_ok)); fail=$((fail+quiet_bad))
+# Pinned total: the bump when an assertion is added is the moment a human confirms it was intended,
+# and it is what catches a child that skipped a block yet still reached its summary line.
+QUIET_EXPECTED_ASSERTIONS=209
+if [ "$quiet_sentinel" != "git-guard-quiet: ${quiet_ok} passed, ${quiet_bad} failed" ] \
+   || [ "$((quiet_ok+quiet_bad))" -ne "$QUIET_EXPECTED_ASSERTIONS" ]; then
+  printf 'FAIL — git-guard-quiet.test.sh did not report a complete run (counted %s ok / %s FAIL, want %s in all; sentinel: %s)\n' \
+    "$quiet_ok" "$quiet_bad" "$QUIET_EXPECTED_ASSERTIONS" "${quiet_sentinel:-<none>}"
+  fail=$((fail+1))
+elif [ "$quiet_rc" -ne 0 ] && [ "$quiet_bad" -eq 0 ]; then
+  printf 'FAIL — git-guard-quiet.test.sh exited %s with no failing assertion\n' "$quiet_rc"
   fail=$((fail+1))
 fi
 

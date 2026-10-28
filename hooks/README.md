@@ -2,7 +2,7 @@
 
 **Four of these hooks are NOT installed.** `checkpoint-before-modify.sh`, `require-project-standards.sh`, `scan-invisible-unicode.sh` and `scan-secrets.sh` exist and pass their suites, and are registered nowhere — they never run. The two scanners in particular are advertised protection that is not currently protecting anything. Nothing inert here starts running until you deliberately wire it up by pasting one of the JSON blocks below into a `settings.json`.
 
-**Everything else here is registered in this repo's own `settings.json` today** — the list below is derived from that file, not recalled: `git-guard.sh`, `doc-guard.sh`, `judge-guard.sh`, `merge-guard.sh`, `feature-sync-guard.sh`, `test-marker-guard.sh`, `phase-guard.sh` and `pane-dispatch-guard.sh` on `PreToolUse`; `verify-hook-wiring.sh`, `doc-guard.sh`, `memsearch-nudge.sh` and `handoff/slim-session-start.sh` on `SessionStart`; `context-handoff-watch.sh` on `PostToolUse`; and the remaining `handoff/` scripts on `PreCompact`, `UserPromptSubmit` and `PostToolUse`. See the `git-guard.sh` and `judge-guard.sh` sections below for why those two are global. `verify-hook-wiring.sh` is the one that speaks up when that list stops matching reality.
+**Everything else here is registered in this repo's own `settings.json` today** — the list below is derived from that file, not recalled: `git-guard.sh`, `doc-guard.sh`, `judge-guard.sh`, `merge-guard.sh`, `feature-sync-guard.sh`, `test-marker-guard.sh`, `phase-guard.sh`, `pane-dispatch-guard.sh` and `dependency-guard.sh` on `PreToolUse`; `verify-hook-wiring.sh`, `doc-guard.sh`, `memsearch-nudge.sh` and `handoff/slim-session-start.sh` on `SessionStart`; `context-handoff-watch.sh` on `PostToolUse`; and the remaining `handoff/` scripts on `PreCompact`, `UserPromptSubmit` and `PostToolUse`. See the `git-guard.sh` and `judge-guard.sh` sections below for why those two are global. `verify-hook-wiring.sh` is the one that speaks up when that list stops matching reality.
 
 ---
 
@@ -166,6 +166,33 @@ disputes and everybody skips at exactly the moment it matters — the change is 
 slow, the session is long. The failure is not ignorance of the rule but the absence of any record of
 whether it happened, and a memory of having run the tests is not evidence about the bytes now
 staged. Only a mechanical check can compare the two.
+
+### `dependency-guard.sh`
+
+PreToolUse, two matchers: `Bash` (registered after `secret-command-guard.sh`) and
+`Edit|Write|NotebookEdit` (after `scan-secrets.sh`). Tier 1. On a package install it can see in the
+command text, or an edit to a dependency manifest (`package.json`, `requirements*.txt`,
+`pyproject.toml`, lockfiles and the like), it decides per package: **deny** (exit 2, reason on
+stderr) when the version is not an exact pin or a runner such as `npx pnpm` would install a package
+manager, **deny** when no vetting record under `hooks/state/vetting/` is fresh (7 days) — the message
+prints the `hooks/bin/vet-dependency <ecosystem> <name> <version>` command to run — and otherwise
+**ask** Mark, with a one-line summary of the record. The flow is: the hook stops the first attempt,
+Claude runs the vetter and shows the report and a recommendation in chat, then retries, and the retry
+reaches the prompt. Denies, asks and broken-guard reports are appended to `hooks/state/dependency-guard.log`; a plain allow is not logged (nearly every Bash call is one).
+Decision steps and message texts: `docs/features/dependency-vetting-guard.md`.
+
+Bypass: `VET_EXEMPT=<reason> <install command>` skips only the "vet first" deny (the ask still
+fires, and the use is logged). **It is a human's bypass, never one Claude issues on its own
+authority.** The unpinned and runner-installs-a-package-manager denies are not bypassable.
+
+**Fails to `ask`, not allow and not deny (D7):** if `python3` is missing, the decision helper is
+missing or crashes, or the payload cannot be parsed, the hook asks with a "guard is broken" warning
+rather than waving the command through or blocking every Bash call.
+
+**A speed bump, not a security boundary.** It reads command text only, and the vetting record is
+written by the agent, so it is forgeable from inside the session; Mark's approval at the prompt is
+the control. Shapes it cannot see are listed under Known gaps in the card. Hooks load from
+`~/.claude`, so a branch's registration does nothing until that branch is merged and pulled there.
 
 ### `verify-hook-wiring.sh`
 
