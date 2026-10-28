@@ -1001,6 +1001,34 @@ else
   fail=$((fail+1))
 fi
 
+# =============================================================================
+# The quiet-decision suite, hook level (docs/features/git-guard-quiet.md; split out because this
+# file is past the 800-line cap). Per ADR 0044 this file stays the runner at the paired name: the
+# test-marker gate pairs git-guard.sh with THIS file only, so the split suite is invoked by
+# explicit name, its assertion lines are re-emitted here and counted here, its non-zero exit is
+# folded into `fail`, and its `N passed, M failed` line is required as a completion sentinel and
+# reconciled against the lines counted -- a child that stops quietly at rc=0 is not a green run.
+# =============================================================================
+QUIET_SUITE="$(cd "$(dirname "$0")" && pwd)/git-guard-quiet.test.sh"
+quiet_out="$(bash "$QUIET_SUITE" 2>&1)"; quiet_rc=$?
+printf '%s\n' "$quiet_out"
+quiet_ok=$(printf '%s\n' "$quiet_out" | grep -c '^ok   — ')
+quiet_bad=$(printf '%s\n' "$quiet_out" | grep -c '^FAIL — ')
+quiet_sentinel=$(printf '%s\n' "$quiet_out" | grep -E '^git-guard-quiet: [0-9]+ passed, [0-9]+ failed$' | tail -1)
+pass=$((pass+quiet_ok)); fail=$((fail+quiet_bad))
+# Pinned total: the bump when an assertion is added is the moment a human confirms it was intended,
+# and it is what catches a child that skipped a block yet still reached its summary line.
+QUIET_EXPECTED_ASSERTIONS=209
+if [ "$quiet_sentinel" != "git-guard-quiet: ${quiet_ok} passed, ${quiet_bad} failed" ] \
+   || [ "$((quiet_ok+quiet_bad))" -ne "$QUIET_EXPECTED_ASSERTIONS" ]; then
+  printf 'FAIL — git-guard-quiet.test.sh did not report a complete run (counted %s ok / %s FAIL, want %s in all; sentinel: %s)\n' \
+    "$quiet_ok" "$quiet_bad" "$QUIET_EXPECTED_ASSERTIONS" "${quiet_sentinel:-<none>}"
+  fail=$((fail+1))
+elif [ "$quiet_rc" -ne 0 ] && [ "$quiet_bad" -eq 0 ]; then
+  printf 'FAIL — git-guard-quiet.test.sh exited %s with no failing assertion\n' "$quiet_rc"
+  fail=$((fail+1))
+fi
+
 # ---------------------------------------------------------------------------
 printf '\ngit-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \

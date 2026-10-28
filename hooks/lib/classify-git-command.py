@@ -58,6 +58,14 @@ the segment in the list segments() returns.
     SEG_OPAQUE<tab><i><tab><token>
                 segment `i` runs git or cd somewhere argv[0] cannot be held
                 accountable for. Two clauses, one fact -- see opaque_token().
+    SEG_QUIET<tab><i><tab><class>
+                segment `i`'s class for the `git-guard quiet` toggle (docs/features/
+                git-guard-quiet.md, D18): read, add, commit, push, other, or nongit. Emitted
+                for EVERY segment, and ONLY on a line that already carries SCOPE_UNKNOWN; read
+                only by hooks/lib/git_guard_quiet.py. The class rules live in
+                git_quiet_class.py. A fault there (module missing, unimportable, raising, or
+                answering outside the five classes) makes every segment `other` and changes no
+                other fact -- see quiet_facts().
     SEG_UNPARSED
                 LINE-scoped: segments() returned [] for a non-empty command string.
     SEG_GROUPED
@@ -234,6 +242,16 @@ BRANCH_MOVE_ALWAYS = ("switch", "merge", "pull", "rebase", "cherry-pick", "rever
 BRANCH_MOVE_UNLESS_PATHSPEC = ("checkout", "reset")
 # `git stash` itself saves; only these two write the working tree back.
 STASH_MOVE_SUBCOMMANDS = ("pop", "apply")
+
+
+# SEG_QUIET classes (docs/features/git-guard-quiet.md, "The lists"). Spelled here, not imported
+# from git_quiet_class.py, because the fallback for a broken module must not depend on it, and
+# because the classes it answers are checked against QUIET_CLASSES -- a module that returned
+# something else, or whose own CLASSES said otherwise, must not be believed.
+QUIET_FACT = "SEG_QUIET"
+QUIET_NONGIT = "nongit"
+QUIET_OTHER = "other"
+QUIET_CLASSES = ("read", "add", "commit", "push", QUIET_OTHER)
 
 
 def _seg(name, index, operand):
@@ -483,6 +501,38 @@ def commit_scan(rest):
     return paths, False
 
 
+def _quiet_class(argv, class_module):
+    """One segment's SEG_QUIET class. Raises on a class outside QUIET_CLASSES."""
+    if not argv or program(argv[0]) != "git":
+        return QUIET_NONGIT
+    subcommand, rest, _blocking, residual_option, _c_operands = resolve_git_segment(argv)
+    # A non-`-C` global option (`-c`, `--git-dir`, ...) or no subcommand at all: there is no
+    # subcommand to name, and the segment is the kind the guard asks about today.
+    if residual_option is not None or subcommand is None:
+        return QUIET_OTHER
+    answer = class_module.classify(subcommand, rest)
+    if answer not in QUIET_CLASSES:
+        raise ValueError("git_quiet_class answered outside the five classes")
+    return answer
+
+
+def quiet_facts(segs):
+    """The SEG_QUIET facts for every segment of a line that carries SCOPE_UNKNOWN.
+
+    Never raises. The import and the calls sit inside one try: if git_quiet_class.py is missing,
+    fails to import, raises, or answers outside the five classes, EVERY segment becomes `other`
+    (R19). `other` can only turn a quiet allow into today's prompt, and no other fact is touched,
+    so a fault here cannot change a quiet-off decision or trip git-guard's classifier-failure
+    deny.
+    """
+    try:
+        import git_quiet_class
+        return [_seg(QUIET_FACT, index, _quiet_class(argv, git_quiet_class))
+                for index, (_assigns, argv) in enumerate(segs)]
+    except Exception:
+        return [_seg(QUIET_FACT, index, QUIET_OTHER) for index in range(len(segs))]
+
+
 def classify(src):
     """Return the sorted list of fact tokens for a raw Bash command string."""
     facts = set()
@@ -580,6 +630,7 @@ def classify(src):
 
     if scope_unknown is not None:
         facts.add("SCOPE_UNKNOWN\t" + scope_unknown)
+        facts.update(quiet_facts(segs))
 
     # segments() appends a fresh segment per control operator and throws the operator
     # away, so `)` and `}` are indistinguishable in its return value -- yet bash
