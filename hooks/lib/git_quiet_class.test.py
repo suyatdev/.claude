@@ -164,10 +164,17 @@ CASES += [
     ("push", ["git@github.com:o/r.git", "HEAD"], "other", "a URL remote: @ and : are not in the pattern"),
     ("push", ["", "HEAD"], "other", "an empty remote"),
     ("push", ["origin\n", "HEAD"], "other", "a trailing newline does not match the pattern"),
-    # Known-gaps row: D8's pattern admits a remote that starts with `-`, so this classifies push.
-    # Pinned so narrowing the pattern is a deliberate edit; the card records that every such form
-    # round 7 ran failed harmlessly. D7 has already proved the branch is not main/master.
-    ("push", ["-f", "HEAD"], "push", "KNOWN GAP (card): a remote spelled -f matches the pattern"),
+    # A would-be remote that starts with `-` is an option, not a remote: git parses `-o HEAD` as a push
+    # option plus nothing, and runs a BARE push (which moved main under push.default=upstream).
+    ("push", ["-f", "HEAD"], "other", "a remote spelled -f is an option, not the shape"),
+    ("push", ["-o", "HEAD"], "other", "-o takes HEAD as its value; a bare push follows"),
+    ("push", ["--push-option", "HEAD"], "other", "--push-option takes HEAD as its value"),
+    ("push", ["-u", "-o", "HEAD"], "other", "an allowed option, then -o"),
+    ("push", ["--all", "HEAD"], "other", "--all is not an allowed option"),
+    ("push", ["--mirror", "HEAD"], "other", "--mirror is not an allowed option"),
+    ("push", ["--delete", "HEAD"], "other", "--delete is not an allowed option"),
+    ("push", [".x", "HEAD"], "push", "a remote may start with a dot"),
+    ("push", ["_r", "HEAD"], "push", "a remote may start with an underscore"),
 
     # --- everything else, including aliases and case variants
     ("st", [], "other", "an alias is never on a list"),

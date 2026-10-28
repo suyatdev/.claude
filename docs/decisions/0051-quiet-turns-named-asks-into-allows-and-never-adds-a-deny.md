@@ -81,7 +81,14 @@ and treats everything else as not checkable, which asks.
   command text (D16).
 - **Not a security boundary.** The flag is a plain file that Claude could create without Mark's
   phrase. Under the stop rule Mark set on 2026-10-26, a bypass that needs a deliberate construction
-  gets a Known-gaps line, not a design change. The full list is in the card's § Known gaps.
+  gets a Known-gaps line, not a design change. The card's § Known gaps records the gaps found so
+  far. The implementation review added three: disguised `eval` spellings (`'ev'al`) evading the
+  raw-text check; a timed-out git call that can still wait on a process stuck in disk I/O; and
+  silent `add`/commit/push into another session's feature-branch worktree. A record of what was
+  found is not proof that nothing else exists.
+- **One review finding changed the design.** The judge measured `git -C U push -o HEAD` running a
+  bare push that moved remote `main`, because D8's remote pattern accepted a leading `-`. Mark
+  approved narrowing it (2026-10-28): a remote may not start with `-`. That only adds asks.
 - doc-guard and feature-sync-guard still never see `-C` commits. That blind spot is unchanged here.
   Under quiet, though, the prompt was the one moment a human saw such a commit, and it goes away.
   Fixing the blind spot is a separate card.

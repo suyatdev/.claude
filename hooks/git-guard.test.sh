@@ -1018,7 +1018,7 @@ quiet_sentinel=$(printf '%s\n' "$quiet_out" | grep -E '^git-guard-quiet: [0-9]+ 
 pass=$((pass+quiet_ok)); fail=$((fail+quiet_bad))
 # Pinned total: the bump when an assertion is added is the moment a human confirms it was intended,
 # and it is what catches a child that skipped a block yet still reached its summary line.
-QUIET_EXPECTED_ASSERTIONS=203
+QUIET_EXPECTED_ASSERTIONS=209
 if [ "$quiet_sentinel" != "git-guard-quiet: ${quiet_ok} passed, ${quiet_bad} failed" ] \
    || [ "$((quiet_ok+quiet_bad))" -ne "$QUIET_EXPECTED_ASSERTIONS" ]; then
   printf 'FAIL — git-guard-quiet.test.sh did not report a complete run (counted %s ok / %s FAIL, want %s in all; sentinel: %s)\n' \

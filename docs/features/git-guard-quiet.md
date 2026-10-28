@@ -6,7 +6,7 @@ branch: feat/git-guard-quiet
 
 # git-guard quiet — a session toggle that lets known-safe `git -C` commands through without a prompt
 
-> **Phase: implementation (`gate confirmed` by Mark, 2026-10-27) — spec frozen at revision 8 (2026-10-26).** History: rev 1 (`64b6232`) silenced the `-C`
+> **Phase: review (implemented 2026-10-27/28; `gate confirmed` by Mark 2026-10-27) — spec frozen at revision 8 (2026-10-26), amended once in review (below).** History: rev 1 (`64b6232`) silenced the `-C`
 > prompt outright; round 1 measured that for a `-C` command the prompt is the **only** check, so a
 > commit to `main` would have gone through. Revs 2–3 (`4bc66cb`, `8780b3f`) tried to give every
 > `-C` command the real blocks in every session; the round-3 cap escalated to Mark. Rev 4
@@ -31,8 +31,13 @@ branch: feat/git-guard-quiet
 > Every fix only adds asks. Round 7: compliance **pass**, observability risk **low**, with small
 > follow-ups Mark approved ("Yes") as **revision 8**: a timeout on every git call the quiet decision
 > makes (a hang asks), "allow" restated as a silent exit 0, `eval` lines ask, a Unicode-aware case
-> fold, the child's input format, and two Known-gaps lines. No code exists.
-> Next: compliance re-check → Mark reviews → `gate confirmed`.
+> fold, the child's input format, and two Known-gaps lines.
+>
+> **Review amendment (Mark, 2026-10-28, "Fix all"):** the implementation observability judge measured
+> `git -C U push -o HEAD` — classed `push` because D8's remote pattern accepted a leading `-` —
+> running a bare push that moved remote `main` under `push.default=upstream`, contradicting the
+> "failed harmlessly" gap line. D8's remote pattern now refuses a leading `-` (only adds asks); the
+> judge's other unrecorded items are now Known-gaps lines; D6 carries Task 0's relative-folder rule.
 >
 > **Stop rule (Mark, 2026-10-26, from round 7 on):** a bypass that needs a deliberate construction
 > (a crafted expansion, an engineered repository state) gets a Known-gaps line, not a design
@@ -66,9 +71,9 @@ today's prompt.
 | D3 | Read-only commands | A git segment whose subcommand is on the read list (§ The lists) passes, whatever folder `-C` names (including `"$W"`) | Mark (his two examples); list contents are Claude's call |
 | D4 | `git add` | Passes, whatever folder — it stages, it cannot move a branch | Claude's call |
 | D5 | Commit and push | Pass only when (a) **every** segment on the line is a git segment classed `read`, `add`, `commit` or `push` — no `cd`, `pushd`, `export`, assignment-only segment, script, or other git subcommand anywhere on the line, and the raw command text contains no `<` or `>` (no redirection), so nothing on the line can switch branch or repository. A wrapper word that `segments()` already strips (`WRAPPERS`, `hooks/lib/shell_segments.py:70`: `rtk`, `time`, `command`, `builtin`, `exec`, `nohup`) is judged as the command it wraps, exactly as every git guard treats it today — **except `eval`**, which `segments()` also strips but which re-reads its arguments as new shell code (round 7 measured `eval git -C F commit -m "x; git -C F switch main; …"` moving `main`), so any line whose raw text contains the word `eval` asks (D9); any other prefix (`env`, `sudo`, `xargs`, …) leaves argv[0] not `git`, so the segment is `nongit` (or `SEG_OPAQUE` when a later word is `git`), and a commit/push line asks; (b) the segment has exactly one `-C` whose folder is checkable (D6); (c) that folder is on a branch other than `main`/`master` with nothing in progress (D7); (d) for a push, the push is the one allowed shape (D8). Any condition unmet → ask | Mark's rule ("not to a main/master of any repository"); conditions (a)–(d) are Claude's call, each closing a measured round-4 or round-5 hole |
-| D6 | Checkable folder | Exactly one `-C`; its operand is an absolute path, `~`, `~/…`, or relative (resolved against the payload's `cwd`, valid because D5(a) forbids anything that changes directory); no `$`, backtick, glob character (`*?[`), and no other `~` form (`~user`, `~+`, `~-`, `~0` expand to other places) | Claude's call — deliberately narrower than worktree-guard's `resolve_effective_repo`, which round 3 measured exits the hook instead of returning |
+| D6 | Checkable folder | Exactly one `-C`; its operand is an absolute path, `~`, or `~/…` — **not** a relative path (Task 0 measured the payload's `cwd` lagging the directory the command starts in, so a relative folder cannot be resolved reliably and asks); no `$`, backtick, glob character (`*?[`), and no other `~` form (`~user`, `~+`, `~-`, `~0` expand to other places) | Claude's call — deliberately narrower than worktree-guard's `resolve_effective_repo`, which round 3 measured exits the hook instead of returning |
 | D7 | Branch check | `git -C <dir> symbolic-ref HEAD` (full name, **not** `--short`, which prints `heads/main` when a tag named `main` exists — measured round 5) must succeed and start with `refs/heads/`, and the name — **compared case- and look-alike-insensitively** (`unicodedata.normalize("NFKC", name).casefold()`, so `Main`, `MASTER` and `maſter` with a long-s all fold to the protected name; round 7 measured `maſter` being the same file as `master` here) — must equal neither `refs/heads/main` nor `refs/heads/master`, because on a case-insensitive filesystem (macOS APFS default) a checkout of `Main` writes to the very file `refs/heads/main` (measured round 6). A branch whose name differs from `main`/`master` only in case therefore asks; and none of `rebase-merge`, `rebase-apply`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_LOG` may exist under `git -C <dir> rev-parse --git-path <name>`. Detached, not a repository, in progress, on `main`/`master`, or any error → ask | Claude's call |
-| D8 | Allowed push shape | One shape only: options only from `-u`, `--set-upstream`, `-q`, `--quiet`, `-v`, `--verbose`, `--force-with-lease` (bare, no `=`), each a separate word, then exactly **`<remote> HEAD`**, where `<remote>` matches `^[A-Za-z0-9._-]+$` (git documents `push <remote> HEAD` as "push the current branch to the same name", which D7 already proved is not `main`/`master`; round 5 measured it staying on the feature branch under every push config tried). A bare `push` (no positional) **asks**: round 5 measured `@{push}` naming the feature branch while the push moved remote `main` under `push.default=matching`, a `remote.<r>.push` refspec, and a mirror remote. Anything else — `--force`, `-f`, `-uf`, `--all`, `--mirror`, `--tags`, `--delete`, `--force-with-lease=…`, `--receive-pack`/`--exec`, `--repo=`, a refspec with `:` or `+`, a branch name, any other option → ask | Claude's call, from rounds 4–5 `writing-specs/edge-cases`; dropping bare push approved by Mark (rev 6) |
+| D8 | Allowed push shape | One shape only: options only from `-u`, `--set-upstream`, `-q`, `--quiet`, `-v`, `--verbose`, `--force-with-lease` (bare, no `=`), each a separate word, then exactly **`<remote> HEAD`**, where `<remote>` matches `^[A-Za-z0-9._][A-Za-z0-9._-]*$` — never a leading `-`, which git would read as an option (review amendment: `push -o HEAD` ran a bare push) — (git documents `push <remote> HEAD` as "push the current branch to the same name", which D7 already proved is not `main`/`master`; round 5 measured it staying on the feature branch under every push config tried). A bare `push` (no positional) **asks**: round 5 measured `@{push}` naming the feature branch while the push moved remote `main` under `push.default=matching`, a `remote.<r>.push` refspec, and a mirror remote. Anything else — `--force`, `-f`, `-uf`, `--all`, `--mirror`, `--tags`, `--delete`, `--force-with-lease=…`, `--receive-pack`/`--exec`, `--repo=`, a refspec with `:` or `+`, a branch name, any other option → ask | Claude's call, from rounds 4–5 `writing-specs/edge-cases`; dropping bare push approved by Mark (rev 6) |
 | D9 | Other options, prefixes and hidden commands | Any non-`-C` blocking option anywhere on the line (`SEG_SCOPE_OPT`), any `GIT_*` assignment (`SEG_ENV`), any `SEG_OPAQUE`, `SEG_GROUPED`, or — checked on the **raw command text**, not the lexer's parse — any `$(`, backtick, `<(` or `>(`, or the word `eval` (regex `\beval\b`), anywhere on the line → ask, read-only lines included. A command substitution inside an argument runs a whole hidden command the classifier never sees (round 5 measured a "read-only" `status -- "$(… switch main; … commit …)"` landing on `main`). Plain variables (`"$W"`) do not trigger this | Claude's call, from rounds 1–5; raw text so the check does not inherit the lexer's blind spots |
 | D10 | Switching on | Mark types the fixed phrase `git-guard quiet` | Mark |
 | D11 | Switching back | The fixed phrase `git-guard on` | Claude's call, offered to Mark, not objected to |
@@ -359,12 +364,21 @@ Scenario: the phrase inside other text does nothing
   `<`/`>` ban applies only to commit/push lines (D5(a)). Such a write cannot itself land a commit
   — every later commit is re-checked by D7 — and the same command without `-C` is allowed today.
   Barring it would make routine `2>/dev/null` lookups prompt. Accepted.
-- **A commit into another session's feature-branch worktree is now silent.** `git -C <other
-  worktree on feat/y> commit` passes D5–D7 — Mark's rule allows any non-`main`/`master` branch —
-  so a wrong-folder commit no longer gets the prompt that might have caught it.
-- **D8's remote pattern accepts a word starting with `-`** (`push -f HEAD` matches
-  `^[A-Za-z0-9._-]+$` as a remote). Every such form round 7 ran failed harmlessly; noted, not
-  narrowed.
+- **An `add`, commit or push into another session's feature-branch worktree is now silent.**
+  `git -C <other worktree on feat/y> add/commit/push origin HEAD` passes D4–D8 — Mark's rule allows
+  any non-`main`/`master` branch — so a wrong-folder change no longer gets the prompt that might
+  have caught it.
+- **Disguised `eval` spellings evade D9's raw-text check** (measured in review: `'ev'al git -C F
+  commit …` is allowed). The shell joins the quotes into `eval`; `\beval\b` does not see it.
+  Deliberate construction, so a gap line under the stop rule.
+- **A timed-out git call can still wait.** `subprocess.run(…, timeout=…)` kills the child on
+  timeout but then waits for it to exit; a git stuck in uninterruptible disk wait (a dead mount)
+  could hold the hook past 3 s. Accidental rather than deliberate, but unlikely, and the command
+  itself would hang on that mount anyway. Read from the Python source, not measured. Recorded, not
+  fixed (Mark, 2026-10-28).
+- **R1's differential half stops discriminating after merge:** it compares against `origin/main`'s
+  git-guard, which becomes this same file. Its fixed expected-decision column keeps guarding the
+  quiet-off path.
 - **Out of scope, found in round 5:** zsh expands `=git` to git's path, and the classifier sees
   nothing in `=git commit …`, so every git guard is blind to that spelling today, quiet or not.
   Needs its own card.

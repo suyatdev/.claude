@@ -59,7 +59,8 @@ PUSH_OPTIONS = (
 )
 PUSH_REF = "HEAD"
 # fullmatch, never `^...$` with re.match: `$` also matches before a trailing newline.
-PUSH_REMOTE_PATTERN = re.compile(r"[A-Za-z0-9._-]+")
+# The first character may not be `-`: git reads `-o HEAD` as a push option and runs a bare push.
+PUSH_REMOTE_PATTERN = re.compile(r"[A-Za-z0-9._][A-Za-z0-9._-]*")
 PUSH_POSITIONAL_COUNT = 2
 
 
