@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: feat/git-guard-quiet
 ---
@@ -377,7 +377,8 @@ Scenario: the phrase inside other text does nothing
   - `UserPromptSubmit` keys: `cwd`, `hook_event_name`, `permission_mode`, `prompt`, `prompt_id`,
     `scratchpad_dir`, `session_id`, `session_title`, `transcript_path`. It also fires on
     background-task notifications (`prompt` starts `<task-notification>`); D15 makes those no-ops.
-  - Its stdout reaches Claude's context; whether Mark sees it directly: pending his answer.
+  - Its stdout reaches Claude's context only — Mark confirmed he never saw the probe's line — so
+    Claude must relay the toggle's ON/OFF/FAILED line to Mark.
   - **`PreToolUse` `cwd` is not always the directory the command starts in:** after `cd hooks`,
     a second Bash call in the same turn ran in `hooks/` while its payload `cwd` still named the
     worktree root. Per Task 0, a relative `-C` folder on a commit/push segment is therefore
@@ -387,7 +388,7 @@ Scenario: the phrase inside other text does nothing
 
 ## Tasks
 
-- [ ] 0. Measure the three unknowns above and the `UserPromptSubmit` payload field names; also
+- [x] 0. Measure the three unknowns above and the `UserPromptSubmit` payload field names; also
       confirm that the `PreToolUse` payload's `cwd` is the directory the Bash command starts in
       (D6 resolves relative `-C` folders against it). Record each under Known gaps; if `cwd` is not
       the start directory, relative folders become not checkable (ask) before Task 2.
