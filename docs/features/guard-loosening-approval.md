@@ -110,6 +110,81 @@ from outside `hooks/`.
 reordering-only edit, staged-vs-HEAD as the baseline (HEAD was used, not `origin/main`), concurrent
 or broken approval stores, and squash/octopus merges.
 
+**Status 2026-10-29: task 4 DONE. Still no implementation code — and task 5 is BLOCKED on three
+decisions listed at the end of this block.**
+
+**The suite.** `hooks/loosening-guard.test.sh` (813 lines, mode 644). Run from the worktree root:
+`bash hooks/loosening-guard.test.sh` (real hook only, ~12 s), `--matrix` (all 31 implementations,
+~2 min), `--impl NAME` (one in detail). 71 assertions: G1–G5 §6.1, U/C/MF direction-unknown and the
+mode flip, R1–R4 §6.2, E1–E10/X1 §6.3 + ADR 0053 + §7, W01–W14 one per watch-set file.
+
+**Verified by this session, not relayed.** `rc=1`, 0 passed / 71 failed, every failure tagged
+`<hook-missing>` (71 of 71). The "all failures are rc=127" sentence is **computed**, not hardcoded —
+`:467` sets the flag from `RC -eq 127` **and** `! -e "$hook"`, and `:808` prints it only when
+`miss == fail`. The harness gate was falsified independently: corrupting one mutation needle in a
+throwaway copy gave `rc=3`, `HARNESS BROKEN (1 checks failed)`, **and no pass/fail counts at all** —
+so a broken harness cannot masquerade as a red hook.
+
+**Which half is proven: the falsifiable half only.** The suite is shown able to fail. It is **not**
+shown able to pass — the sole passing column is a reference double that is *handed* the
+classification via `LG_ORACLE_CLASS`, because the extractors are task 5's work. That proves the 71
+assertions do not contradict each other, and nothing more. Do not read "71/71 on the double" as
+evidence the design is implementable.
+
+**The matrix.** Always-allow stub passes 14/71; always-deny passes 18/71; **passed by both: 0**. A
+no-op hook that never inspects anything fails **all 71** — so "allowed" is distinguished from "never
+ran". The three required degraded controls all discriminate:
+
+| Control | Assertions it fails |
+|---|---|
+| guard-filename-only watcher | **37** — ADR 0052's predicted silent fail-open, now measured. It still passes W02/W04/W08, the three guard `.sh` files themselves; the other 11 watch-set files are missed. |
+| content-only key, ignoring git modes | **2** (MF1, R4b) — one row is the whole margin on a `100755` → `100644` disarm |
+| two-outcome classifier | **23** — ADR 0052 decision 2's third state |
+
+⚠️ **"0 assertions undiscriminated" must be read with its provenance.** The first pass had **22**
+such assertions; controls were then written *aimed at each one*. So 0 means every assertion can fail
+against some single-defect implementation — **not** that those are the defects a real hook will
+have. G3, E8a and E8e are the weakest: each is killed by exactly one control.
+
+**ADR 0053 amended 2026-10-29 (precedence), because task 4 surfaced a contradiction.** The ADR said
+a missing `origin/main` exits 128 and must prompt; §6.3 and §7 both say an unobtainable baseline
+must REFUSE. §7 is checked first and wins — without `origin/main` there is no baseline, so the
+commit refuses before the merge question is reached. The 128 case ADR 0053 governs is the narrower
+one: **`origin/main` present, `MERGE_HEAD` absent or unreadable** → prompt. The suite already had
+this right (`E8c` vs `E8d`); the ADR wording was what was wrong.
+
+⚠️ **TASK 5 IS BLOCKED on three things that must not be guessed.**
+1. **How a human's approval becomes a record is undefined.** An `ask` is decided in the UI, which
+   the hook cannot observe. Spec §5.1's "on approval → write approval record" arrow has **no
+   mechanism**. Task 4 assumed a `PostToolUse` call back into the same script (`A7`), confined to
+   `approve_flow()` so it can be changed in one place. **This is the single largest interface guess
+   in the feature.**
+2. **`permission_mode` is unmeasured for `PreToolUse`.** It is recorded for `PostToolUse` (ADR 0035)
+   and `UserPromptSubmit` (`git-guard-quiet.md:391`) but **never for `PreToolUse`** — the git-guard-quiet
+   Task 0 dump enumerated only those two. The suite pins "absent ⇒ refuse" (`R1e`). **If `PreToolUse`
+   lacks the field, every interactive loosening refuses and the feature looks switched off.** Dump a
+   real `PreToolUse` payload before building on it. This needs a temporary hook in the *primary*
+   `settings.json` — hooks load from the primary checkout, so a branch edit is inert — i.e. it needs Mark.
+3. **Approval lifetime is self-inconsistent in the spec.** §2 says "until the rule changes"; the
+   §5.1 flowchart and `secret_approval.py` both consume on first use. The suite pins only that one
+   re-commit of the same state is silent (`G4`). Pick one before task 5.
+
+**Two further findings, not blocking.**
+- **The watcher is not in its own watch set**, so a loosening of `loosening-guard.sh` or its libs
+  would pass unwatched. Fold into task 7 or a follow-up.
+- **The suite is 813 lines, over `core-conduct`'s 800 maximum.** Splitting the reference double and
+  the mutation table into siblings is the obvious fix and is a **removal from a file, so it is a
+  blocking ask** — not done.
+
+**Also flagged by task 4 for ADR 0052 decision 4's human review:** the suite assumes that *adding* a
+block entry or *removing* an allow entry is a tightening, and that dropping `.zprofile` from
+`DOTFILE_PATTERNS` is a loosening. That is a reading, not a measurement.
+
+**Not covered by task 4:** the real extractors; the M8 unbalanced-quote case; statement reordering;
+pathspec commits, `--amend`, octopus merges, `rerere`; server-side merges and fast-forward pulls
+(ADR 0053 holes 1–2); whether the hook is registered; concurrent approvals; message wording beyond
+named tokens; and `E7`'s no-python case if the real hook hard-codes `/usr/bin/python3`.
+
 ## The one-line problem
 
 Widening a security guard's permission list is caught today only by `hooks/git-guard.replay.sh`,
@@ -154,8 +229,10 @@ three guards; refuse when unattended; approval lifetime; **one shared watcher ho
       **Measured 2026-10-28 → `hooks/secret-approval-state-key.probe.sh`. Verdict: YES, but
       conditional — see the status block below. The store works unchanged; the key does not
       exist yet, so task 5 must add one entry point to `secret_approval.py`.**
-- [ ] 4. Write the failing tests for §6.1/§6.2/§6.3, including the always-allow and always-deny stub
+- [x] 4. Write the failing tests for §6.1/§6.2/§6.3, including the always-allow and always-deny stub
       falsifiers required by §10. Tests and implementation never in the same step.
+      **Written 2026-10-29 → `hooks/loosening-guard.test.sh`, 71 assertions, RED. The hook it
+      tests is `hooks/loosening-guard.sh` — that name is now decided. See the status block.**
 - [ ] 5. Implement the watcher hook (spec §5), fail-closed per §7.
 - [ ] 6. Make `EXPECTED_RELAXED` a record written by the approval rather than hand-edited (§5.4).
 - [ ] 7. Register it in `settings.json` beside `doc-guard.sh` / `test-marker-guard.sh`.

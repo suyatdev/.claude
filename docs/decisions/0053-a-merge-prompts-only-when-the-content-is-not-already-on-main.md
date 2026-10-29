@@ -27,9 +27,24 @@ git merge-base --is-ancestor "$(cat "$GIT_DIR/MERGE_HEAD")" origin/main
 ```
 
 - exit 0 → the content is already on `main`, so it has already been through PR review → **silent**.
-- **any non-zero exit → prompt.** Not only `1`. A missing `origin/main` ref exits `128`, and that
-  must prompt, not allow; a hook that special-cases `1` and treats other codes as success inverts
-  the fail direction §7 requires.
+- **any non-zero exit → prompt.** Not only `1`. A bad or unreadable `MERGE_HEAD` exits `128`, and
+  that must prompt, not allow; a hook that special-cases `1` and treats other codes as success
+  inverts the fail direction §7 requires.
+
+### Precedence over §7 — added 2026-10-29, after task 4 surfaced the gap
+
+**§7 is checked first, and §7 wins.** As first written, the bullet above read "a missing
+`origin/main` ref exits 128, and that must prompt", which contradicts §6.3's row
+*`origin/main` is unreachable → REFUSE* and §7's row *baseline unobtainable → REFUSE*. Both cannot
+hold for the same state.
+
+The contradiction dissolves once the order is stated: without `origin/main` there is no baseline to
+extract a permission list from, so the commit is **REFUSED** before the merge question is ever
+reached. The `128` case this ADR governs is therefore the narrower one — **`origin/main` present,
+`MERGE_HEAD` absent or unreadable** — and that prompts. A missing `origin/main` refuses.
+
+Task 4's suite already encodes this split (`E8c` pins the true 128 case to ask; `E8d` accepts either
+for the missing-baseline case). The wording here, not the suite, was what needed correcting.
 
 This is a rule rather than a heuristic: it reads git's own reachability, never the commit subject.
 
