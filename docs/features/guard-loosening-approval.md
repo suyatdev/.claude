@@ -185,6 +185,94 @@ pathspec commits, `--amend`, octopus merges, `rerere`; server-side merges and fa
 (ADR 0053 holes 1–2); whether the hook is registered; concurrent approvals; message wording beyond
 named tokens; and `E7`'s no-python case if the real hook hard-codes `/usr/bin/python3`.
 
+**Status 2026-10-29 (second block) — SUPERSEDES the "TASK 5 IS BLOCKED on three things" list in the
+block above. Two of those three are now settled; only the approval-record mechanism remains.**
+Decisions recorded in `docs/decisions/0054-approval-lifetime-is-state-scoped-and-attendedness-uses-the-measured-signal.md`.
+
+**The unmeasured field was measured, and it exists.** A temporary key-only probe hook was registered
+on `PreToolUse`/`Bash` in the primary `settings.json`, two payloads captured, then removed and
+`settings.json` verified **byte-identical by SHA-256**. The probe recorded key names only — never
+values, except the two fields in question — and was falsified against a canary string in the command
+text, which did not appear in its output.
+
+| Session | `permission_mode` | Subagent markers |
+|---|---|---|
+| Main (bypassed) | `'bypassPermissions'` | absent |
+| In-process subagent | `'bypassPermissions'` | `agent_id` present, `agent_type='general-purpose'` |
+
+Full `PreToolUse` key set: `cwd`, `effort`, `hook_event_name`, `permission_mode`, `prompt_id`,
+`scratchpad_dir`, `session_id`, `tool_input`, `tool_name`, `tool_use_id`, `transcript_path`, plus
+`agent_id`/`agent_type` for a subagent. Also in memory: `reference_claude_code_hook_payload_facts`.
+
+⚠️ **Only ONE mode value was ever observed.** The probing session is bypassed, so every payload read
+`'bypassPermissions'`. Established: the key exists and reported bypass correctly. **Not** measured:
+that it reports `'default'` in a normal session. Treat an unrecognised or absent value as unattended;
+do not switch on a closed set of strings. ⚠️ **A subagent inherits the parent permission_mode**,
+so the mode alone cannot tell a subagent from its parent — that is why the markers are a second leg.
+
+**Two decisions, and the fallback changed twice.** Approval lifetime is **state-scoped** — which §2
+had already settled on 2026-09-16 ("Until that rule changes again — fingerprinted to the exact new
+list state"); the §5.1 flowchart `consume record` node is the drift, and this session wrongly
+re-asked a settled decision before tracing which half was authoritative. Attendedness reads
+`permission_mode` first and subagent markers second, and **the fallback now refuses (exit 2) rather
+than asking** — the intermediate "ask on fallback" state was an active fail-open, since an ask under
+bypass is silently allowed and the command runs.
+
+**The suite, as it now stands.** `hooks/loosening-guard.test.sh` + `hooks/loosening-guard.test.d/`
+(`10-mutations.sh`, `20-reference-double.sh`), sourced via the house `*.test.d/NN-*.sh` convention.
+Runner **674 lines — back under the 800 maximum** (the split was the user call; nothing was
+deleted, 219 lines moved and the original reassembles byte-identically). **78 assertions, RED**, all
+tagged `<hook-missing>`, `rc=1`.
+
+**Matrix, re-run and confirmed by this session, not relayed:**
+
+| | |
+|---|---|
+| always-allow stub | fails 62 (passes 16) |
+| always-deny stub | fails 61 (passes 17) |
+| passed by BOTH stubs | **0** |
+| no-op, never-inspects | fails **78 of 78** — so "allowed" stays distinguishable from "never ran" |
+| reference double | 78/78 |
+| `gfile` (filename-keyed watcher) | fails **42** |
+| `two-outcome` | fails 24 · `nomode` fails 2 (`MF1 R4b`) |
+| `consumeuse` (single-use approval) | fails **1**, exactly `G4` |
+| `askfallback` (the rejected design) | fails **2**, exactly `R1e R1k` |
+| `absentblanket` (refuses everything when the field is absent) | fails **3**: `R1j R1l R1m` |
+| `fallbackclaims` (message says "unattended") | fails 2: `R1e R1k` |
+| `agentblind` (mode only, ignores `agent_id`) | fails 2: `R1f R1j` |
+| assertions NO degraded control fails | **0** |
+
+**The worker caught a hole that was not briefed, and it is the right catch.** Without the added
+`R1l`/`R1m`, a hook that **refused every commit** whenever `permission_mode` was absent would have
+passed the whole suite — the dead-feature shape. They pin that on the fallback path an unrelated
+commit is still a silent skip and a tightening a silent allow.
+
+⚠️ **`R1j` discriminates the REASON, not the outcome — do not read it as proof both legs are
+load-bearing.** For "mode absent + subagent", the two-leg design and the mode-only design both reach
+**exit 2**, by different routes. There is no behavioural discriminator, so `R1j` fails `agentblind`
+only on the stderr wording. **`R1f` is the sole behavioural discriminator** for reading `agent_id`
+(subagent at mode `default`: must exit 2; mode-only sees an attended mode and asks). If task 5
+refusal wording differs, `R1j` fails spuriously — it is one string, changeable in one place.
+Relatedly, `askfallback` and `fallbackclaims` fail the **same** pair, so the fallback is pinned by
+two assertions and two fully-overlapping controls, not four independent ones.
+
+**Proven half is still falsifiability ONLY.** The one passing column is a reference double that is
+handed the classification and was edited to agree with the new assertions, so 78/78 shows
+self-consistency and nothing else. No real hook has passed anything.
+
+⚠️ **TASK 5 IS BLOCKED on ONE thing now: how a human approval becomes a record.** An `ask` is
+decided in the UI, which the hook cannot observe, and spec §5.1 "on approval → write approval
+record" arrow has no mechanism. The suite assumes a `PostToolUse` call back into the same script
+(`A7`), confined to `approve_flow()` so it can change in one place. This is the last interface guess
+in the feature.
+
+**Still open, not blocking:** ADR 0052 decision 4 **human review of the direction tables** (still
+nobody has reviewed them; a mis-tag fails permissively) — and task 4 flagged its own readings for
+that review: that adding a block entry or removing an allow entry is a tightening, and that dropping
+`.zprofile` from `DOTFILE_PATTERNS` is a loosening. Also: the watcher is **not in its own watch
+set**; `acceptEdits`/`plan`/`dontAsk` modes are unclassified; `agent_type` without `agent_id` is
+untested; and `E7` no-python case would not hold if the real hook hard-codes `/usr/bin/python3`.
+
 ## The one-line problem
 
 Widening a security guard's permission list is caught today only by `hooks/git-guard.replay.sh`,

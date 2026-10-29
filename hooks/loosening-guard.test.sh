@@ -6,19 +6,33 @@
 #
 # Run:   bash hooks/loosening-guard.test.sh               real hook only (fast)
 #        bash hooks/loosening-guard.test.sh --matrix      real + 2 stubs + 1 no-op + 1 reference
-#                                                         double + 29 degraded controls, in parallel
+#                                                         double + 34 degraded controls, in parallel
 #        bash hooks/loosening-guard.test.sh --impl NAME   one implementation, full detail
 #
 # THE CONTRACT THIS SUITE PINS. The spec fixes behaviour, not the wire format; where it was silent
 # the choice below is MINE and task 5 may change it in ONE place (run_hook / ex_* / approve_flow).
 #   A1 input   PreToolUse JSON on stdin: hook_event_name, tool_name, tool_input.command, session_id,
-#              cwd, permission_mode. Process cwd = the repo being committed in.
+#              cwd, and -- when present -- permission_mode and, for a subagent, agent_id + agent_type
+#              (the measured keys). Process cwd = the repo being committed in.
 #   A2 outcome silent allow = rc 0 + EMPTY stdout (never a `permissionDecision: allow`, which would
 #              skip Claude's own permission check); ask = rc 0 + hookSpecificOutput.permissionDecision
 #              "ask" + a reason; refuse = rc 2 + stderr. Fail-closed is rc 2, NEVER ask: under a
 #              bypass session an ask is silently allowed and the command runs (card, task 0).
-#   A3 unattended = permission_mode other than "default" (absent included): a needed prompt becomes
-#              a refuse naming "unattended"; no ask is ever emitted there.
+#   A3 unattended (ADR 0054 decision 2) = a subagent payload (agent_id present: the MEASURED signal)
+#              OR permission_mode present and other than "default". A needed prompt in an unattended
+#              case becomes a refuse (rc 2) naming "unattended"; no ask is ever emitted there.
+#              permission_mode ABSENT with no subagent keys is the FALLBACK path and it REFUSES too
+#              (rc 2, stderr names permission_mode and does NOT claim "unattended" -- the hook cannot
+#              know that): an ask under a bypass session was measured to be silently allowed with the
+#              command running, so an ask on a path that is meant to refuse is a fail-open. Only a
+#              NEEDED prompt refuses: absent mode + an unrelated or tightening commit stays silent.
+#              PROVENANCE (measured live in this repo, 2026-10-29, key-only probe on PreToolUse/Bash,
+#              since removed): the main-session payload keys are cwd, effort, hook_event_name,
+#              permission_mode, prompt_id, scratchpad_dir, session_id, tool_input, tool_name,
+#              tool_use_id, transcript_path; a subagent adds agent_id and agent_type
+#              ('general-purpose'). permission_mode was 'bypassPermissions' in both (in-process
+#              subagents inherit the parent mode). The field IS present, so the fallback is a
+#              defensive branch kept strict -- do not re-hedge it back to an ask.
 #   A4 liveness  every invocation appends `decision=<skip|allow|ask|refuse> class=<c>` to the file
 #              named by $LOOSENING_GUARD_LOG. ONLY skip/allow lines are asserted: "allowed" is
 #              otherwise indistinguishable from "never inspected". class for the pinned allows:
@@ -30,7 +44,9 @@
 #              one-sided failure must not mention the other label.
 #   A7 approval  the human approves in the Claude Code UI, which the hook cannot see; the record is
 #              written by a PostToolUse invocation of the SAME script for the command that ran.
-#              approve_flow() is the only place that encodes this.
+#              approve_flow() is the only place that encodes this. Lifetime (ADR 0054 decision 1): the
+#              record is scoped to the permission-list STATE and lives until that state changes -- it
+#              is NOT spent by a commit, so any number of commits of the same state stay silent.
 #   A8 store     $SECRET_GUARD_STATE_DIR, session_id-scoped, as hooks/lib/secret_approval.py.
 #   A9 baseline  the literal ref origin/main (not HEAD, not merge-base).
 #   A10 libs     the hook finds its libraries relative to its own path (so a lone copy refuses).
@@ -78,226 +94,17 @@ hooks/reference-transaction.mode
 hooks/lib/shell_segments.py
 settings.json'
 
-# ---------------------------------------------------------------------------------------------
-# Mutations on REAL bytes (needles from hooks/secret-approval-state-key.probe.sh, plus more).
-# Each must occur exactly once; a miss is a HARNESS failure, never a hook failure.
-# ---------------------------------------------------------------------------------------------
-cat > "$MUTPY" <<'PYEOF'
-import sys
-SC = "hooks/lib/classify-secret-command.py"
-GG = "hooks/git-guard.sh"
-WG = "hooks/worktree-guard.sh"
-Z = '    (r"(^|/)\\.zprofile$", "~/.zprofile"),\n'
-E = '    (r"(^|/)\\.zshenv$", "~/.zshenv"),\n'
-CJ = "      coding-memory/compliance-judge/verdicts.jsonl) ;;\n"
-M = {
- "sec_rm_zprofile": (SC, Z, ""),
- "sec_rm_zshenv": (SC, E, ""),
- "sec_add_npmrc": (SC, E, E + '    (r"(^|/)\\.npmrc$", "~/.npmrc"),\n'),
- "sec_anchor": (SC, '(r"(^|/)credentials\\.json$"', '(r"(^|/)credentials\\.json"'),
- "sec_fold": (SC, "FOLD_FLAGS = re.IGNORECASE ", "FOLD_FLAGS = 0 "),
- "sec_exit": (SC, "fails OPEN on any exit other than 0/2/3.\n        sys.exit(1)",
-              "fails OPEN on any exit other than 0/2/3.\n        sys.exit(0)"),
- "secsh_exit": ("hooks/secret-command-guard.sh", "\nexit 2\n", "\nexit 0\n"),
- "sec_hatch": ("hooks/lib/secret_approval.py", 'r"^[A-Za-z0-9._,:/-]+$"', 'r"^.+$"'),
- "git_add_ledger": (GG, CJ, CJ + "      coding-memory/third-judge/verdicts.jsonl) ;;\n"),
- "git_rm_ledger": (GG, "      coding-memory/observability-judge/verdicts.jsonl) ;;\n", ""),
- "git_exit": (GG, '"$prints_and_exits" >&2\n    exit 2', '"$prints_and_exits" >&2\n    exit 0'),
- "gq_add_stash": ("hooks/lib/git_quiet_class.py", '"for-each-ref",\n)', '"for-each-ref", "stash",\n)'),
- "gq_protected": ("hooks/lib/git_guard_quiet.py", 'PROTECTED_BRANCHES = ("main", "master")',
-                  'PROTECTED_BRANCHES = ("main",)'),
- "cgc_force": ("hooks/lib/classify-git-command.py", 'FORCE_FLAGS = ("--force", "-f")',
-               'FORCE_FLAGS = ("--force",)'),
- "wt_add_exempt": (WG, "  rules/*|skills/*) exit 0 ;;\n", "  rules/*|skills/*) exit 0 ;;\n  hooks/*) exit 0 ;;\n"),
- "wt_rm_exempt": (WG, "  rules/*|skills/*) exit 0 ;;\n", ""),
- "wt_no_home": (WG, "being usable at all.\nrequire_home\n", "being usable at all.\n"),
- "wta_refuse": ("hooks/lib/worktree_guard_bash_arms.sh", '  refuse "$1" "$2" "$command_line"\n', "  exit 0\n"),
- "wtl_liveness": ("hooks/lib/worktree_guard_liveness.sh", "    return 0\n  fi\n  return 1\n}",
-                  "    return 0\n  fi\n  return 0\n}"),
- "rt_exit": ("hooks/reference-transaction", '"$3" 1>&2\n  exit 1\n}', '"$3" 1>&2\n  exit 0\n}'),
- "rtm_off": ("hooks/reference-transaction.mode", "\n\nlog\n", "\n\noff\n"),
- "seg_paren": ("hooks/lib/shell_segments.py", '")" in tok:\n        return False\n    return "<"',
-               '")" in tok:\n        return True\n    return "<"'),
- "set_retarget": ("settings.json", "hooks/secret-command-guard.sh", "hooks/secret-command-guard.sh.disabled"),
- "cosmetic": (SC, "# (regex, human label). Anchored on the basename",
-              "# (regex, human label). Anchored on the basename [reworded]"),
- "reorder": (SC, Z + E, E + Z),
+# The mutation table (writes $MUTPY) and the reference double with its degraded controls (writes
+# $MODELPY) live in loosening-guard.test.d/ so this runner stays under the 800-line maximum
+# (rules/core-conduct.md). Parts are sourced through the repo's shared loader, which fails loudly --
+# FAIL line, exit 2 -- on a missing, unreadable or syntax-broken part or a count mismatch.
+source "$HERE/handoff/lib/test-parts.sh" || exit 2
+command -v source_test_parts >/dev/null 2>&1 || {
+  printf 'FAIL — source_test_parts not defined after sourcing handoff/lib/test-parts.sh\n'
+  exit 2
 }
-APPEND = {"brk_py": (SC, "\ndef (:\n"), "brk_py2": (SC, "\nclass :\n"),
-          "brk_sh": (GG, "\nif then fi (\n"), "brk_json": ("settings.json", "\n{{\n")}
+source_test_parts "$HERE/loosening-guard.test.d" 2
 
-def apply_one(repo, mid):
-    if mid in APPEND:
-        path, text = APPEND[mid]
-        with open(repo + "/" + path, "ab") as fh:
-            fh.write(text.encode("utf-8"))
-        return path
-    path, old, new = M[mid]
-    with open(repo + "/" + path, "rb") as fh:
-        body = fh.read().decode("utf-8")
-    n = body.count(old)
-    if n != 1:
-        sys.stderr.write("mutation %s: needle occurs %d times in %s, expected 1\n" % (mid, n, path))
-        sys.exit(9)
-    with open(repo + "/" + path, "wb") as fh:
-        fh.write(body.replace(old, new).encode("utf-8"))
-    return path
-
-if sys.argv[1] == "list":
-    print("\n".join(sorted(list(M) + list(APPEND))))
-else:
-    print(apply_one(sys.argv[3], sys.argv[2]))
-PYEOF
-
-# ---------------------------------------------------------------------------------------------
-# The reference double: the contract above as a decision table, with the CLASSIFICATION supplied by
-# the harness (LG_ORACLE_CLASS) because the extractors are task 5's work. LG_DEGRADE removes one
-# capability at a time -- each degradation is a plausible way a real implementation goes wrong.
-# ---------------------------------------------------------------------------------------------
-cat > "$MODELPY" <<'PYEOF'
-import hashlib, json, re, subprocess, sys
-from os import environ as ENV
-import os
-DEG = ENV.get("LG_DEGRADE", "")
-SEC, GIT, WT = "secret-command-guard", "git-guard", "worktree-guard"
-WATCH = {
- "hooks/lib/classify-secret-command.py": (SEC,), "hooks/secret-command-guard.sh": (SEC,),
- "hooks/lib/secret_approval.py": (SEC,), "hooks/git-guard.sh": (GIT,),
- "hooks/lib/git_quiet_class.py": (GIT,), "hooks/lib/git_guard_quiet.py": (GIT,),
- "hooks/lib/classify-git-command.py": (GIT, WT), "hooks/worktree-guard.sh": (WT,),
- "hooks/lib/worktree_guard_bash_arms.sh": (WT,), "hooks/lib/worktree_guard_liveness.sh": (WT,),
- "hooks/reference-transaction": (WT,), "hooks/reference-transaction.mode": (WT,),
- "hooks/lib/shell_segments.py": (SEC, GIT, WT), "settings.json": (SEC, GIT, WT)}
-GUARD_FILES = {"hooks/secret-command-guard.sh", "hooks/git-guard.sh", "hooks/worktree-guard.sh"}
-
-def run(*a):
-    return subprocess.run(list(a), stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-def git(*a): return run("git", *a)
-def log(decision, cls):
-    path = ENV.get("LOOSENING_GUARD_LOG")
-    if path:
-        with open(path, "a") as fh: fh.write("decision=%s class=%s\n" % (decision, cls))
-def done(decision, cls):
-    log(decision, cls)
-    if DEG == "chatty" and decision == "skip": sys.stderr.write("loosening-guard: nothing to check\n")
-    sys.exit(0)
-def refuse(msg): sys.stderr.write("loosening-guard: %s\n" % msg); sys.exit(2)
-
-try:
-    p = json.loads(sys.stdin.read()); assert isinstance(p, dict)
-except Exception:
-    if DEG == "json-open": sys.exit(0)
-    refuse("payload is not valid JSON, so the command cannot be inspected")
-ev, cmd = p.get("hook_event_name"), (p.get("tool_input") or {}).get("command") or ""
-sid = re.sub(r"[^A-Za-z0-9_-]", "_", str(p.get("session_id") or "nosession"))[:128]
-state = ENV["SECRET_GUARD_STATE_DIR"]
-cid = hashlib.sha256(cmd.encode()).hexdigest()[:16]
-rec = lambda k: os.path.join(state, "secret-approval-%s-%s" % ("any" if DEG == "sess-blind" else sid, k))
-
-if ev == "PostToolUse":
-    pend = os.path.join(state, "lg-pending-%s-%s" % (sid, cid))
-    try:
-        if os.path.exists(pend) and DEG != "no-record":
-            for k in open(pend).read().split():
-                open(rec(k), "w").write("1")
-            os.remove(pend)
-    except OSError:
-        pass
-    done("skip", "post")
-if ev != "PreToolUse": done("skip", "unrelated")
-
-flat = re.sub(r'"[^"]*"|\'[^\']*\'', '""', cmd)
-m = re.search(r'(^|[;&|]\s*)git\s+commit\b([^;&|]*)', flat)
-if not m and DEG != "loose-detect": done("skip", "unrelated")
-use_wt = bool(re.search(r"\s-[A-Za-z]*a[A-Za-z]*\b|\s--all\b", m.group(2))) if m else False
-if DEG == "unattended-blanket" and p.get("permission_mode") != "default": refuse("unattended: refusing every commit")
-has_base = git("rev-parse", "--verify", "-q", "origin/main^{commit}").returncode == 0
-if DEG == "base-first" and not has_base: refuse("baseline origin/main is unobtainable")
-if DEG == "dirty-tree": open(".lg-dirt", "w").write("x")
-names = (git("diff", "HEAD", "--name-only", "--no-renames") if use_wt
-         else git("diff", "--cached", "--name-only", "--no-renames")).stdout.split("\n")
-view = GUARD_FILES if DEG == "guard-filename-only" else set(WATCH)
-touched = [n for n in names if n in view]
-if not touched: done("skip", "unrelated")
-if DEG == "store-first" and not os.access(state, os.R_OK): refuse("approval store unreadable")
-
-if not has_base:
-    if DEG == "base-open": done("allow", "unchanged")
-    refuse("baseline origin/main is unobtainable, so no comparison can be made")
-gd = git("rev-parse", "--git-dir").stdout.strip()
-if os.path.exists(os.path.join(gd, "MERGE_HEAD")):
-    if DEG == "merge-skip-all": done("allow", "merge-on-main")
-    sha = open(os.path.join(gd, "MERGE_HEAD")).read().strip()
-    rc = git("merge-base", "--is-ancestor", sha, "origin/main").returncode
-    if (rc == 0 and DEG != "merge-never-skip") or (DEG == "merge-exit1-only" and rc != 1): done("allow", "merge-on-main")
-elif DEG == "squash-skip" and os.path.exists(os.path.join(gd, "SQUASH_MSG")): done("allow", "merge-on-main")
-
-ref = "HEAD" if DEG == "head-baseline" else "origin/main"
-def new_state(f):
-    if use_wt:
-        if not os.path.exists(f): return None
-        return ("100755" if os.access(f, os.X_OK) else "100644", git("hash-object", f).stdout.strip())
-    o = git("ls-files", "-s", "--", f).stdout.split()
-    return (o[0], o[1]) if o else None
-def base_state(f):
-    o = git("ls-tree", ref, "--", f).stdout.split()
-    return (o[0], o[2]) if o else None
-norm = lambda s: s if (s is None or DEG != "content-only") else s[1]
-changed = [f for f in touched if norm(new_state(f)) != norm(base_state(f))]
-
-oracle = ENV.get("LG_ORACLE_CLASS") or "unclassified"
-if DEG == "head-baseline" and ENV.get("LG_ORACLE_CLASS_HEAD"): oracle = ENV["LG_ORACLE_CLASS_HEAD"]
-if oracle == "parse-error" and changed:
-    if DEG == "parse-open": done("allow", "tightening")
-    side = ENV.get("LG_ORACLE_BAD_SIDE", "staged")
-    refuse({"staged": "cannot extract the permission list from the staged side",
-            "baseline": "cannot extract the permission list from the baseline side",
-            "both": "cannot extract the permission list from either the staged or the baseline side"}[side])
-if not changed: cls = "unchanged"
-elif any(new_state(f) is None for f in changed): cls = "unclassified"
-elif any(base_state(f) is None for f in changed): cls = "loosening"
-else: cls = oracle
-if cls == "unchanged" and changed and DEG == "whole-file": cls = "unclassified"
-if cls == "unchanged" or (cls == "tightening" and DEG != "ask-tighten"): done("allow", cls)
-if cls == "unclassified" and DEG == "two-outcome": done("allow", "tightening")
-
-guards = sorted({g for f in changed for g in WATCH[f]})
-if DEG == "first-guard-only": guards = guards[:1]
-def key(g):
-    if DEG == "name-only": return hashlib.sha256(g.encode()).hexdigest()[:24]
-    h = hashlib.sha256(g.encode())
-    for f in sorted(f for f, gs in WATCH.items() if g in gs):
-        s = new_state(f); h.update(repr((f, norm(s))).encode())
-    return h.hexdigest()[:24]
-try:
-    missing = [g for g in guards if not os.path.exists(rec(key(g)))]
-except OSError:
-    missing = guards
-if DEG == "store-open" and not os.access(state, os.R_OK): missing = []
-if not missing:
-    for g in guards:
-        try: os.remove(rec(key(g)))
-        except OSError: pass
-    done("allow", "approved")
-
-if p.get("permission_mode") != "default" and DEG != "ask-not-deny":
-    refuse("approval cannot be obtained unattended (permission mode %r): refusing" % p.get("permission_mode"))
-diff = git(*(["diff", ref, "--"] if use_wt else ["diff", "--cached", ref, "--"]), *changed).stdout.split("\n")
-lines = [l[:160] for l in diff if l[:1] in "+-" and l[:3] not in ("+++", "---")][:20]
-if DEG == "terse-reason": lines = []
-tag = "[UNCLASSIFIED]" if (cls == "unclassified" and DEG != "single-message") else "[LOOSENING]"
-body = ("%s change to %s could not be classified; it needs your decision." % (tag, ", ".join(missing))
-        if tag == "[UNCLASSIFIED]" else "%s %s: entries changed below. Confirm to commit." % (tag, ", ".join(missing)))
-reason = "%s\ncommit: %s\n%s" % (body, cmd, "\n".join(lines))
-try:
-    with open(os.path.join(state, "lg-pending-%s-%s" % (sid, cid)), "w") as fh:
-        fh.write(" ".join(key(g) for g in missing))
-except OSError:
-    pass
-print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask",
-                                          "permissionDecisionReason": reason}}))
-log("ask", cls); sys.exit(0)
-PYEOF
 
 # ---------------------------------------------------------------------------------------------
 # Implementations the same assertions run against.
@@ -356,8 +163,13 @@ dirty:model:dirty-tree
 jsonopen:model:json-open
 mergeask:model:merge-never-skip
 chatty:model:chatty
-squashskip:model:squash-skip'
-CONTROLS="gfile nomode two-outcome wholefile onemsg headbase askdeny parseopen mexit1 namekey pyopen orphanopen norecord sessblind storeopen mergeskip basefirst baseopen loosedetect asktight terse unattblanket storefirst firstguard dirty jsonopen mergeask chatty squashskip"
+squashskip:model:squash-skip
+consumeuse:model:consume-on-use
+askfallback:model:ask-fallback
+absentblanket:model:absent-blanket
+fallbackclaims:model:fallback-claims-unattended
+agentblind:model:agent-blind'
+CONTROLS="gfile nomode two-outcome wholefile onemsg headbase askdeny parseopen mexit1 namekey pyopen orphanopen norecord sessblind storeopen mergeskip basefirst baseopen loosedetect asktight terse unattblanket storefirst firstguard dirty jsonopen mergeask chatty squashskip consumeuse askfallback absentblanket fallbackclaims agentblind"
 impl_path() { if [ "$1" = real ]; then printf '%s' "$REAL_HOOK"; else printf '%s' "$IMPL/$1/loosening-guard.sh"; fi; }
 make_impls() {
   local n k d
@@ -409,7 +221,7 @@ EOF
 
 CASE=""; REPO=""; CUR_ID=x; RC=0; OUT=""; ERR=""; LOGTXT=""; REASON=""
 ORACLE=unrelated; ORACLE_HEAD=""; BAD_SIDE=""; PERM=default; EVENT=PreToolUse
-SID=s; HOOK_OVERRIDE=""; HOOK_PATH=""; RAW_PAYLOAD=""; CMD=""; HOOK=""
+SID=s; HOOK_OVERRIDE=""; HOOK_PATH=""; RAW_PAYLOAD=""; CMD=""; HOOK=""; AGENT_ID=""; AGENT_TYPE=""
 T_OK=1; T_WHY=""; T_MISSING=0; T_HARNESS=0
 g() { git -C "$REPO" "$@"; }
 new_case() {
@@ -417,7 +229,7 @@ new_case() {
   cp -Rp "$TPL/work" "$CASE/repo"; REPO="$CASE/repo"
   mkdir -p "$CASE/state"; : > "$CASE/log"
   ORACLE=unrelated; ORACLE_HEAD=""; BAD_SIDE=""; PERM=default; EVENT=PreToolUse
-  SID="sess-$$-$RANDOM"; HOOK_OVERRIDE=""; HOOK_PATH=""; RAW_PAYLOAD=""
+  SID="sess-$$-$RANDOM"; HOOK_OVERRIDE=""; HOOK_PATH=""; RAW_PAYLOAD=""; AGENT_ID=""; AGENT_TYPE=""
   CMD="git commit -m lg-$CUR_ID"; RC=0; OUT=""; ERR=""; LOGTXT=""
 }
 fail_t() { T_OK=0; T_WHY="$T_WHY [$*]"; }
@@ -454,8 +266,11 @@ run_hook() { # $1 command; sets RC OUT ERR LOGTXT. rc is captured on the very ne
   : > "$CASE/log"
   if [ -n "$RAW_PAYLOAD" ]; then payload="$RAW_PAYLOAD"; else
     payload="$("$JQ" -nc --arg c "$cmd" --arg s "$SID" --arg pm "$PERM" --arg cwd "$REPO" --arg ev "$EVENT" \
+      --arg aid "$AGENT_ID" --arg aty "$AGENT_TYPE" \
       '{hook_event_name:$ev,tool_name:"Bash",tool_input:{command:$c},session_id:$s,cwd:$cwd}
        | if $pm == "" then . else . + {permission_mode:$pm} end
+       | if $aid == "" then . else . + {agent_id:$aid} end
+       | if $aty == "" then . else . + {agent_type:$aty} end
        | if $ev == "PostToolUse" then . + {tool_response:{interrupted:false}} else . end')"
   fi
   ( cd "$REPO" && printf '%s' "$payload" | env SECRET_GUARD_STATE_DIR="$CASE/state" \
@@ -525,7 +340,23 @@ t_notcommit() { new_case; sm sec_rm_zprofile; run_hook "$1"; ex_silent unrelated
 t_chained() { new_case; ORACLE=loosening; sm sec_rm_zprofile
   run_hook "git add -- $SC && git commit -m lg-$CUR_ID"; ex_ask loosening; }
 t_commit_a() { new_case; ORACLE=loosening; wm sec_rm_zprofile; run_hook "git commit -am lg-$CUR_ID"; ex_ask loosening; }
-t_recommit() { new_case; ORACLE=loosening; sm wt_add_exempt; approve_flow; run_hook "$CMD"; ex_allow; }
+t_recommit() { # ADR 0054 decision 1: three more commits of the approved state stay silent AND the record survives
+  local before after lost n cmd
+  new_case; ORACLE=loosening; sm wt_add_exempt; approve_flow
+  before="$(ls -1 "$CASE/state" | /usr/bin/grep '^secret-approval-' | sort)"
+  [ -n "$before" ] || fail_t "approve_flow left no approval record in the store, so survival cannot be checked"
+  for n in 1 2 3; do
+    cmd="git commit -m lg-$CUR_ID-again-$n"
+    run_hook "$cmd"; ex_allow
+    g commit -q -m "lg recommit $n" || harness_fail "fixture commit $n failed"
+    EVENT=PostToolUse; run_hook "$cmd"; EVENT=PreToolUse
+    [ "$RC" -eq 0 ] || fail_t "PostToolUse rc=$RC want 0 after silent commit $n"
+    g reset -q --soft HEAD~1 || harness_fail "fixture reset $n failed"
+  done
+  after="$(ls -1 "$CASE/state" | /usr/bin/grep '^secret-approval-' | sort)"
+  lost="$(comm -23 <(printf '%s\n' "$before") <(printf '%s\n' "$after"))"
+  [ -z "$lost" ] || fail_t "approval record spent by use (gone after 3 commits): $lost"
+  [ -n "$after" ] || fail_t "no approval record left in the store after 3 commits"; }
 t_session() { new_case; ORACLE=loosening; sm wt_add_exempt; SID=sess-A; approve_flow; SID=sess-B
   run_hook "$CMD"; ex_ask loosening; }
 t_unclass() { new_case; ORACLE=unclassified; sm "$1"; run_hook "$CMD"; ex_ask unclassified; }
@@ -538,7 +369,19 @@ t_unatt_tight() { new_case; PERM=bypassPermissions; ORACLE=tightening; sm git_rm
 t_unatt_unrel() { new_case; PERM=bypassPermissions; printf 'x\n' >> "$REPO/docs/note.md"; g add -- docs/note.md
   run_hook "$CMD"; ex_silent unrelated skip; }
 t_unatt_unk() { new_case; PERM=bypassPermissions; ORACLE=unclassified; sm sec_fold; run_hook "$CMD"; ex_refuse unattended; }
-t_nomode() { new_case; PERM=""; ORACLE=loosening; sm sec_rm_zprofile; run_hook "$CMD"; ex_refuse; }
+t_nomode() { # ADR 0054 decision 2, FALLBACK path: permission_mode absent AND no subagent keys -> a needed prompt REFUSES (rc 2)
+  local oracle mid; IFS=, read -r oracle mid <<EOF
+$1
+EOF
+  new_case; PERM=""; ORACLE="$oracle"; sm "$mid"; run_hook "$CMD"; ex_refuse permission_mode; ex_err_lacks unattended; }
+t_nomode_silent() { # absent mode but NO prompt needed: the fallback refuses only a needed prompt, never every commit
+  new_case; PERM=""
+  if [ "$1" = unrelated ]; then printf 'x\n' >> "$REPO/docs/note.md"; g add -- docs/note.md; run_hook "$CMD"; ex_silent unrelated skip
+  else ORACLE=tightening; sm git_rm_ledger; run_hook "$CMD"; ex_silent tightening allow; fi; }
+t_subagent() { # $1 permission_mode ("" = absent); a subagent payload carries agent_id + agent_type (measured keys)
+  new_case; PERM="$1"; AGENT_ID=agent-1; AGENT_TYPE=general-purpose; ORACLE=loosening; sm sec_rm_zprofile
+  run_hook "$CMD"; ex_refuse unattended; }
+t_bypass_only() { new_case; PERM=bypassPermissions; ORACLE=loosening; sm sec_rm_zshenv; run_hook "$CMD"; ex_refuse unattended; }
 t_parse() { new_case; ORACLE=parse-error
   case "$1" in
     staged-py) BAD_SIDE=staged; sm brk_py ;;
@@ -616,7 +459,7 @@ reg G3b "6.1 not a commit (git status) with a loosening staged: skipped" t_notco
 reg G3c "6.1 'git commit' only inside a quoted string, loosening staged: skipped" t_notcommit 'echo "then git commit it"'
 reg G3d "chained 'git add && git commit' is judged (ask)" t_chained
 reg G3e "git commit -am with the loosening UNSTAGED is judged (ask) [beyond spec]" t_commit_a
-reg G4 "6.1 re-commit of the approved state: no re-prompt" t_recommit
+reg G4 "6.1 + ADR0054-1 three more commits of the approved state: all silent, approval record still on disk" t_recommit
 reg G5 "approval from session A does not satisfy session B" t_session
 reg U1 "2: regex anchor dropped in place -> ask [UNCLASSIFIED]" t_unclass sec_anchor
 reg U2 "2: re.IGNORECASE -> 0 -> ask [UNCLASSIFIED]" t_unclass sec_fold
@@ -632,7 +475,14 @@ reg R1g "6.2 unattended + loosening (git): refuse rc 2 'unattended'" t_unattende
 reg R1b "unattended + tightening: still silent" t_unatt_tight
 reg R1c "unattended + unrelated commit: still silent" t_unatt_unrel
 reg R1d "unattended + direction-unknown: refuse rc 2 'unattended'" t_unatt_unk
-reg R1e "permission_mode absent + loosening: refuse (cannot establish a prompt)" t_nomode
+reg R1e "ADR0054-2 permission_mode ABSENT, no subagent keys, loosening: FALLBACK path -> refuse rc 2 naming permission_mode, not 'unattended' (an ask under bypass is silently allowed = fail-open)" t_nomode "loosening,sec_rm_zprofile"
+reg R1f "ADR0054-2 subagent (agent_id) with permission_mode=default, loosening: unattended, refuse rc 2 not ask" t_subagent default
+reg R1h "ADR0054-2 permission_mode=bypassPermissions, no subagent keys, loosening: unattended, refuse rc 2 not ask" t_bypass_only
+reg R1i "ADR0054-2 subagent AND permission_mode=bypassPermissions, loosening: refuse rc 2" t_subagent bypassPermissions
+reg R1j "ADR0054-2 permission_mode ABSENT + subagent (agent_id), loosening: the fallback leg fires, refuse rc 2" t_subagent ""
+reg R1k "ADR0054-2 permission_mode ABSENT, no subagent keys, direction-unknown: FALLBACK path -> refuse rc 2 naming permission_mode, not 'unattended' (an ask under bypass is silently allowed = fail-open)" t_nomode "unclassified,sec_fold"
+reg R1l "ADR0054-2 permission_mode ABSENT, no subagent keys, unrelated commit: no prompt needed, silent skip (the fallback refuses a needed prompt only)" t_nomode_silent unrelated
+reg R1m "ADR0054-2 permission_mode ABSENT, no subagent keys, tightening: no prompt needed, silent allow" t_nomode_silent tightening
 reg R2a "6.2 staged .py unparseable: refuse rc 2 naming 'staged' only" t_parse staged-py
 reg R2b "6.2 staged .sh unparseable: refuse rc 2 naming 'staged' only" t_parse staged-sh
 reg R2c "6.2 staged settings.json unparseable: refuse rc 2 naming 'staged' only" t_parse staged-json
@@ -734,6 +584,17 @@ run_harness_checks() {
   hres "no-python PATH hides python3 but keeps git and bash" $?
   "$JQ" -nc --arg ev PreToolUse '{hook_event_name:$ev}' | "$JQ" -e '.hook_event_name == "PreToolUse"' >/dev/null
   hres "synthetic payloads carry hook_event_name (a payload without it is 'never inspected')" $?
+  # The R1e/R1f/R1h/R1i/R1j/R1k/R1l/R1m cells are only distinct if the payloads really differ: dump what run_hook sends.
+  T_HARNESS=0; T_WHY=""; new_case; printf '#!/usr/bin/env bash\ncat > "$SECRET_GUARD_STATE_DIR/payload.json"\n' > "$CASE/dump.sh"; HOOK_OVERRIDE="$CASE/dump.sh"
+  PERM=""; run_hook "$CMD"
+  "$JQ" -e 'has("permission_mode") == false and has("agent_id") == false and has("agent_type") == false' "$CASE/state/payload.json" >/dev/null
+  hres "payload with PERM='' and no agent carries NEITHER permission_mode NOR agent_id/agent_type" $?
+  PERM=default; AGENT_ID=agent-1; AGENT_TYPE=general-purpose; run_hook "$CMD"
+  "$JQ" -e '.permission_mode == "default" and .agent_id == "agent-1" and .agent_type == "general-purpose"' "$CASE/state/payload.json" >/dev/null
+  hres "subagent payload carries permission_mode=default, agent_id and agent_type" $?
+  PERM=bypassPermissions; AGENT_ID=""; AGENT_TYPE=""; run_hook "$CMD"
+  "$JQ" -e '.permission_mode == "bypassPermissions" and has("agent_id") == false' "$CASE/state/payload.json" >/dev/null
+  hres "bypass payload carries permission_mode=bypassPermissions and NO agent_id" $?
 }
 
 if [ "$RUNMODE" = "--impl" ]; then
