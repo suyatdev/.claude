@@ -54,6 +54,62 @@ Also discharged: the "second active card may overlap" warning. `feat/git-guard-q
 merged into `origin/main` (its card is `phase: review`), so it is part of the baseline now, not a
 competing edit to `git-guard.sh`.
 
+**Status 2026-10-28 (second block): tasks 2 and 3 DONE. Still no implementation code.**
+
+**Task 2 — §9.1 answered → ADR 0053.** The watcher skips a merge whose incoming content is already
+an ancestor of `origin/main`, and prompts otherwise; **any non-zero exit of
+`git merge-base --is-ancestor` prompts**, including `128` for a missing ref. Measured live on a
+fixture repo: pull-main-into-branch → silent, branch-into-branch → prompt, no `origin/main` →
+prompt. ⚠️ **The historical noise split is NOT recoverable** — two proxies disagree (0 of 76 vs 16
+of 39) because git does not retain `origin/main`'s past position. An earlier "33 silent, 6 asked"
+figure came from commit subject lines and is **withdrawn**; do not reuse it. 37 of the 76 watched-file
+merges are GitHub server-side and unreachable by any local hook.
+
+**Task 3 — the state key discriminates, conditional on a serializer that does not exist yet.**
+Probe: `hooks/secret-approval-state-key.probe.sh`, re-run with `bash hooks/secret-approval-state-key.probe.sh`
+from the worktree root. 33 assertions over S1 = the HEAD blobs **and git modes** of all fourteen
+watch-set files. Real 33/33; always-match stub 6/33; never-match stub 25/33; **passed by both: 0**.
+
+⚠️ **Read the three caveats before building on that, in this order.**
+1. **The "real" column tests a serializer written inside the probe.** `secret_approval.py` holds no
+   state-keyed function — verified: zero hits for `watch`/`ls-tree`/`100755`/`state_id`/`serial`, and
+   every one of its twelve functions is command-oriented. So the verdict is "yes, for that
+   serializer", **never** "yes for `secret_approval.py` as shipped".
+2. **`0 passed by both stubs` is structural, not evidence.** A single-direction assertion can only be
+   passed by both stubs if it is vacuous. The **degraded controls** are what actually discriminate:
+   `guard-file-only` (spec §5.1 as first worded) fails **17** assertions, and `name-only` fails 24 —
+   ADR 0052's prediction that a filename-keyed watcher fails open, now measured.
+3. **Mode must be in the key.** The `no-mode` control fails exactly one assertion, M17 — the
+   `100755` → `100644` flip with byte-identical content. One row is the whole margin, so a
+   content-only digest is blind to a hook being disarmed.
+
+**Requirement task 3 adds (recorded here, not in the list, per the phase gate — fold into task 5):**
+`secret_approval.py` needs **one new entry point**, e.g. `state-id <guard>`, that digests the
+guard's watch-set bytes **plus git modes** and hashes directly. It must bypass `canonical_text()`
+and `unapprovable_reason()`, and exit non-zero when a watched file is unreadable. Both existing
+paths fail on real list text: `id` mode exits **3** ("more than one segment joined by a separator"),
+and `fingerprint()` collides — `fp(T) == fp(T + trailing whitespace)` and
+`fp(T) == fp("SECRET_EXEMPT=x " + T)`, both measured. `grant`/`consume`/session-scoping/single-use
+need no change.
+
+⚠️ **A whole-file digest over-prompts: a comment-only edit gives NO MATCH (measured), and flipping
+`WORKTREE_GUARD_MODE` invalidates all three guards' approvals because `settings.json` is in every
+file set.** Fails closed, but it contradicts spec §5.2's "tightening passes silently". The entry-level
+extractors (ADR 0052, decision 3) are what resolve this, in tasks 4/5.
+
+**Probe defect found and fixed by this session, not by the subagent that wrote it:** the probe
+printed `PROBE VALIDITY: INVALID` while **exiting 0**, so a caller checking only the status read an
+invalid probe as a pass. Falsified in both directions after the fix — clean run `rc=0`, and a run
+with one mutation target deliberately corrupted `rc=1` with `INVALID — 1 mutation(s) missed their
+target`. That corrupted run is also the first time the probe's own MISS gate was ever shown to fire;
+the subagent listed it as unmeasured. The probe also fails closed (`rc=1`, named reason) when run
+from outside `hooks/`.
+
+**Not measured by task 3:** direction classification and the ALLOW/BLOCK tables (ADR 0052 decision
+4 — still unreviewed by a human, still a gate before shipping), the watcher itself, a
+reordering-only edit, staged-vs-HEAD as the baseline (HEAD was used, not `origin/main`), concurrent
+or broken approval stores, and squash/octopus merges.
+
 ## The one-line problem
 
 Widening a security guard's permission list is caught today only by `hooks/git-guard.replay.sh`,
@@ -91,9 +147,13 @@ three guards; refuse when unattended; approval lifetime; **one shared watcher ho
       shapes across the three guards.
       **Answered 2026-10-28 → `docs/decisions/0052-the-permission-list-is-not-in-the-guard-file.md`.**
       It falsified three things the spec asserts; see the status block below before reading §5.
-- [ ] 2. Put open question §9.1 (merge commits) to the user. Do not guess a default.
-- [ ] 3. Prove the `secret_approval.py` key shape discriminates (spec §8) — falsified against an
+- [x] 2. Put open question §9.1 (merge commits) to the user. Do not guess a default.
+      **Answered 2026-10-28 → `docs/decisions/0053-a-merge-prompts-only-when-the-content-is-not-already-on-main.md`.**
+- [x] 3. Prove the `secret_approval.py` key shape discriminates (spec §8) — falsified against an
       always-match and a never-match stub, since a non-discriminating key fails permissively.
+      **Measured 2026-10-28 → `hooks/secret-approval-state-key.probe.sh`. Verdict: YES, but
+      conditional — see the status block below. The store works unchanged; the key does not
+      exist yet, so task 5 must add one entry point to `secret_approval.py`.**
 - [ ] 4. Write the failing tests for §6.1/§6.2/§6.3, including the always-allow and always-deny stub
       falsifiers required by §10. Tests and implementation never in the same step.
 - [ ] 5. Implement the watcher hook (spec §5), fail-closed per §7.
