@@ -260,11 +260,27 @@ two assertions and two fully-overlapping controls, not four independent ones.
 handed the classification and was edited to agree with the new assertions, so 78/78 shows
 self-consistency and nothing else. No real hook has passed anything.
 
-⚠️ **TASK 5 IS BLOCKED on ONE thing now: how a human approval becomes a record.** An `ask` is
-decided in the UI, which the hook cannot observe, and spec §5.1 "on approval → write approval
-record" arrow has no mechanism. The suite assumes a `PostToolUse` call back into the same script
-(`A7`), confined to `approve_flow()` so it can change in one place. This is the last interface guess
-in the feature.
+**TASK 5 IS UNBLOCKED — the approval-record mechanism is DERIVED, not guessed (2026-10-29).**
+Spec §5.1 "on approval → write approval record" has no stated mechanism, and an `ask` is decided in
+the UI where no hook can see it. The `A7` assumption — a `PostToolUse` call back into the same
+script — follows from three facts already established, rather than being a free choice:
+
+1. `PostToolUse` fires **only when the tool actually ran**. A declined command never runs.
+2. The hook emits an `ask` **only in an attended session**: an unattended one exits 2 first
+   (ADR 0054 decision 2). So an ask existing at all implies a human was present.
+3. `PostToolUse` carries **no approval field** — ADR 0035 enumerates its complete key set
+   (`cwd`, `duration_ms`, `effort`, `hook_event_name`, `permission_mode`, `prompt_id`, `session_id`,
+   `tool_input`, `tool_name`, `tool_response`, `tool_use_id`, `transcript_path`). There is no direct
+   signal to prefer, so the indirect one is not a shortcut.
+
+Chained: **a `PostToolUse` following the hook own ask means an attended human approved it**, and a
+decline yields no `PostToolUse` and therefore no record — which is exactly §6.2 third scenario.
+
+⚠️ **One leg is NOT confirmed: that a declined ask produces no `PostToolUse`.** It cannot be
+measured from a bypass session, where an ask is auto-allowed and no decline is possible. It needs one
+interactive run, the same way task 0 interactive half did. Until then the chain has a measured head
+(facts 1-3 above are each recorded elsewhere) and an inferred joint. Keep the mechanism inside
+`approve_flow()` so a wrong answer changes one function. Record the result against task 8 ADR.
 
 **Still open, not blocking:** ADR 0052 decision 4 **human review of the direction tables** (still
 nobody has reviewed them; a mis-tag fails permissively) — and task 4 flagged its own readings for
@@ -272,6 +288,71 @@ that review: that adding a block entry or removing an allow entry is a tightenin
 `.zprofile` from `DOTFILE_PATTERNS` is a loosening. Also: the watcher is **not in its own watch
 set**; `acceptEdits`/`plan`/`dontAsk` modes are unclassified; `agent_type` without `agent_id` is
 untested; and `E7` no-python case would not hold if the real hook hard-codes `/usr/bin/python3`.
+
+**Status 2026-10-29 (third block): task 5 IMPLEMENTED and the suite is GREEN — but its checkbox
+stays UNTICKED.** Task 5 reads "fail-closed per §7", and one path is not: see the stale-note
+fail-open below. The same treatment task 0 got — a green measurement does not tick a box whose
+stated exit condition is unmet.
+
+**Files.** `hooks/loosening-guard.sh` (78 lines, **mode 755** — a 100644 hook cannot start) wrapping
+six libs: `hooks/lib/loosening_guard.py` (286, both events), `loosening_decide.py` (234, decision
+order), `loosening_extract.py` (219), `loosening_shell.py` (181), `loosening_states.py` (115),
+`loosening_watch.py` (82, the 14-file table **and the hand-assigned direction tables**). Plus
+`hooks/lib/secret_approval.py` 534 → 647, **additive only** (+114/−1): a new `state_id(guard, files)`
+and `state-id <guard> [--source index|worktree]` digesting file bytes **and git modes**, bypassing
+`canonical_text()`/`unapprovable_reason()`, exiting 3 on an unreadable file or unknown guard, with
+the watch table imported **lazily** so a broken table cannot break `grant`/`consume`/`id`.
+
+**Verified by this session, not relayed.** Suite **78 passed / 0 failed**, `rc=0`. ⚠️ **First check
+was that the tests are still the tests:** `git diff HEAD -- hooks/loosening-guard.test.sh
+hooks/loosening-guard.test.d` is **empty**, so nothing was bent to fit. Existing
+`secret-command-guard.test.sh` still **212/212** — the module was not broken. Matrix: real hook
+78/78, no-op fails **78/78**, stubs fail 62/61 with **0** passed by both, `gfile` 42, `two-outcome`
+24, `nomode` 2, `consumeuse` 1 (`G4`), `askfallback` 2, `absentblanket` 3, `fallbackclaims` 2,
+`agentblind` 2, and **assertions no control fails: 0**. **No control stopped failing** — the
+implementation passes without absorbing any defect a near-miss was built to catch.
+
+⚠️ **OPEN FAIL-OPEN — a declined approval can become a granted one.** The ask leaves a note keyed to
+**session + command text** (`tool_use_id` is **not** used). Decline, and the command never runs, so
+no `PostToolUse` arrives and the note persists. Run the same command text later at a state needing
+no ask: `clear_pending` tries to drop the note, and on an unwritable store
+`loosening_guard.py:222` **logs `warning=stale-approval-note-uncleared` and ALLOWS**. The command
+runs, `PostToolUse` fires, and the leftover note becomes approval records for a loosening that was
+refused. Narrow conjunction, documented in the source and logged rather than hidden — and still the
+wrong direction for this contract.
+
+**Fix to apply, test-first:** on the allow path, **refuse (exit 2) when a stale note cannot be
+cleared.** §7 already says any internal error in the checker refuses, so this applies the contract
+rather than extending it, and needs no new facts. **Rejected for now:** keying the note to
+`tool_use_id` — tidier, and it would make a declined note unmatchable by any later call, but it
+rests on `PreToolUse` and `PostToolUse` carrying the **same** id for one call, which is plausible and
+**unmeasured**. Keep it as a follow-up; the probe recipe in ADR 0054 would settle it.
+
+**Three deviations the implementer declared, none fail-open, each needing a decision recorded:**
+1. **`python3`/libs missing refuses only commands whose text mentions "commit"**, not every Bash
+   call. §7 reads literally as REFUSE. The narrowing stops a missing interpreter from locking the
+   session. Judged correct, but it is a departure and task 8 ADR must say so.
+2. **Only `permission_mode == "default"` counts as attended**, so under `acceptEdits` or `plan` a
+   human **cannot** approve a loosening. Conservative and unmeasured — those values were never
+   observed (ADR 0054 residual risk 2).
+3. **Comparison is coarser than ADR 0052 decision 3.** Python compares by AST with docstrings
+   stripped; shell compares as a **whole-file residue**, not per-function digests. Anything outside a
+   recognised list is direction-unknown and prompts. So "tightening passes silently" holds **only**
+   for entries in the lists tagged in `loosening_watch.py` — narrower than the spec claims.
+
+⚠️ **ADR 0052 decision 4 human review is now a live gate, with specifics.** The direction tables are
+hand-assigned in `loosening_watch.py`: `DOTFILE_PATTERNS`, `PROTECTED_BRANCHES` and `FORCE_FLAGS` as
+block lists; `READ_SUBCOMMANDS` as an allow list; plus two shell `case` lists and the `settings.json`
+registrations. **Only the last three were required by any assertion — the other four were added as
+"obvious" and nothing tests them.** A wrong tag makes a loosening silent.
+
+**Other open items:** `EXPECTED_RELAXED` as a record (task 6), registration (task 7), ADR (8),
+docs (9). The watcher is **still not in its own watch set**. No test yet for `state-id`, for
+`PostToolUse interrupted`, for the stale note, for pathspec commits or `-C`/`cd` resolution —
+`state-id` was deliberately left untested because writing it in the same step as the code would
+break the tests-and-implementation rule. ADR 0052's M8 unbalanced-quote case is caught only as far
+as `bash -n` reaches. **Also unmeasured and load-bearing: that a declined ask yields no
+`PostToolUse`.** The whole approval-record mechanism rests on it.
 
 ## The one-line problem
 

@@ -201,7 +201,24 @@ Usage:
                                                   # exit 3 = not approvable
   secret_approval.py fingerprint <command-text>   # the raw hash, checks skipped
   secret_approval.py grant <id> [--session <sid>] # record an approval
+  secret_approval.py state-id <guard> [--source index|worktree]
+                                                  # print the id of a guard's permission-list
+                                                  # STATE (see STATE IDS); exit 3 = unreadable
 Exit 0 on success, 2 on a malformed argument or an unwritable store.
+
+STATE IDS (guard-loosening approval, hooks/loosening-guard.sh)
+--------------------------------------------------------------
+A second kind of id, for a different question: not "was this COMMAND approved" but "was this exact
+STATE of a guard's files approved". state_id() digests each watched file's git MODE and the SHA-256 of
+its bytes, under the guard's name, and takes the first ID_LEN hex -- so it is a valid argument to
+grant()/approval_path() and lives in the same store. It deliberately bypasses canonical_text() and
+unapprovable_reason(): those are about shell command text, and `id` mode exits 3 on real file content
+("more than one segment joined by a separator"), while fingerprint() collides on text that differs
+only in trailing whitespace or a leading SECRET_EXEMPT= (both measured, task 3). Unlike a command
+approval it is NOT single-use: the watcher never calls consume() on it, because the thing a human
+approved is a state, and re-presenting that state is the same fact, not a replay (ADR 0054
+decision 1). A missing watched file is not "absent"; the caller must say so explicitly (None), and a
+file it could not read is an error here, never a silently shorter digest.
 """
 import hashlib
 import os
@@ -451,6 +468,87 @@ def is_approvable(command):
     return unapprovable_reason(command) is None
 
 
+STATE_ID_SCHEME = "loosening-state-v1"
+_GIT_MODE_RE = re.compile(r"^[0-7]{6}$")
+
+
+class StateUnreadable(Exception):
+    """A watched file's state could not be named, so no id may be built (fail closed)."""
+
+
+def state_id(guard, files):
+    """The id of a guard's permission-list state.
+
+    `files` maps every watched path the guard's key covers to (git mode, bytes), or to None for a path
+    that is KNOWN to be absent (deleted by the commit). A malformed entry raises StateUnreadable; a
+    path the caller simply could not read must not be passed at all, so it cannot pass for absent.
+    """
+    if not isinstance(guard, str) or not guard or "\n" in guard or "\0" in guard:
+        raise StateUnreadable("guard name is not usable")
+    if not files:
+        raise StateUnreadable("no watched files were supplied for %s" % guard)
+    digest = hashlib.sha256(("%s\0guard:%s\n" % (STATE_ID_SCHEME, guard)).encode("utf-8"))
+    for path in sorted(files):
+        if not isinstance(path, str) or not path or "\n" in path or "\0" in path:
+            raise StateUnreadable("watched path is not usable: %r" % (path,))
+        entry = files[path]
+        if entry is None:
+            digest.update(("%s\0ABSENT\n" % path).encode("utf-8"))
+            continue
+        try:
+            mode, data = entry
+        except (TypeError, ValueError):
+            raise StateUnreadable("%s: state is not (mode, bytes)" % path)
+        if not (isinstance(mode, str) and _GIT_MODE_RE.match(mode) and isinstance(data, bytes)):
+            raise StateUnreadable("%s: state is not (git mode, bytes)" % path)
+        digest.update(("%s\0%s\0%s\n" % (path, mode, hashlib.sha256(data).hexdigest())).encode("utf-8"))
+    return digest.hexdigest()[:ID_LEN]
+
+
+def read_guard_files(guard, source):
+    """{path: (mode, bytes)} for the guard's watched files, from the git index or the work tree of the
+    current directory. STRICT: a file missing from `source` is StateUnreadable, not absent. The watcher
+    itself does not use this reader (it already holds the bytes it extracted from); it exists so the
+    state id can be computed from outside, and is the door the task-3 probe asked for."""
+    import subprocess
+
+    import loosening_watch  # lazy: only this entry point needs the table, so a missing or broken
+    #                         loosening_watch.py can never break grant/consume/id (the hatch).
+
+    paths = loosening_watch.files_of(guard)
+    if not paths:
+        raise StateUnreadable("unknown guard %r" % guard)
+
+    def git(*args):
+        done = subprocess.run(("git",) + args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              env=dict(os.environ, GIT_OPTIONAL_LOCKS="0"))
+        if done.returncode != 0:
+            raise StateUnreadable("git %s failed: %s" % (args[0], done.stderr.decode("utf-8", "replace").strip()))
+        return done.stdout
+
+    top = git("rev-parse", "--show-toplevel").decode("utf-8").strip()
+    files = {}
+    for path in paths:
+        if source == "index":
+            row = git("ls-files", "-s", "-z", "--", path).decode("utf-8", "replace").strip("\0")
+            if not row:
+                raise StateUnreadable("%s is not in the index" % path)
+            meta = row.split("\t", 1)[0].split()
+            if meta[2] != "0":
+                raise StateUnreadable("%s is unmerged in the index" % path)
+            files[path] = (meta[0], git("cat-file", "blob", meta[1]))
+        else:
+            full = os.path.join(top, path)
+            try:
+                with open(full, "rb") as fh:
+                    data = fh.read()
+                mode = os.stat(full).st_mode
+            except OSError as exc:
+                raise StateUnreadable("%s: %s" % (path, exc))
+            files[path] = ("100755" if mode & 0o111 else "100644", data)
+    return files
+
+
 def approval_path(session, approval_id):
     return os.path.join(
         state_dir(), "secret-approval-%s-%s" % (safe_session(session), approval_id)
@@ -509,6 +607,21 @@ def main(argv):
         print(fingerprint(arg))
         return 0
 
+    if mode == "state-id":
+        source = "index"
+        if "--source" in argv:
+            i = argv.index("--source")
+            source = argv[i + 1] if i + 1 < len(argv) else ""
+        if source not in ("index", "worktree"):
+            print("--source must be 'index' or 'worktree'", file=sys.stderr)
+            return 2
+        try:
+            print(state_id(arg, read_guard_files(arg, source)))
+        except (StateUnreadable, ImportError, OSError) as exc:
+            print("secret_approval: cannot name the state of %r: %s" % (arg, exc), file=sys.stderr)
+            return 3
+        return 0
+
     if mode == "grant":
         try:
             path = grant(session, arg)
@@ -525,7 +638,7 @@ def main(argv):
         print(path)
         return 0
 
-    print("unknown mode %r (expected 'id', 'fingerprint' or 'grant')" % mode,
+    print("unknown mode %r (expected 'id', 'fingerprint', 'grant' or 'state-id')" % mode,
           file=sys.stderr)
     return 2
 
