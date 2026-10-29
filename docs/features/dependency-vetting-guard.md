@@ -1418,3 +1418,21 @@ Scenario: an update beside a pinned install still reaches the strongest decision
   This is not yet in Known gaps: adding it is a spec edit, raised with Mark. Before writing a
   follow-up card, separate the two suspects: run one bypass-mode dry run with Mark watching,
   then one with the orca hook disabled.
+- **2026-10-29, measured with Mark watching: in bypass mode, an `ask` shows a prompt, waits for
+  it, and a No stops the command.** The status line read "bypass permissions". The command was
+  `npm update --prefix <empty mktemp -d dir>`, which the live guard logged as `ask` each time.
+  The only thing it can change is that directory's empty `package-lock.json`, and that file's
+  modification time records when a run actually happened.
+
+  | Run | Guard logged `ask` | Mark | Ran? |
+  | --- | --- | --- | --- |
+  | 1 | 19:26:14Z | saw the prompt, approved | yes, done by 19:27:11Z |
+  | 2 | 19:37:34Z | missed the prompt; later says he pressed yes by accident | yes, lock file rewritten 19:46:06Z |
+  | 3 | (rejected before running) | refused | no: lock file unchanged after 19:46:06Z |
+
+  So bypass mode does not answer an `ask` by itself, and a prompt can sit unseen for minutes
+  (run 2: about 8½ min) until a key press approves it. This matches the two unexplained runs
+  above, but does not prove what answered *them*. The orca hook is ruled out by reading it: it
+  discards the Orca app's reply, prints nothing and always exits 0, so it cannot return a
+  decision. The suspects in `docs/features/permission-ask-answerer.md` were not tested: cmux's
+  hooks, a claude.ai remote-control link, and Mark answering without noticing.

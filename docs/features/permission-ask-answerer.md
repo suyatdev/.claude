@@ -17,7 +17,7 @@ parent card. Nothing is run until Mark types `gate confirmed` and sets aside ~30
 ## Why (moved from the yarn card, 2026-10-16)
 
 **Part B — two asks resolved with no recorded yes.** The parent card's Verification
-(`dependency-vetting-guard.md:1367-1392`) records two `ask` decisions in `bypassPermissions` mode
+(`dependency-vetting-guard.md:1395-1420`) records two `ask` decisions in `bypassPermissions` mode
 that went through without a yes from Mark on record, and names two untested suspects: bypass mode
 answering the ask itself, and `~/.orca/agent-hooks/claude-hook.sh` on `PermissionRequest`.
 A read-only survey on 2026-10-16 found evidence against both (below) and two suspects the card does
@@ -42,6 +42,11 @@ Part B (read-only):
   `--settings` (`:945-956`), so a throwaway `--settings` file still loads cmux's hooks inside cmux.
   This makes cmux's `PermissionRequest` hook an unlikely answerer of the 9 min 48 s ask, but the
   experiment still tests all cmux hooks together (run 3).
+- Added 2026-10-29: an informal supervised run recorded in the parent card
+  (`dependency-vetting-guard.md`, the entry after `:1420`) showed that in bypass mode an `ask`
+  shows a prompt, waits for it, and a No stops the command. Suspect 1 (bypass mode answering by
+  itself) did not happen in that session. cmux's hooks and the remote-control link were not
+  isolated, so this card's question about the two original asks is still open.
 - Versions when planned: Claude Code 2.1.301, cmux 0.64.22, Orca 1.4.146
   (`/Applications/Orca.app/Contents/Info.plist` `CFBundleShortVersionString`).
 
