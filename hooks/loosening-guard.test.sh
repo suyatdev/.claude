@@ -6,7 +6,7 @@
 #
 # Run:   bash hooks/loosening-guard.test.sh               real hook only (fast)
 #        bash hooks/loosening-guard.test.sh --matrix      real + 2 stubs + 1 no-op + 1 reference
-#                                                         double + 34 degraded controls, in parallel
+#                                                         double + 35 degraded controls, in parallel
 #        bash hooks/loosening-guard.test.sh --impl NAME   one implementation, full detail
 #
 # THE CONTRACT THIS SUITE PINS. The spec fixes behaviour, not the wire format; where it was silent
@@ -168,8 +168,9 @@ consumeuse:model:consume-on-use
 askfallback:model:ask-fallback
 absentblanket:model:absent-blanket
 fallbackclaims:model:fallback-claims-unattended
-agentblind:model:agent-blind'
-CONTROLS="gfile nomode two-outcome wholefile onemsg headbase askdeny parseopen mexit1 namekey pyopen orphanopen norecord sessblind storeopen mergeskip basefirst baseopen loosedetect asktight terse unattblanket storefirst firstguard dirty jsonopen mergeask chatty squashskip consumeuse askfallback absentblanket fallbackclaims agentblind"
+agentblind:model:agent-blind
+staleopen:model:stale-open'
+CONTROLS="gfile nomode two-outcome wholefile onemsg headbase askdeny parseopen mexit1 namekey pyopen orphanopen norecord sessblind storeopen mergeskip basefirst baseopen loosedetect asktight terse unattblanket storefirst firstguard dirty jsonopen mergeask chatty squashskip consumeuse askfallback absentblanket fallbackclaims agentblind staleopen"
 impl_path() { if [ "$1" = real ]; then printf '%s' "$REAL_HOOK"; else printf '%s' "$IMPL/$1/loosening-guard.sh"; fi; }
 make_impls() {
   local n k d
@@ -439,6 +440,17 @@ t_store() { new_case
   if [ "$1" = loosen ]; then ORACLE=loosening; sm wt_add_exempt; approve_flow; else ORACLE=tightening; sm git_rm_ledger; fi
   chmod 000 "$CASE/state"; run_hook "$CMD"; chmod 755 "$CASE/state"
   if [ "$1" = loosen ]; then ex_not_silent; else ex_silent tightening allow; fi; }
+t_stale_note() { # spec 7: a note left by a DECLINED ask must not become an approval; if it cannot be cleared, REFUSE
+  local notes; new_case; ORACLE=loosening; sm sec_rm_zprofile
+  run_hook "$CMD"; ex_ask loosening                      # the note is written by this real ask, never fabricated here
+  notes="$(ls -1 "$CASE/state" | /usr/bin/grep -c '^lg-pending-')"
+  [ "$notes" -eq 1 ] || fail_t "the declined ask left $notes pending notes in the store, want 1"
+  g reset -q || harness_fail "fixture reset failed"      # declined: nothing was committed; now a tightening, same text
+  ORACLE=tightening; sm git_rm_ledger
+  chmod 555 "$CASE/state"                                # readable but unwritable: os.remove on the note raises EACCES
+  if ( : > "$CASE/state/probe" ) 2>/dev/null; then chmod 755 "$CASE/state"; harness_fail "state dir is still writable after chmod 555"; return; fi
+  run_hook "$CMD"; chmod 755 "$CASE/state"               # restored on the next line; the suite's EXIT trap also chmods -R $TMP
+  ex_refuse; }
 t_orphan() { new_case; ORACLE=loosening; sm sec_rm_zprofile; mkdir -p "$CASE/orphan"; cp "$HOOK" "$CASE/orphan/loosening-guard.sh" 2>/dev/null
   HOOK_OVERRIDE="$CASE/orphan/loosening-guard.sh"; run_hook "$CMD"; ex_refuse; }
 t_badjson() { new_case; RAW_PAYLOAD='this is not json'; run_hook "$CMD"; ex_refuse; }
@@ -510,6 +522,7 @@ reg E8d "ADR0053 merge with origin/main missing: not silent" t_merge nomain
 reg E8e "ADR0053 squash merge has no MERGE_HEAD: ordinary path, ask" t_merge squash
 reg E9a "7 approval store unreadable + prior approval: bypass refused, not silent" t_store loosen
 reg E9b "7 approval store unreadable + tightening: judged on its merits, silent" t_store tighten
+reg E9c "7 declined ask left a note, same command now needs no ask, note cannot be cleared (store unwritable): refuse rc 2 -- an allow lets PostToolUse record approval for a refused loosening; an ask under bypass is silently allowed, so only exit 2 refuses" t_stale_note
 reg E10 "7 hook copied alone (libs missing): refuse rc 2, never fail open" t_orphan
 reg X1 "7 payload is not JSON: refuse rc 2 [extrapolated from 'any internal error']" t_badjson
 reg W01 "1 watch set: classify-secret-command.py changed -> not silent" t_watch sec_exit

@@ -61,6 +61,13 @@ if ev != "PreToolUse": done("skip", "unrelated")
 flat = re.sub(r'"[^"]*"|\'[^\']*\'', '""', cmd)
 m = re.search(r'(^|[;&|]\s*)git\s+commit\b([^;&|]*)', flat)
 if not m and DEG != "loose-detect": done("skip", "unrelated")
+# Spec 7: a note left by an earlier DECLINED ask for this exact command is dropped before judging; when it
+# cannot be dropped, the allow path would let PostToolUse turn it into an approval nobody gave, so REFUSE.
+stale = os.path.join(state, "lg-pending-%s-%s" % (sid, cid))
+if os.path.exists(stale):
+    try: os.remove(stale)
+    except OSError as exc:
+        if DEG != "stale-open": refuse("an earlier approval note for this command could not be cleared (%s)" % exc)
 use_wt = bool(re.search(r"\s-[A-Za-z]*a[A-Za-z]*\b|\s--all\b", m.group(2))) if m else False
 pm, agent = p.get("permission_mode"), bool(p.get("agent_id"))
 mode_says = pm is not None and pm != "default"

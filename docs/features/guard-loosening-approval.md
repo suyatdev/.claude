@@ -321,7 +321,20 @@ runs, `PostToolUse` fires, and the leftover note becomes approval records for a 
 refused. Narrow conjunction, documented in the source and logged rather than hidden — and still the
 wrong direction for this contract.
 
-**Fix to apply, test-first:** on the allow path, **refuse (exit 2) when a stale note cannot be
+**PINNED by `E9c`, committed RED (2026-10-29).** The suite now reads **78 passed / 1 failed of 79**,
+failure class `contract`, `[rc=0 want 2]`. Verified discriminating from the raw matrix row: the
+reference double **passes** it (so it is satisfiable, not malformed), the real hook fails it, a
+`staleopen` control — the bug reintroduced — fails **only** `E9c`, and both stubs and the
+never-inspects hook fail it. The fixture writes the pending note via a **real `ask` from the hook**,
+never fabricating it, and makes the store genuinely unwritable with a probe write that reports a
+harness error rather than passing quietly. Header comment corrected 34 → 35 controls.
+⚠️ Two adjacent spots the test deliberately does not pin, to avoid over-constraining the fix:
+`clear_pending` runs **before** `decide.evaluate`, so the same leftover note exists on the path where
+evaluation then refuses (harmless there); and on the **ask** path an uncleared stale note only
+appends text to the prompt — fine in an attended session, but it is the same "an ask is not a
+refusal" reasoning that produced this bug.
+
+**Fix to apply:** on the allow path, **refuse (exit 2) when a stale note cannot be
 cleared.** §7 already says any internal error in the checker refuses, so this applies the contract
 rather than extending it, and needs no new facts. **Rejected for now:** keying the note to
 `tool_use_id` — tidier, and it would make a declined note unmatchable by any later call, but it
