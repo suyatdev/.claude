@@ -1423,7 +1423,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       was red before (`Extra items in the left set: 'no_channel'` — task 7 had left it red) and
       green after; `pytest treko/test_server.py -q` → 90 passed. Falsifier: replacing the new
       test's `assert_reason` call with `pass` → `test_zz_…` fails, 1 failed / 89 passed.
-- [ ] 8. Red tests in `test_ui_commands.py` for D4/D5/D7, all callable directly off the grown node
+- [x] 8. Red tests in `test_ui_commands.py` for D4/D5/D7, all callable directly off the grown node
       bridge: `trackerLiveIds(hasToken, channelOk)` resolves to `[]` / `LOCAL_IDS` / `IDS` for all
       four combinations, including the fail-closed case — `channelOk=false` for every value other
       than the literal `'ok'`, which is the automated half of D4's anti-injection guarantee —
@@ -1459,6 +1459,16 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       reaching the rendered page without the raw meta attribute leaking elsewhere in the markup —
       is task 13's: that is a question about React's render output, not about the lookup, and
       stays outside the fence the same way `CMD_TONES` and `commandProps` itself do (D5).
+      Done 2026-10-29: 7 new tests + `no_channel` in `ROW_OUTCOMES`; the bridge gained a
+      `mode: 'probe'` path that guards every call, so each test fails on its own assertion rather
+      than one node `TypeError` failing all. Against today's fence: **8 failed, 14 passed** — the 7
+      new tests plus `test_zz_…` (`no response … produced: no_channel`); each failure read and
+      confirmed to be a missing export or the 503 resolving to `unexpected`, none a bridge crash.
+      `TRACKER_COMMAND_IDS` unchanged is already pinned by the existing
+      `test_the_handler_slice_is_fenced_exactly_once_and_loads_standalone`; not duplicated.
+      Gotcha: `trackerLiveIds` takes a boolean, so the strict `=== 'ok'` that makes every other
+      meta value fail closed lives in `commandProps`, outside the fence — node can only drive
+      `channelOk=false`. The string-level half is observable only in task 13's launches.
 - [ ] 9. Implement the fence additions (`trackerLiveIds`, `TRACKER_LOCAL_IDS`, `TRACKER_SEND_IDS`,
       `TRACKER_CHANNEL_REASONS`, `trackerChannelReason`, the grown `module.exports`),
       **`TRACKER_MESSAGES.no_channel` and `TRACKER_ERROR_OUTCOMES.no_channel`** (D5's "three
