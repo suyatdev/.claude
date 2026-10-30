@@ -70,7 +70,8 @@ BREAK_HOME="$(mktemp -d)" # stale-lock breaking UNDER concurrency
 UNIT_HOME="$(mktemp -d)"  # direct lock-helper calls, created here so the trap owns it
 JSON_HOME="$(mktemp -d)"  # legacy-state-format migration case
 WT_ROOT="$(mktemp -d)"    # real git repo + real linked worktree, for the wt:() cases
-trap 'rm -rf "$TMP" "$NONGIT" "$STATE_HOME" "$RACE_HOME" "$LOCK_HOME" "$JSON_HOME" "$BREAK_HOME" "$UNIT_HOME" "$WT_ROOT"' EXIT
+QUIET_HOME="$(mktemp -d)" # git-guard quiet flags, written by the real toggle hook
+trap 'rm -rf "$TMP" "$NONGIT" "$STATE_HOME" "$RACE_HOME" "$LOCK_HOME" "$JSON_HOME" "$BREAK_HOME" "$UNIT_HOME" "$WT_ROOT" "$QUIET_HOME"' EXIT
 
 BASE_PAYLOAD='{"workspace":{"current_dir":"/tmp"},"model":{"display_name":"Opus 4.8"},"context_window":{"total_input_tokens":100}}'
 BASE_OUT="$(render "$BASE_PAYLOAD")"
@@ -1064,6 +1065,110 @@ if [ "$tb_seen" = "green yellow orange red" ]; then
 else
   bad "bar ladder out of order under clamp (saw: $tb_seen)"
 fi
+
+# --- git-guard quiet indicator ------------------------------------------------
+# The segment must report the state git-guard will act on, so the flag is
+# written by the REAL toggle hook rather than planted by hand -- a hand-planted
+# file would pass against a script that looked in the wrong directory, as long
+# as the test made the same mistake. The hand-planted cases below are the
+# opposite: files git-guard would IGNORE, which the segment must ignore too.
+TOGGLE="$(cd "$(dirname "$0")" && pwd)/hooks/git-quiet-toggle.sh"
+QUIET_DIR="$QUIET_HOME/.claude/hooks/state/git-guard-quiet"
+C_DIM=$'\033[2m'
+QUIET_ON_TEXT="${C_YELLOW}git-guard: quiet"
+QUIET_OFF_TEXT="${C_DIM}git-guard: on"
+
+toggle() { # $1 phrase  $2 session_id
+  printf '{"prompt":"%s","session_id":"%s"}' "$1" "$2" | HOME="$QUIET_HOME" bash "$TOGGLE"
+}
+render_quiet() { # $1 payload
+  printf '%s' "$1" | HOME="$QUIET_HOME" bash "$SCRIPT"
+}
+quiet_payload() { # $1 session_id, as JSON string content
+  printf '{"cwd":"/tmp","session_id":"%s"}' "$1"
+}
+expect_quiet_state() { # $1 label  $2 "quiet"|"on"|"absent"  $3 rendered output
+  case "$2:$3" in
+    quiet:*"$QUIET_ON_TEXT"*) ok "$1" ;;
+    on:*"$QUIET_ON_TEXT"*) bad "$1 (rendered quiet): $3" ;;
+    on:*"$QUIET_OFF_TEXT"*) ok "$1" ;;
+    absent:*git-guard*) bad "$1 (segment present): $3" ;;
+    absent:*) ok "$1" ;;
+    *) bad "$1 (expected $2): $3" ;;
+  esac
+}
+
+toggle "git-guard quiet" "sess-q1" >/dev/null
+if [ -f "$QUIET_DIR/sess-q1" ]; then
+  ok "toggle hook wrote the quiet flag the indicator cases read"
+else
+  bad "toggle hook did not write $QUIET_DIR/sess-q1 -- every quiet case below is void"
+fi
+expect_quiet_state "quiet flag set -> 'git-guard: quiet'" quiet \
+  "$(render_quiet "$(quiet_payload sess-q1)")"
+expect_quiet_state "no flag for this session -> 'git-guard: on'" on \
+  "$(render_quiet "$(quiet_payload sess-other)")"
+
+toggle "git-guard on" "sess-q1" >/dev/null
+expect_quiet_state "flag removed by 'git-guard on' -> 'git-guard: on'" on \
+  "$(render_quiet "$(quiet_payload sess-q1)")"
+toggle "git-guard quiet" "sess-q1" >/dev/null # back on, for the near-miss cases
+
+expect_quiet_state "no session_id -> no git-guard segment" absent \
+  "$(render_quiet '{"cwd":"/tmp"}')"
+
+# Near-misses: each names a file git-guard would never consult (its session_id
+# must fullmatch [A-Za-z0-9-]{1,128}, then the flag must be a regular file).
+# Several are near-misses OF sess-q1, whose flag exists, so a script that
+# normalises the id before validating it -- strips the control byte, the
+# newline -- finds a real flag and renders "quiet" where git-guard asks.
+mkdir -p "$QUIET_DIR"
+: > "$QUIET_DIR/sess_q4"
+expect_quiet_state "underscore id git-guard rejects -> 'on' even with a flag" on \
+  "$(render_quiet "$(quiet_payload sess_q4)")"
+expect_quiet_state "control byte inside a flagged id -> 'on'" on \
+  "$(render_quiet "$(quiet_payload 'sess-\u001bq1')")"
+expect_quiet_state "trailing newline on a flagged id -> 'on'" on \
+  "$(render_quiet "$(quiet_payload 'sess-q1\n')")"
+: > "$QUIET_HOME/.claude/hooks/state/escape"
+expect_quiet_state "path-traversal id -> 'on'" on \
+  "$(render_quiet "$(quiet_payload '../escape')")"
+mkdir -p "$QUIET_DIR/sess-dir"
+expect_quiet_state "flag path is a directory -> 'on'" on \
+  "$(render_quiet "$(quiet_payload sess-dir)")"
+LONG_ID="$(printf 'a%.0s' $(seq 1 129))"
+: > "$QUIET_DIR/$LONG_ID"
+expect_quiet_state "129-character id -> 'on'" on \
+  "$(render_quiet "$(quiet_payload "$LONG_ID")")"
+
+# The segment's declared width must be its real width, or packing overflows.
+# Sweeping every narrow width finds an understatement wherever it bites,
+# rather than at the one width a hand-picked case happened to choose.
+#
+# The ceiling is max(cols, the twin's widest line): user@host is one segment
+# that is never split, so on a narrow terminal it overflows on its own -- with
+# or without this segment -- by an amount that depends on the machine. The
+# twin is the same payload with no session_id, so it has no quiet segment.
+QUIET_WRAP_PAYLOAD='{"workspace":{"current_dir":"/tmp"},"session_id":"sess-q1","model":{"display_name":"Opus 5 (1M context)"},"context_window":{"total_input_tokens":87000}}'
+QUIET_WRAP_TWIN='{"workspace":{"current_dir":"/tmp"},"model":{"display_name":"Opus 5 (1M context)"},"context_window":{"total_input_tokens":87000}}'
+quiet_overflow=""
+for cols in $(seq 20 90); do
+  OUT="$(printf '%s' "$QUIET_WRAP_PAYLOAD" | HOME="$QUIET_HOME" COLUMNS="$cols" bash "$SCRIPT")"
+  TWIN="$(printf '%s' "$QUIET_WRAP_TWIN" | HOME="$QUIET_HOME" COLUMNS="$cols" bash "$SCRIPT")"
+  W="$(widest_line "$OUT")"
+  ceiling="$(widest_line "$TWIN")"
+  [ "$ceiling" -lt "$cols" ] && ceiling="$cols"
+  [ "$W" -gt "$ceiling" ] && quiet_overflow="${quiet_overflow} ${cols}:${W}>${ceiling}"
+done
+case "$(printf '%s' "$QUIET_WRAP_PAYLOAD" | HOME="$QUIET_HOME" bash "$SCRIPT")" in
+  *"$QUIET_ON_TEXT"*)
+    if [ -z "$quiet_overflow" ]; then
+      ok "quiet segment never overflows COLUMNS across 20..90"
+    else
+      bad "quiet segment overflows COLUMNS at (cols:widest)$quiet_overflow"
+    fi ;;
+  *) bad "width sweep payload did not render the quiet segment -- sweep is void" ;;
+esac
 
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
