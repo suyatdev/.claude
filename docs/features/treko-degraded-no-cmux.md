@@ -1469,7 +1469,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       Gotcha: `trackerLiveIds` takes a boolean, so the strict `=== 'ok'` that makes every other
       meta value fail closed lives in `commandProps`, outside the fence — node can only drive
       `channelOk=false`. The string-level half is observable only in task 13's launches.
-- [ ] 9. Implement the fence additions (`trackerLiveIds`, `TRACKER_LOCAL_IDS`, `TRACKER_SEND_IDS`,
+- [x] 9. Implement the fence additions (`trackerLiveIds`, `TRACKER_LOCAL_IDS`, `TRACKER_SEND_IDS`,
       `TRACKER_CHANNEL_REASONS`, `trackerChannelReason`, the grown `module.exports`),
       **`TRACKER_MESSAGES.no_channel` and `TRACKER_ERROR_OUTCOMES.no_channel`** (D5's "three
       page-side additions" — the implement-list named only `CMD_TONES` of the three before round
@@ -1486,6 +1486,16 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       but never the template element that displays the result, so following it literally shipped
       every mechanism and no visible reason line — the exact gap D5's render-wire section now
       closes.*
+      Done 2026-10-29. `_serve_index`'s second meta had already landed in task 5 (`392aeea`), so
+      this task touched `Treko.dc.html` only. Fence now `:402-525`; file 783 lines (criterion 14).
+      `pytest treko/test_ui_commands.py -q` → 22 passed. The only new failures in the five browser
+      and guard modules, as a sorted set diff vs a detached worktree of `0439e3c`, are the three
+      task 1a predicted for D4 rows 1–3: the two criterion-15 digests and
+      `test_criterion16_cmdButtons_and_cmdCopies_map_the_same_three_ids` (tasks 9a/9b).
+      **Blocker found, not caused here:** every Chrome-driven module fails on its precondition at
+      both commits — `Chrome version mismatch: pinned 152.0.7977.65 … installed 156.0.8078.79`
+      (35 failures + 14 `test_nontext_contrast.py` errors). 9c, 12 and 13 cannot be verified until
+      the pin is resolved; the pin belongs to `treko-theme-and-layout.md`, not this card.
 - [ ] 9a. **Re-baseline `test_guards.py`'s fence digests, in a commit of its own, after task 9 is
       green.** Recompute `BASE_FENCE_BYTES` / `BASE_FENCE_SHA256` and
       `BASE_FENCE_NODE_BRIDGE_BYTES` / `BASE_FENCE_NODE_BRIDGE_SHA256` from the implemented
