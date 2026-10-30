@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
-branch: none
+branch: feat-statusline-quiet-indicator
 ---
 
 # Status line: git-guard quiet indicator
@@ -42,8 +42,12 @@ control byte or trailing newline inside a flagged id, path traversal, flag path 
 
 ## Tasks
 
-- [ ] Task 1 — failing tests in `statusline-command.test.sh` (written and run red: 124/134, 10 new cases fail)
-- [ ] Task 2 — segment in `statusline-command.sh`; full suite green
+- [x] Task 1 — failing tests in `statusline-command.test.sh` (written and run red: 124/134, 10 new cases fail)
+  - Committed with Task 2, not alone: test-marker-guard refuses a test version that has never passed.
+  - The width sweep first failed against correct code: user@host is one unsplittable segment, wider
+    than 20–28 columns on its own. Ceiling is now max(cols, the no-session twin's widest line).
+- [x] Task 2 — segment in `statusline-command.sh`; full suite green (134/134)
+  - Falsified: declaring width 1 fails the sweep; validating the stripped id fails 4 near-miss cases.
 - [ ] Task 3 — observability judge, then PR
 
 ## Verification

@@ -348,6 +348,20 @@ session_id="${session_id//[[:cntrl:]]/}"
 # session_id containing e.g. "../" could otherwise escape statusline-state/.
 session_id_safe=$(printf '%s' "$session_id" | tr -cd 'A-Za-z0-9_-')
 
+# --- git-guard quiet indicator --------------------------------------------
+# Mirrors git-guard's own test (hooks/git-guard.sh, quiet_allows): quiet only
+# when $HOME is set, the session_id fullmatches [A-Za-z0-9-]{1,128}, and the
+# flag is a regular file. The id is validated on the RAW payload value, not the
+# stripped ones above -- stripping turns an id git-guard rejects into one whose
+# flag may exist, and the segment would then claim a quiet git-guard ignores.
+QUIET_STATE_SUBPATH=".claude/hooks/state/git-guard-quiet"
+quiet_session_id=$(echo "$input" | jq -r '.session_id | select(type == "string" and test("\\A[A-Za-z0-9-]{1,128}\\z"))')
+is_git_guard_quiet=0
+if [ -n "${HOME:-}" ] && [ -n "$quiet_session_id" ] &&
+   [ -f "$HOME/$QUIET_STATE_SUBPATH/$quiet_session_id" ]; then
+  is_git_guard_quiet=1
+fi
+
 cu_input=$(echo "$input" | jq -r '.context_window.current_usage.input_tokens // empty')
 cu_input="${cu_input//[[:cntrl:]]/}"
 cu_output=$(echo "$input" | jq -r '.context_window.current_usage.output_tokens // empty')
@@ -762,6 +776,16 @@ if [ -n "$week_used_pct" ]; then
   fi
 fi
 
+# Shown in both states so "off" is visibly off rather than indistinguishable
+# from a missing segment; omitted only when there is no session to look up.
+if [ -n "$session_id" ]; then
+  if [ "$is_git_guard_quiet" -eq 1 ]; then
+    push_claude_segment "${YELLOW}git-guard: quiet${RESET}" 16
+  else
+    push_claude_segment "${DIM}git-guard: on${RESET}" 13
+  fi
+fi
+
 # --- Packing the segments onto lines ------------------------------------------
 # Segments are packed greedily up to the terminal width, and a break is only
 # ever taken AT a separator. That is what keeps a line from ending in the middle
@@ -791,7 +815,7 @@ WRAP_MIN_WIDTH=12
 # width from 24 to 52 cells overflowed by sharing the remainder onto the last
 # row. The count needs no cap because it is already bounded -- a segment starts a
 # new row only when it does not fit on the current one, so the row count can
-# never exceed the number of segments, which is at most eight.
+# never exceed the number of segments, which is at most nine.
 
 wrap_at=0
 case "${COLUMNS:-}" in
