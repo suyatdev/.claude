@@ -1405,7 +1405,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       2 failed on `assert 'wrong_reason' == 'no_channel'`. The second one is load-bearing: the
       no-guard run dies earlier at `RemoteDisconnected`, so without the mutation the
       `reason=no_channel` check would be proven only in the direction that passes.
-- [ ] 7a. **Repair `test_server.py`'s reason contract for `503 no_channel`** (D7, third sealed
+- [x] 7a. **Repair `test_server.py`'s reason contract for `503 no_channel`** (D7, third sealed
       door): add `"no_channel": 503` to `REASON_STATUS` (`test_server.py:56-73`), add `503` to
       `CONTRACT_STATUSES` (`:77`), and drive one real `no_channel` refusal **from inside
       `test_server.py`** so `OBSERVED_REASONS` (`:81`) records it and
@@ -1419,6 +1419,10 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       which means `test_zz_every_reason_value_was_driven_by_a_real_request` must gain an explicit,
       commented exemption for `no_channel` rather than being left quietly unsatisfiable. Do not
       discover this at the ceiling; check the delta before writing.
+      Done 2026-10-29: 778 → 789 lines, so the request stayed in `test_server.py`. The enum test
+      was red before (`Extra items in the left set: 'no_channel'` — task 7 had left it red) and
+      green after; `pytest treko/test_server.py -q` → 90 passed. Falsifier: replacing the new
+      test's `assert_reason` call with `pass` → `test_zz_…` fails, 1 failed / 89 passed.
 - [ ] 8. Red tests in `test_ui_commands.py` for D4/D5/D7, all callable directly off the grown node
       bridge: `trackerLiveIds(hasToken, channelOk)` resolves to `[]` / `LOCAL_IDS` / `IDS` for all
       four combinations, including the fail-closed case — `channelOk=false` for every value other
