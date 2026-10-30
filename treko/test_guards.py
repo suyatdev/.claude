@@ -12,34 +12,34 @@ and was wrong to say so. Checked directly: `git show a5a66a7:treko/Treko.dc.html
 lines 325 and 418 ARE the two fence marker comment lines. So the card's literal citation
 `:325-418` names the span *from the first byte of the START marker line through the last
 byte of the END marker line* — the two marker comments are IN the criterion's span, not
-outside it. Line numbers are still the wrong *locator* on this branch (tasks 2-4 shifted the
-fence to `:348-441`, checked with `grep -n` before writing this file) — this module still
+outside it. Line numbers are still the wrong *locator* on this branch (tasks 2-9 shifted the
+fence to `:402-525`, checked with `grep -n` on `git show 0bb61bc:treko/Treko.dc.html`) — this module still
 locates the region by the literal fence comments — `// <<< tracker-command-handler:
 node-loadable slice begins >>>` / `// <<< ... slice ends >>>` — never by line number. What
 changed is which *span*, once located, the guard is required to compare.
 
-**Three distinct spans were independently re-derived, byte-for-byte, against
-`git show a5a66a7:treko/Treko.dc.html` and the current working tree; all three reproduce
-identically at both points** — i.e. nothing inside any of them has drifted since the base
-commit:
+**Three distinct spans were re-derived, byte-for-byte, against
+`git show 0bb61bc:treko/Treko.dc.html` (the commit that landed card `treko-degraded-no-cmux`
+task 9, which grew the fence for D4/D5; the figures below pin that form, not the original
+`a5a66a7` one, whose figures were 4851 / 4728 / 4727 bytes):
 
 * **Marker-inclusive** — from the first byte of the START marker line through the last byte
   of the END marker line, including its trailing newline. This is what the criterion's
   `:325-418` names, and this guard's PRIMARY assertion (`extract_fence`, below):
-  **4851 bytes**, sha256 `f0a37389f08f31dfdf18a0a1676657919a01272746d5ab28dbd65a53dae7c136`.
+  **6692 bytes**, sha256 `bfe1764584375a37c2862bc4c114df0a5cfeb956eb84424c7a436b5a5ed52a05`.
 * **NODE_BRIDGE-style** — `html.slice(html.indexOf(START) + START.length, html.indexOf(END))`,
   a byte offset with no line awareness. This is the literal slice
   `test_ui_commands.py:68-87`'s `NODE_BRIDGE.loadHandler` writes to a temp `.js` and
   `require()`s — the span the running system actually depends on being loadable, not the span
   the criterion names. Kept here as a SECONDARY, explicitly-subsumed check
-  (`extract_fence_node_bridge`, below): **4728 bytes**, sha256
-  `1aa22b5f01d1d4a5e42d328496c08bc46fa260fe35c5b40cdb0a9d77cdb2139b`.
+  (`extract_fence_node_bridge`, below): **6569 bytes**, sha256
+  `4f1f1179e9f163b370128558e4a1cb8d8277535cbce2a36ce5e88a9651c687e1`.
 * **Line-based exclusive** — every full line strictly between the two marker lines, both
-  marker lines dropped, rejoined with `\n`. Recorded here for completeness only, because an
-  earlier draft of this file conflated it with the NODE_BRIDGE figure; it is one byte lower,
-  because the `\n` immediately after the START marker line survives `NODE_BRIDGE`'s
-  byte-offset slice but is stripped by a line-based cut: **4727 bytes**, sha256
-  `5409d62e91d402fa2085d2974d9343067fd38b2c6248db8f1f90fdf80b222d08`. No test below asserts
+  marker lines dropped, each line keeping its own trailing `\n`. Recorded here for
+  completeness only, because an earlier draft of this file conflated it with the NODE_BRIDGE
+  figure; it is one byte lower, because the `\n` immediately after the START marker line
+  survives `NODE_BRIDGE`'s byte-offset slice but is stripped by a line-based cut: **6568
+  bytes**, sha256 `3457323b0529c5c525ee3568c7805b28ac7e05afc089cb007816b02e654c2706`. No test below asserts
   against this figure — it is not a span anything in this repo actually consumes; it exists
   in this docstring solely so the next reader does not re-derive it and wonder why it is one
   byte off from the other two.
@@ -110,7 +110,7 @@ NOCTURNE_PATH = TREKO_DIR / "nocturne.css"
 VENDOR_DIR = TREKO_DIR / "vendor"
 INTER_CSS_PATH = VENDOR_DIR / "inter" / "inter.css"
 
-BASE_COMMIT = "a5a66a75204f334fff09462e931981431b39081a"
+BASE_COMMIT = "0bb61bccb08c4e0066e91c3c6d2d4af5b28fd2e0"
 
 sys.path.insert(0, str(TREKO_DIR))
 import server  # noqa: E402  (path shim above must run first, same pattern as test_server.py)
@@ -127,14 +127,14 @@ FENCE_END = b"// <<< tracker-command-handler: node-loadable slice ends >>>"
 # at the base commit those ARE the two marker lines). See the module docstring for the full
 # derivation and for the two other spans that were also re-derived and rejected as the
 # primary assertion.
-BASE_FENCE_BYTES = 4851
-BASE_FENCE_SHA256 = "f0a37389f08f31dfdf18a0a1676657919a01272746d5ab28dbd65a53dae7c136"
+BASE_FENCE_BYTES = 6692
+BASE_FENCE_SHA256 = "bfe1764584375a37c2862bc4c114df0a5cfeb956eb84424c7a436b5a5ed52a05"
 
 # SECONDARY, explicitly subsumed: the span `test_ui_commands.py`'s NODE_BRIDGE.loadHandler
 # actually require()s. Retained because it is the span the running system depends on being
 # loadable -- not retained as an alternative primary assertion.
-BASE_FENCE_NODE_BRIDGE_BYTES = 4728
-BASE_FENCE_NODE_BRIDGE_SHA256 = "1aa22b5f01d1d4a5e42d328496c08bc46fa260fe35c5b40cdb0a9d77cdb2139b"
+BASE_FENCE_NODE_BRIDGE_BYTES = 6569
+BASE_FENCE_NODE_BRIDGE_SHA256 = "4f1f1179e9f163b370128558e4a1cb8d8277535cbce2a36ce5e88a9651c687e1"
 
 
 def _locate_markers(html_bytes):
@@ -193,8 +193,8 @@ def _fence_measurements_node_bridge(html_bytes):
 def test_criterion15_fence_region_byte_identical_to_base_commit():
     """Criterion 15, PRIMARY assertion. Proves the marker-inclusive node-loadable slice in
     the working tree is byte-identical to its form at the base commit, located by fence
-    marker rather than by the card's `:325-418` (accurate only at the base commit; on this
-    branch the markers are at `:348-441`, per `grep -n` on this file).
+    marker rather than by the card's `:325-418` (accurate only at the original `a5a66a7`
+    commit; on this branch the markers are at `:402-525`, per `grep -n` on this file).
 
     Does NOT prove the slice is *correct* — see the module docstring.
     """
@@ -299,8 +299,21 @@ def test_criterion15_marker_text_mutation_is_reported_honestly():
 # ===========================================================================================
 
 COMMAND_IDS_RE = re.compile(r"var TRACKER_COMMAND_IDS=\[(.*?)\];")
-CMD_BUTTONS_RE = re.compile(r"cmdButtons:\(hasChannel&&view\.offersButton\)\?TRACKER_COMMAND_IDS\.map\(")
-CMD_COPIES_RE = re.compile(r"cmdCopies:showCopies\?TRACKER_COMMAND_IDS\.map\(")
+# `cmdButtons` no longer names TRACKER_COMMAND_IDS itself (D4): it maps `buttonIds`, which is
+# `liveIds`, which is `trackerLiveIds(...)`, whose channel-ok branch returns the whole array. So
+# the pin is the whole chain, in source order -- the function, the `liveIds` call, the
+# `buttonIds` binding, then the render site -- not the last link alone, which would stay green
+# if `trackerLiveIds` were pointed at some other list. `cmdCopies` is the complement of
+# `buttonIds` over TRACKER_COMMAND_IDS, so the pair still partitions the same three ids.
+CMD_BUTTONS_RE = re.compile(
+    r"function trackerLiveIds\(hasToken,channelOk\)\{\s*"
+    r"return !hasToken\?\[\]:\(channelOk\?TRACKER_COMMAND_IDS:TRACKER_LOCAL_IDS\);\s*\}"
+    r".*?const liveIds=trackerLiveIds\(hasToken,channelOk\);"
+    r".*?const buttonIds=view\.offersButton\?liveIds:\[\];"
+    r".*?cmdButtons:buttonIds\.map\(",
+    re.DOTALL)
+CMD_COPIES_RE = re.compile(
+    r"cmdCopies:TRACKER_COMMAND_IDS\.filter\(id=>buttonIds\.indexOf\(id\)<0\)\.map\(")
 
 EXPECTED_COMMAND_IDS = ["clear", "handoff", "reanalyze"]
 
@@ -327,11 +340,12 @@ def test_criterion16_command_ids_unchanged():
 
 
 def test_criterion16_cmdButtons_and_cmdCopies_map_the_same_three_ids():
-    """Criterion 16, second half. `cmdButtons` and `cmdCopies` both still `.map()` directly
-    over `TRACKER_COMMAND_IDS` (`Treko.dc.html:515` and `:519` on this branch) rather than a
-    second, independently-maintained list -- so once the first half confirms the array's
-    contents, both render sites are proven to render the same three rows they render today
-    without needing a live DOM render to check it.
+    """Criterion 16, second half. Both render sites (`Treko.dc.html:619` and `:623` on this
+    branch) still draw from `TRACKER_COMMAND_IDS` rather than a second, independently-
+    maintained list: `cmdCopies` maps it directly (filtered to the ids with no button), and
+    `cmdButtons` maps `buttonIds`, pinned back through `liveIds` and `trackerLiveIds` to the
+    array. Once the first half confirms the array's contents, the two sites are proven to
+    cover the same three ids without needing a live DOM render to check it.
 
     Does NOT prove the rendered pixels are unchanged (no style/markup byte comparison here);
     only that the two render sites still draw from the one pinned array.
@@ -373,6 +387,51 @@ def test_criterion16_falsifiers_are_caught(mutate, label):
     ids = extract_command_ids(mutated)
     assert ids != EXPECTED_COMMAND_IDS, (
         "falsifier %r was NOT caught -- got ids %r, the check cannot fail" % (label, ids))
+
+
+def _hardcode_the_button_list(text):
+    original = "cmdButtons:buttonIds.map("
+    mutated = "cmdButtons:['clear','handoff'].map("
+    assert text.count(original) == 1, "fixture literal not found or not unique"
+    return text.replace(original, mutated)
+
+
+def _repoint_buttonids_at_a_second_list(text):
+    original = "const buttonIds=view.offersButton?liveIds:[];"
+    mutated = "const buttonIds=view.offersButton?['clear']:[];"
+    assert text.count(original) == 1, "fixture literal not found or not unique"
+    return text.replace(original, mutated)
+
+
+def _live_ids_never_returns_the_full_array(text):
+    original = "(channelOk?TRACKER_COMMAND_IDS:TRACKER_LOCAL_IDS)"
+    mutated = "(channelOk?TRACKER_LOCAL_IDS:TRACKER_LOCAL_IDS)"
+    assert text.count(original) == 1, "fixture literal not found or not unique"
+    return text.replace(original, mutated)
+
+
+RENDER_SITE_FALSIFIERS = [
+    (_hardcode_the_button_list, "cmdButtons maps a hardcoded list instead of buttonIds"),
+    (_repoint_buttonids_at_a_second_list, "buttonIds repointed at a second list"),
+    (_live_ids_never_returns_the_full_array, "trackerLiveIds no longer returns TRACKER_COMMAND_IDS"),
+]
+
+
+@pytest.mark.parametrize("mutate,label", RENDER_SITE_FALSIFIERS,
+                         ids=[l for _, l in RENDER_SITE_FALSIFIERS])
+def test_criterion16_cmdButtons_render_site_falsifiers_are_caught(mutate, label):
+    """Oracle is `CMD_BUTTONS_RE`, not `extract_command_ids`: each mutation leaves the ids
+    array untouched, so `test_criterion16_falsifiers_are_caught` (which judges through the
+    array alone) cannot see any of them. Asserting the ids are unchanged below is what pins
+    that reason in place -- if it ever stops being true, this test belongs merged back."""
+    text = HTML_PATH.read_text()
+    assert CMD_BUTTONS_RE.search(text), "precondition: the unmutated page must match"
+    mutated = mutate(text)
+    assert mutated != text, "falsifier %r produced no change" % (label,)
+    assert extract_command_ids(mutated) == EXPECTED_COMMAND_IDS, (
+        "falsifier %r changed the ids array -- it no longer isolates the render site" % (label,))
+    assert not CMD_BUTTONS_RE.search(mutated), (
+        "falsifier %r was NOT caught -- the cmdButtons check cannot fail" % (label,))
 
 
 # ===========================================================================================

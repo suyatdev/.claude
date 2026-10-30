@@ -1496,7 +1496,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       both commits — `Chrome version mismatch: pinned 152.0.7977.65 … installed 156.0.8078.79`
       (35 failures + 14 `test_nontext_contrast.py` errors). 9c, 12 and 13 cannot be verified until
       the pin is resolved; the pin belongs to `treko-theme-and-layout.md`, not this card.
-- [ ] 9a. **Re-baseline `test_guards.py`'s fence digests, in a commit of its own, after task 9 is
+- [x] 9a. **Re-baseline `test_guards.py`'s fence digests, in a commit of its own, after task 9 is
       green.** Recompute `BASE_FENCE_BYTES` / `BASE_FENCE_SHA256` and
       `BASE_FENCE_NODE_BRIDGE_BYTES` / `BASE_FENCE_NODE_BRIDGE_SHA256` from the implemented
       `Treko.dc.html`, and move `BASE_COMMIT` to the commit that landed task 9.
@@ -1525,7 +1525,14 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `test_criterion15_marker_text_mutation_is_reported_honestly` still fail on a mutated fence
       afterwards — a re-baseline that also disarms the falsifiers has replaced a guard with a
       constant. Record the old and new digest pairs in the commit message.
-- [ ] 9b. **Re-pin `test_guards.py`'s criterion-16 render-site regexes** (`CMD_BUTTONS_RE` at
+      Done 2026-10-29 with 9b, one commit. Pins derived with the file's own extractors from
+      `git show 0bb61bc:treko/Treko.dc.html`: fence 4851/`f0a37389…` → 6692/`bfe17645…`; node
+      bridge 4728/`1aa22b5f…` → 6569/`4f1f1179…` (re-derived independently in the main session,
+      matched). Falsifiers still fire. Finding: the old third figure (4727/`5409d62e…`) reproduces
+      only when each line keeps its trailing `\n`, not "rejoined with `\n`" (that gives 4726); the
+      docstring now says so. Left stale, outside both whitelists: `test_guards.py:126-129`'s
+      "`:325-418` at the base commit" comment and `extract_command_ids`' `:356` citation (now `:410`).
+- [x] 9b. **Re-pin `test_guards.py`'s criterion-16 render-site regexes** (`CMD_BUTTONS_RE` at
       `test_guards.py:302`, `CMD_COPIES_RE` at `:303` — note `:301` is `COMMAND_IDS_RE`, which this
       task must **not** touch) to D4's rewritten `commandProps` text, in the
       same commit as task 9a and under the same discipline. Then add a **new** falsifier test with a
@@ -1542,6 +1549,14 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       pressure, an implementer would reach for a text-search substitute (grep the template for
       `<sc-if value="{{ cmdReason }}">`) that proves nothing about whether the node is actually
       *emitted* — the whole point of the check. Moved to task 9c, which already has the fixtures.
+      Done 2026-10-29. `CMD_BUTTONS_RE` now pins the whole chain back to `TRACKER_COMMAND_IDS`
+      (`trackerLiveIds` body → `liveIds` → `buttonIds` → `cmdButtons:buttonIds.map(`), since the
+      render site no longer names the array; `CMD_COPIES_RE` pins the complement filter. New
+      `test_criterion16_cmdButtons_render_site_falsifiers_are_caught`: three mutations (hardcoded
+      list at `cmdButtons`, `buttonIds` repointed, `trackerLiveIds` returning local on both
+      branches) each caught by `CMD_BUTTONS_RE` and missed by `extract_command_ids`. A fourth,
+      `cmdButtons:TRACKER_LOCAL_IDS.map(`, was checked in the main session: caught.
+      `pytest treko/test_guards.py -q` → 28 passed.
 - [ ] 9c. **Header-child-count assertion, in `test_drawer.py`** (it already imports `cdp_harness`
       and drives `srv`/Chrome — `test_criterion12_the_gear_opens_the_drawer` at `:264` is the
       pattern to follow). Render the healthy/idle path and assert the command cluster has its
