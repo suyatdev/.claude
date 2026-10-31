@@ -16,6 +16,9 @@ conditions still exit 2 and still refuse a connection. Those tests are red until
 variant; the criterion-9 five are the exception and pass today, because they lock behaviour
 this card must *not* change.
 
+Task 14 (criterion 17) lives at the bottom: the two lifetime clauses `test_server_lifetime.py`
+asserts for a healthy server -- parent death and idle shutdown -- re-run against a degraded one.
+
 **The import is `channel`, not `treko.channel`.** `treko/` holds no `__init__.py`, so every
 sibling test in this directory imports flat off the `sys.path` shim below (`import server`,
 `from store_location import ...`). D6 makes `channel.py` a sibling of `server.py`, so `channel`
@@ -41,9 +44,12 @@ incidental of how `StartupAbort` was constructed.
 
 import enum
 import errno
+import json
 import os
 import re
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -59,7 +65,12 @@ from channel import (  # noqa: E402
 )
 # Reuse, not duplicate (rules/core-conduct.md DRY): criterion 9 says `assert_aborted` is
 # unchanged and still used for all of them, which a second copy here would stop being true.
-from test_server_lifetime import assert_aborted  # noqa: E402
+from test_server_lifetime import (  # noqa: E402
+    ORPHAN_PARENT,
+    SHUTDOWN_SLACK_SECS,
+    assert_aborted,
+)
+import server_harness as harness  # noqa: E402
 
 
 # Transcribed from D1's yaml block: the closed set, in the order the design lists it.
@@ -524,3 +535,82 @@ def test_an_unknown_command_id_is_still_403_before_the_channel_guard_runs(launch
 
     assert response.status == 403
     assert response.json() == {"ok": False, "error": "forbidden"}
+
+
+# ==========================================================================
+# Task 14 / criterion 17 — a degraded server is still bounded in lifetime
+# ==========================================================================
+
+# Criterion 17 exists because a server with no surface has no cmux client keeping it
+# honest, so the two watchdog clauses (`server.py` `watchdog`) are all that stops it
+# outliving its session. Nothing in this card changes `watchdog`, so these are expected to
+# pass on first run: they are regression guards on the degraded path, not a red step. Each
+# asserts the degraded banner too, so neither can pass against a healthy launch by accident.
+LIFETIME_DEGRADED_KWARGS = {"surface": ""}
+LIFETIME_REASON = "surface_unset"
+ORPHAN_POLL_SECS = 1
+ORPHAN_LINGER_SECS = 3  # long enough for the server to come up before its parent exits
+LIFETIME_TEST_TIMEOUT_SECS = 30
+IDLE_EXIT_MARGIN_SECS = 30  # on top of the 60s floor, same margin the healthy test uses
+
+
+def test_a_degraded_server_exits_when_its_parent_does(tmp_path, tree):
+    """Criterion 17, parent-death clause: bound is `poll_secs + 1 + SHUTDOWN_SLACK_SECS`.
+
+    Mirrors `test_server_lifetime.test_the_server_exits_when_its_parent_does` with only the
+    surface blanked. A real parent exit, not a mocked `getppid()`, for the same reason.
+    """
+    port = harness.free_port()
+    stderr_path = tmp_path / "orphan-degraded-stderr.log"
+    pidfile = tmp_path / "server.pid"
+    cmux_bin = harness.install_fake_cmux(tmp_path)
+    env = harness.server_env(tmp_path, tree, cmux_bin, tmp_path / "cmux-calls.jsonl",
+                             surface="",
+                             overrides={"TREKO_PORT": str(port),
+                                        "TREKO_POLL_SECS": str(ORPHAN_POLL_SECS)})
+    config = {
+        "argv": [sys.executable, str(tree / "server.py"), "--repo", str(harness.REPO_ROOT)],
+        "env": env, "cwd": str(tmp_path), "stderr": str(stderr_path),
+        "pidfile": str(pidfile), "linger": ORPHAN_LINGER_SECS,
+    }
+
+    started = time.monotonic()
+    subprocess.run([sys.executable, "-c", ORPHAN_PARENT, json.dumps(config)],
+                   check=True, timeout=LIFETIME_TEST_TIMEOUT_SECS)
+    parent_gone = time.monotonic()
+    assert parent_gone - started >= config["linger"]
+    served = stderr_path.read_text()
+    assert served, "server produced no stderr while its parent lived"
+    assert DEGRADED_BANNER % LIFETIME_REASON in served, \
+        "the server was not degraded, so this proves nothing about the degraded path:\n%s" % served
+
+    bound = ORPHAN_POLL_SECS + 1 + SHUTDOWN_SLACK_SECS
+    assert harness.port_free(port, bound), \
+        "port still held %.1fs after the parent exited:\n%s" % (
+            time.monotonic() - parent_gone, stderr_path.read_text())
+    assert "parent session ended; exiting" in stderr_path.read_text()
+
+    pid = int(pidfile.read_text())
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
+def test_an_idle_degraded_server_exits(launcher):
+    """Criterion 17, idle clause: the 60s floor applies to a server with no surface.
+
+    Mirrors `test_server_lifetime.test_an_idle_server_exits_and_its_audit_reaches_the_
+    parents_stderr`. The floor is never lowered (`TREKO_IDLE_SECS=1` is raised to it), so
+    this costs about a minute, which is the control and not an inefficiency.
+    """
+    floor = server.IDLE_SECS[1]
+    srv = launcher(overrides={"TREKO_IDLE_SECS": "1", "TREKO_POLL_SECS": "1"},
+                   **LIFETIME_DEGRADED_KWARGS)
+
+    assert DEGRADED_BANNER % LIFETIME_REASON in srv.stderr, \
+        "the server was not degraded, so this proves nothing about the degraded path:\n%s" % srv.stderr
+    assert "TREKO_IDLE_SECS=1 raised to the %ds minimum" % floor in srv.stderr
+
+    code = srv.wait_for_exit(timeout=floor + IDLE_EXIT_MARGIN_SECS)
+    assert code is not None, "still running %ds after going idle" % (floor + IDLE_EXIT_MARGIN_SECS)
+    assert "idle for %ds; exiting" % floor in srv.stderr
+    assert harness.refuses_connection(srv.port)

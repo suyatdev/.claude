@@ -1621,7 +1621,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       condition D5 and criterion 7 name explicitly (`hasToken && !channelOk`) — no reason text
       renders beside them. This third launch is what keeps criterion 7's `file://` clause and the
       "a file:// launch shows no reason text" Gherkin scenario from being unverified promises.
-- [ ] 14. Red test in `test_degraded.py` for criterion 17: a server launched with no surface still
+- [x] 14. Red test in `test_degraded.py` for criterion 17: a server launched with no surface still
       exits within `poll_secs` of its parent dying, and still exits after `idle_secs` of
       inactivity — the same two assertions `test_server_lifetime.py` already makes for a healthy
       server (`:157`, `:195`), run again against a degraded one. Never `nohup`/`setsid`/`&` the
