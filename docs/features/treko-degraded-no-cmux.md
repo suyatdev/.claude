@@ -1566,13 +1566,22 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       derived. This is what catches a later edit silently deleting D5's `sc-if` gate (round 12's
       finding) — without it the suite stays green and the layout regression this card spent two
       rounds finding and fixing comes back invisibly, undetected by anything else in the suite.
-- [ ] 10. **ADR 0038** — re-verify free against `origin/main` at the moment of writing, and
+- [x] 10. **ADR 0038** — re-verify free against `origin/main` at the moment of writing, and
       against every `refs/heads/*` and `refs/remotes/*`, each ref queried separately. Do NOT
       trust the number recorded here: it was 0036 at planning time and 0036/0037 have since
       been taken. A duplicate ADR number merges cleanly and is never reported.
-- [ ] 11. `skills/treko/SKILL.md`: split the table exactly as **criterion 15** specifies — which
+      Done 2026-10-30 as **ADR 0055**: highest number on every local and remote ref, each queried
+      separately after `git fetch`, was 0054 (this branch's own tree stops at 0037). Written by a
+      Sonnet pane helper; citations spot-checked in the main session (`server.py:613-621`,
+      `:713-719`, `:729`, `Treko.dc.html:610`).
+- [x] 11. `skills/treko/SKILL.md`: split the table exactly as **criterion 15** specifies — which
       rows move and which are added is stated there and only there — and document that the board is
       always served.
+      Done 2026-10-30: new "When it starts degraded" section before "When it refuses to start";
+      two rows moved, `probe_timeout` and `cmux_unrunnable` added, message text taken from
+      `channel.py`. `pytest treko/test_autolaunch.py -q` → 10 passed in the main session (the helper
+      saw 2 git-repo-outside failures in its pane; not reproduced here or at a clean HEAD — likely
+      its scratch dir sitting inside the `~/.claude` repo, unconfirmed).
 - [ ] 12. Post-change suite: node-ID set diff vs task 1 with the three renamed nodes accounted for
       by name — `test_an_unset_surface_id_aborts_before_serving`,
       `test_a_failing_read_screen_probe_aborts_before_serving` and
