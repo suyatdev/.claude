@@ -145,9 +145,11 @@ since `03e17ae`. Task 5 fixes both rows.
 
 ## Acceptance criteria
 
-1. `PINNED_VERSION` is `"156.0.8078.79"` at `cdp_harness.py:70`. The comment at `:49-69` keeps both
-   existing paragraphs unchanged and gains a third, dated 2026-10-31. On Path A that is the only
-   change under `treko/` (`git diff --stat origin/main -- treko/` names one file).
+1. `PINNED_VERSION` is `"156.0.8078.79"` at `cdp_harness.py:70`. The comment at `:49-69` keeps all
+   three existing paragraphs unchanged (the undated `:49-51` lead-in and the two dated re-pin
+   notes) and gains a new dated paragraph. On Path A that is the only change under `treko/`
+   (`git diff --stat dddd183 -- treko/` names one file; `dddd183` is this branch's base, which
+   unlike `origin/main` does not move).
 2. On `156.0.8078.79`, with the version unchanged across the run, the five browser files report
    **64 passed, 0 failed, 0 errors**. A `COLUMNS=400` short-summary grep for
    `Chrome version mismatch\|devtools endpoint` reads 0; the same recipe read 49 at the old pin.
@@ -155,10 +157,15 @@ since `03e17ae`. Task 5 fixes both rows.
    `c1c4d1d9…539e`, step 3's value.
 4. Task 4 shows the suite can fail on 156: at the old pin, on each single-value perturbation, and on
    card D's planted faults 3, 5, 9 and 12. For each, caught/total and the catching test are
-   recorded.
+   recorded. **Pass rule:** every case in task 4 is caught by the test task 4 names for it, except
+   the DEBT ±0.0004 case, which must pass; at the old pin, construction fails with
+   `Chrome version mismatch` and no Chrome process starts. A case caught only by some *other* test
+   does not meet this criterion. A miss is handled as task 4 says, never recorded and passed over.
 5. The two live pin rows name `156.0.8078.79` and point at `cdp_harness.PINNED_VERSION` rather than
    a line number. Every historical mention is untouched, and
-   `git grep -n 'cdp_harness.py:60' -- ':!*.jsonl'` is empty.
+   `git grep -n 'cdp_harness.py:60' -- ':!*.jsonl' ':!docs/features/treko-chrome-156-repin.md'`
+   is empty. (This card quotes the string itself, so without the second exclusion the grep can
+   never come back empty.)
 6. An observability-judge verdict is recorded before the PR.
 
 ## Tasks
@@ -173,7 +180,7 @@ with the approved plan's step numbers 6-11.
       were failing at construction; every recorded figure was re-measured on this build, as card
       D's §"Pinned versions" requires; all 104 stored values and the 3 comment figures reproduced
       exactly, with byte-identical walks; approved by the user 2026-10-31; detail in this card.
-      Keep both existing paragraphs verbatim. Tick this task in the same commit, because doc-guard
+      Keep all three existing paragraphs verbatim. Tick this task in the same commit, because doc-guard
       wants `docs/` staged alongside a source change. Verify, from `treko/`:
       ```
       "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --version   # before
@@ -196,24 +203,41 @@ with the approved plan's step numbers 6-11.
 - [ ] 4 — **Prove the suite can fail (plan step 9).** Scratch only, no tracked edits.
       - a. Move the pin back to `152.0.7977.65` in-process. Chrome must not start, and
         `pgrep -fl "Google Chrome.*remote-debugging"` must find nothing.
-      - b. On one captured walk, call each `tnc` test body with one value changed:
-        - each scored total ±1, and each exclusion count ±1;
-        - one entry's mark count ±1, where the `:786` delta table must name the entry;
-        - one colour string altered;
-        - each DEBT ratio ±0.0006, which must fail, and ±0.0004, which must pass;
-        - one PIN floor set just above its measured minimum. The lowest is `--color-accent` in
-          light at 4.6292.
+      - b. On one captured walk, call each `tnc` test body with one value changed. The expected
+        catcher is named after each arrow (all in `test_nontext_contrast.py`):
+        - each scored total ±1 → `test_scored_mark_count_is_exact` (`:432`);
+        - each exclusion count ±1 → `test_enumerated_exclusions_are_at_their_recorded_counts`
+          (`:474`);
+        - one entry's mark count ±1, where the `:786` delta table must name the entry →
+          `test_every_entry_sits_at_its_recorded_mark_count` (`:881`);
+        - one colour string altered → `test_every_scored_key_maps_to_exactly_one_entry` (`:836`);
+        - each DEBT ratio ±0.0006 → `test_debt_tokens_sit_at_their_recorded_ratio` (`:1017`)
+          fails; ±0.0004 → the same test passes;
+        - one PIN floor set just above its measured minimum → `test_pin_tokens_clear_their_floor`
+          (`:979`). The lowest is `--color-accent` in light at 4.6292.
       - c. In a private tree copy, re-run card D's planted faults 3, 5, 9 and 12 (card D `:1070`,
         `:1072`, `:1076`, `:1079`). First confirm each one targets an element the 156 walk
-        actually counts; card D `:1085-1091` shows what happens otherwise.
-      Record caught/total and the catching test for each.
+        actually counts; card D `:1085-1091` shows what happens otherwise. Expected catchers,
+        from card D's "what actually fired" column: 3 → `test_debt_tokens_sit_at_their_recorded_ratio`
+        (dark); 5 → `test_every_entry_sits_at_its_recorded_mark_count` (`--hair`, both themes);
+        9 → `test_no_colour_parse_failures` (`:453`); 12 →
+        `test_enumerated_exclusions_are_at_their_recorded_counts` (the over-background-image
+        count, both themes).
+      Record caught/total and the catching test for each. **On a miss:** first check whether the
+      fault touched an element outside the 156 walk's population (card D case 5's first
+      attempt). If it did, re-point it at a counted element and re-run, recording both attempts.
+      If a correctly targeted fault is still not caught by its named test, **stop and ask the
+      user**: that means a check is blind on 156, which is outside a re-pin's scope to fix.
 - [ ] 5 — **Old-card bookkeeping (plan step 10). Docs only.** Change card A `:800` and card D
       `:867` to `156.0.8078.79`. Cite `cdp_harness.PINNED_VERSION` instead of a line number, and
       add a dated pointer to this card. Leave the historical mentions alone: ADR 0037 `:15` and
       `:130`; card A `:803` and `:1841`; card D `:114`, `:721` and `:1028`;
-      `treko-card-d-followups.md:64`. Verify: `git grep -n 'cdp_harness.py:60' -- ':!*.jsonl'` is
-      empty. The exclusion is required: `coding-memory/compliance-judge/verdicts.jsonl` quotes that
-      citation in 7 historical rows, a judge ledger is append-only, and without the exclusion the
+      `treko-card-d-followups.md:64`. Verify:
+      `git grep -n 'cdp_harness.py:60' -- ':!*.jsonl' ':!docs/features/treko-chrome-156-repin.md'`
+      is empty. Excluding this card is required because it quotes the string itself. The `*.jsonl`
+      exclusion is required too: `coding-memory/compliance-judge/verdicts.jsonl` quotes that
+      citation in several historical rows, and the count grows whenever a new verdict quotes it
+      (count it with `git grep -c`, don't trust a figure here). A judge ledger is append-only, and without the exclusion the
       grep can never come back empty.
 - [ ] 6 — **Full suite twice, then the judge, the PR, and review (plan step 11).** From `treko/`,
       run twice, bracketing each run with `--version`:
@@ -489,4 +513,6 @@ not task 1's receipt.
   80-column truncation. Getting 49 needs `COLUMNS=400` or the traceback lines, so tasks 1 and 6 use
   the wide form.
 - `git grep 'cdp_harness.py:60'` can never come back empty, because the compliance-judge ledger
-  quotes it in 7 rows. Task 5 excludes `*.jsonl`.
+  quotes it in 7 rows (counted at `a5b32e2`; the round-1 compliance verdict added another). Task 5
+  excludes `*.jsonl`, and, after that verdict found this card quoting the string four times
+  itself, excludes this card too.
