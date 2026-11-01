@@ -1,5 +1,5 @@
 ---
-phase: planning
+phase: implementation
 model_tier: low
 branch: chore/treko-chrome-156-repin
 ---
