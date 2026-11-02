@@ -67,7 +67,15 @@ CHROME_BINARY = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 # card's §"Pinned versions" requires: every one of those figures was re-measured on this build
 # rather than carried over, and the card records what reproduced and what did not. Approved by the
 # user 2026-08-26 in preference to downgrading Chrome.
-PINNED_VERSION = "152.0.7977.65"
+#
+# Re-pinned a third time 2026-10-31 from `152.0.7977.65`, after Chrome auto-updated to
+# `156.0.8078.79`; 49 browser tests (35 failed, 14 errored) failed at construction. Moved the way the
+# paragraph above requires: every stored figure was re-measured on this build, and all 104 values in
+# `test_nontext_contrast.py` plus the 3 figures quoted in `test_theme.py`'s comments reproduced
+# exactly, with byte-identical page walks, so nothing was re-recorded. Approved by the user
+# 2026-10-31; the old build is gone from disk, so there was nothing to downgrade to. Detail:
+# `docs/features/treko-chrome-156-repin.md`.
+PINNED_VERSION = "156.0.8078.79"
 
 DEVTOOLS_TIMEOUT_SECS = 10
 NAV_TIMEOUT_SECS = 20
