@@ -433,7 +433,7 @@ channel read is the same shape, and skip actually adding it.
 **The page-side split, and the one rule that generalises it.** `commandProps`
 (`Treko.dc.html:566-585`) is rewritten around three values instead of one — but the
 value-*selection* does not live in `commandProps`. It moves **inside** the node-loadable fence
-(`:399-492`), as a new pure function, so it gets a real automated check rather than a promise:
+(`:399-492` at `2a0c459`; `:402-525` after task 9), as a new pure function, so it gets a real automated check rather than a promise:
 
 ```js
 // inside the fence, beside TRACKER_COMMAND_IDS -- pure, no S, no document, no window
@@ -549,7 +549,7 @@ TRACKER_ERROR_OUTCOMES.no_channel = 'no_channel'      // keyed by the server's e
 CMD_TONES.no_channel = 'var(--warn)'                  // presentation, outside the slice
 ```
 
-plus, **inside the marker-fenced region** (`:399-492`, beside `trackerLiveIds` — D4), the four-row
+plus, **inside the marker-fenced region** (`:399-492` at `2a0c459`; `:402-525` after task 9, beside `trackerLiveIds` — D4), the four-row
 map from the meta's enum token to the standing explanation shown beside the copy chips, and the
 pure function that selects from it:
 
@@ -633,7 +633,7 @@ cmdReasonC: 'var(--warn)',
 `cmdReasonC` is a fixed tone, not a lookup: D5 has exactly one reason state (degraded), not a
 palette per token, so there is nothing for a second constants table to select between.
 `CMD_TONES.no_channel` (§"Three page-side additions", above) lives at `Treko.dc.html:500` —
-**outside** the fence (`:399-492`), same as `cmdReasonC` — and the two are independent constants
+**outside** the fence (`:399-492`), same as `cmdReasonC` (after task 9: `CMD_TONES` at `:533-537`, `no_channel` at `:537`, fence `:402-525`) — and the two are independent constants
 for different things: `CMD_TONES` keys the *command-status* color (`cmdMsgC`) by outcome,
 `cmdReasonC` is a single fixed color for the reason line, never keyed at all.
 
@@ -1593,13 +1593,45 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `channel.py`. `pytest treko/test_autolaunch.py -q` → 10 passed in the main session (the helper
       saw 2 git-repo-outside failures in its pane; not reproduced here or at a clean HEAD — likely
       its scratch dir sitting inside the `~/.claude` repo, unconfirmed).
-- [ ] 12. Post-change suite: node-ID set diff vs task 1 with the three renamed nodes accounted for
+- [x] 12. Post-change suite: node-ID set diff vs task 1 with the three renamed nodes accounted for
       by name — `test_an_unset_surface_id_aborts_before_serving`,
       `test_a_failing_read_screen_probe_aborts_before_serving` and
       `test_a_hanging_read_screen_probe_aborts_before_serving`, each an old name paired with its
       new one (criterion 13); per-module counts; `wc -l` for criterion 14 — including `Treko.dc.html`, which is
       what re-captures the fence's grown byte range (D4); if its own end marker has moved from
       `:492`, this document's citations to it must be corrected in the same pass.
+      Done 2026-11-02 at `3e31cea` (this branch merged with origin/main for the Chrome 156 pin),
+      measured by a Sonnet helper and re-derived in the main session.
+      **Suite:** `TREKO_CHROME_DENY_BIRD=1 python3 -m pytest -q` -> `360 passed in 225.49s`, exit 0,
+      0 failed/errored/skipped; Chrome `156.0.8078.79` before and after.
+      **Baseline re-derived:** task 1's recipe reproduces `310` / `c1c4d1d9…` only when the extract
+      includes `hooks/lib` (`git archive 6adf470 treko hooks/lib`): `test_analyze.py` imports
+      `feature_tasks` from there, and without it collection errors and `grep '::'` silently drops its
+      26 nodes (284 lines, a different digest). Post set: 360 nodes, sha256 `19d5bf54…`.
+      **Set diff:** 4 lost, 54 gained (310 - 4 + 54 = 360). Every lost node is paired by name:
+      the three named above were **deleted, not renamed** (`e30f37e`, task 5), because their
+      successors already existed as rows of task 4's parametrised
+      `test_degraded.py::test_a_degraded_launch_serves_and_names_its_own_reason` (`0728e12`):
+      `test_an_unset_surface_id_aborts_before_serving` -> `[surface_unset]`,
+      `test_a_failing_read_screen_probe_aborts_before_serving` -> `[probe_failed]`,
+      `test_a_hanging_read_screen_probe_aborts_before_serving` -> `[probe_timeout]` (same launcher
+      arguments, inverted outcome). A fourth lost node, not named by criterion 13, is a rename in
+      place: `test_autolaunch.py::test_without_a_cmux_surface_the_server_still_refuses` ->
+      `..._still_launches_degraded` (`e30f37e`). No lost node lacks a successor.
+      **Per module (base -> post):** `test_degraded.py` 0->40, `test_ui_commands.py` 15->22,
+      `test_guards.py` 25->28 (`eb58399`), `test_drawer.py` 9->11 (`da68dfd`), `test_server.py`
+      89->90 (`d072f9d`), `test_server_lifetime.py` 10->7; the other ten modules unchanged.
+      **Criterion 14 (`wc -l`):** `server.py` 795, `test_server.py` 789, `Treko.dc.html` 783,
+      `test_degraded.py` 616, `test_guards.py` 599, `test_ui_commands.py` 468,
+      `test_server_lifetime.py` 250, `channel.py` 95 — all under 800.
+      **Fence:** the end marker moved, `:399-492` -> `:402-525` (both markers found once each by
+      the strings `test_ui_commands.py:65-66` slices on; only `0bb61bc`, task 9, moved them). The
+      three present-tense citations of the fence (D4's "moves **inside** the node-loadable fence",
+      D5's "inside the marker-fenced region", and D5's `CMD_TONES.no_channel` paragraph) now carry
+      both spans, with no line added or removed. Citations that name their own commit or task are
+      left as written: D4's "as of `2a0c459`" measurement and its re-derive note, task 9's and
+      9a's close notes, and task 1a's D4 row. The card's other `Treko.dc.html:N` line citations
+      are from the `2a0c459` layout and were not re-derived (out of this task's scope).
 - [x] 13. Launch for real **three times**. For the two that go through `server.py`, never with
       `nohup`/`setsid`/`&` (any of the three detaches the server from the parent whose death its
       watchdog is watching for via `getppid()`). Once outside cmux (`env -u CMUX_SURFACE_ID
