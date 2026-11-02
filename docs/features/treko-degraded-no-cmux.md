@@ -1698,6 +1698,16 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       measured mutation run; a status line at the top of this card.
       Gotcha: a full run with `TMPDIR` inside a git repo fails 2 `test_autolaunch.py` nodes
       (environmental; same as the task 11 note). Run with `TMPDIR` outside any repo.
+      Round 2 (2026-11-02, head `8134c4e`): risk low, confidence high, no dimension failed, 360
+      passed in one run; round 1's must-fix confirmed fixed. Draft PR **#126** opened against it.
+      Left before `gh pr ready 126`, all text-only: (a) the ADR 0055 / §Risks mutation sentence
+      must say the "served a corrupt legacy store" run also made the handler tolerate an abort with
+      no `.reason` (without that the server crashes, exit 1, and all nine criterion-9 cases stay
+      green); (b) `test_degraded.py:39` cites `server.py:214-233` for strings that live in
+      `channel.py`, and `:454` cites `server.py:707-708` for a call the judge places at `:725-726`,
+      both stale before `d35ff38` shifted them (verify before editing); (c) a README Roadmap line
+      for #126; (d) tick this task. Follow-ups for main, in the PR body: `assert_aborted` checks
+      `code != 0`, not `== 2`; `test_server.py:452` and `:330-331` can print environment data.
 
 ## Risks
 
