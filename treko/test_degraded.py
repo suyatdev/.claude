@@ -509,7 +509,10 @@ def test_the_refusal_spawns_no_cmux_subprocess_at_all(launcher, command_id):
 
     srv.command(command_id)
 
-    assert srv.cmux_calls() == []
+    # Only argv[0] (the cmux verb) is compared: each logged call also carries the child's full
+    # environment, and a bare `assert srv.cmux_calls() == []` would print it on failure.
+    verbs = [call["argv"][0] if call["argv"] else "" for call in srv.cmux_calls()]
+    assert verbs == []
 
 
 def test_reanalyze_still_succeeds_on_a_degraded_server(launcher):
