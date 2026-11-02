@@ -39,8 +39,6 @@ from channel import (  # noqa: E402  (D6: the cmux control channel and its close
     CHANNEL_OK,
     CMUX_BIN,
     CMUX_TIMEOUT_SECS,
-    SURFACE_ENV,
-    Reason,
     SurfaceUnavailable,
     bind_surface,
 )
