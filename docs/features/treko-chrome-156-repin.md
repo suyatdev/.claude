@@ -174,7 +174,7 @@ The planning-phase steps are done, and their results are §Verification: the wor
 the baseline, and the 156 measurement. The tasks below are the implementation phase, labelled
 with the approved plan's step numbers 6-11.
 
-- [ ] 1 — **Pin commit (plan step 6).** Change `cdp_harness.py:70` to
+- [x] 1 — **Pin commit (plan step 6).** Change `cdp_harness.py:70` to
       `PINNED_VERSION = "156.0.8078.79"`. Add a third paragraph, dated 2026-10-31, to the comment at
       `:49-69`. It should say: re-pinned from `152.0.7977.65` after an auto-update; 49 browser tests
       were failing at construction; every recorded figure was re-measured on this build, as card
