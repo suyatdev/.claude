@@ -1557,7 +1557,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       branches) each caught by `CMD_BUTTONS_RE` and missed by `extract_command_ids`. A fourth,
       `cmdButtons:TRACKER_LOCAL_IDS.map(`, was checked in the main session: caught.
       `pytest treko/test_guards.py -q` → 28 passed.
-- [ ] 9c. **Header-child-count assertion, in `test_drawer.py`** (it already imports `cdp_harness`
+- [x] 9c. **Header-child-count assertion, in `test_drawer.py`** (it already imports `cdp_harness`
       and drives `srv`/Chrome — `test_criterion12_the_gear_opens_the_drawer` at `:264` is the
       pattern to follow). Render the healthy/idle path and assert the command cluster has its
       known child count; render a degraded path and assert it has exactly **one more**. Verified
@@ -1566,6 +1566,17 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       derived. This is what catches a later edit silently deleting D5's `sc-if` gate (round 12's
       finding) — without it the suite stays green and the layout regression this card spent two
       rounds finding and fixing comes back invisibly, undetected by anything else in the suite.
+      Done 2026-11-01. Two tests: `test_task9c_the_healthy_header_has_eight_children` (`srv`)
+      and `test_task9c_a_degraded_header_has_exactly_one_more_child` (`launcher(surface="")`,
+      i.e. `surface_unset`; the other three degraded reasons share the gate but were not run).
+      The cluster is located as the gear's parent, gear match count asserted == 1. Observed
+      8 healthy, 9 degraded. Falsifiers: reason div made unconditional -> healthy test fails
+      (9 != 8); `sc-if` block deleted -> degraded test fails (8 != 9), the second reproduced in
+      the main session. **Run under an in-memory pin patch** (`PINNED_VERSION` set to
+      `156.0.8078.79` by a scratch wrapper, nothing on disk changed): the machine's Chrome is
+      156 and `cdp_harness.py:70` pins 152 until `chore/treko-chrome-156-repin` merges. A child
+      count is not a contrast read, so the build difference does not touch what it measures.
+      Under that patch `treko/test_drawer.py` -> 11 passed.
 - [x] 10. **ADR 0038** — re-verify free against `origin/main` at the moment of writing, and
       against every `refs/heads/*` and `refs/remotes/*`, each ref queried separately. Do NOT
       trust the number recorded here: it was 0036 at planning time and 0036/0037 have since

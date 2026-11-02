@@ -593,3 +593,81 @@ def test_criterion14_id_check_is_falsifiable():
     assert len(ids) == 8, "an added id was not counted: %r" % ids
     assert [i for i in ids if not i.startswith("sec-")] == ["settings-panel"], (
         "a non-`sec-` id was not reported: %r" % ids)
+
+
+# ===========================================================================================
+# Task 9c / D5 — the command cluster's child count (the layout regression guard)
+# ===========================================================================================
+
+# Counted against the real template, not "whatever it is today": the sticky header opens at
+# `Treko.dc.html:102` and the gear is its last child at `:122`. Healthy: four fixed children
+# (title block, search wrapper, Agent button, `cmdMsg` div), the three `cmdButtons` buttons,
+# no `cmdCopies` chips, and the gear -- 8. Degraded: the same three commands split into one
+# button plus two copy chips (still three children; `CMD_COPIES_RE` in `test_guards.py` pins
+# that complement split), plus the one child D5's `<sc-if value="{{ cmdReason }}">` (`:113`)
+# renders only when `hasToken && !channelOk` -- 9.
+HEALTHY_HEADER_CHILDREN = 8
+DEGRADED_HEADER_CHILDREN = HEALTHY_HEADER_CHILDREN + 1
+
+# The cluster has no id (criterion 14) and the page exposes no component handle, so it is
+# located by the one thing nothing else shares: it is the parent of the gear, whose `title`
+# is already this file's only stable handle. `parentCount` is the probe's own control -- the
+# gear must match exactly once, or `parentElement` would be a first-match read.
+_PROBE_HEADER_CHILDREN_JS = """
+(() => {
+  const gears = document.querySelectorAll('[title=%s]');
+  if (gears.length !== 1) return {count: gears.length};
+  const header = gears[0].parentElement;
+  return {count: 1, children: header.children.length,
+          sticky: getComputedStyle(header).position === 'sticky',
+          hasH1: header.querySelectorAll('h1').length,
+          tags: Array.prototype.map.call(header.children, c => c.tagName)};
+})()
+""" % json.dumps(GEAR_TITLE)
+
+
+def _header_children(chrome, port):
+    """Render the page served on `port` and return the command cluster's probe reading."""
+    chrome.navigate("http://127.0.0.1:%d/" % port)
+    _wait_for_mount(chrome)
+    probe = chrome.evaluate(_PROBE_HEADER_CHILDREN_JS)
+    assert probe["count"] == 1, (
+        "expected exactly one element with title=%r (the gear), found %d -- its parent is "
+        "the command cluster only if the match is unique" % (GEAR_TITLE, probe["count"]))
+    # The parent must actually be the header, not some wrapper the gear moved into.
+    assert probe["sticky"] and probe["hasH1"] == 1, (
+        "the gear's parent is not the sticky header (sticky=%r, h1 count=%r): %r"
+        % (probe["sticky"], probe["hasH1"], probe))
+    return probe
+
+
+def test_task9c_the_healthy_header_has_eight_children(srv, tmp_path):
+    """Task 9c, healthy half: on a server whose control channel is live, `cmdReason` is `''`,
+    D5's `sc-if` renders nothing, and the command cluster has exactly 8 children."""
+    chrome = cdp_harness.Chrome(str(tmp_path / "chrome-profile"))
+    try:
+        probe = _header_children(chrome, srv.port)
+        assert probe["children"] == HEALTHY_HEADER_CHILDREN, (
+            "healthy header has %d children, expected %d: %r"
+            % (probe["children"], HEALTHY_HEADER_CHILDREN, probe["tags"]))
+    finally:
+        chrome.close()
+
+
+def test_task9c_a_degraded_header_has_exactly_one_more_child(launcher, tmp_path):
+    """Task 9c / D5: a degraded server (no control channel, here `surface=""` ->
+    `surface_unset`, the mechanism `test_degraded.py` already uses) has `hasToken &&
+    !channelOk`, so the reason line renders and the cluster has 9 children -- exactly one
+    more than the healthy 8. This is what catches a later edit silently deleting D5's
+    `sc-if` gate: without it the suite stays green and the layout regression returns
+    unseen."""
+    degraded = launcher(surface="")
+    chrome = cdp_harness.Chrome(str(tmp_path / "chrome-profile"))
+    try:
+        probe = _header_children(chrome, degraded.port)
+        assert probe["children"] == DEGRADED_HEADER_CHILDREN, (
+            "degraded header has %d children, expected %d (healthy %d + the reason line): %r"
+            % (probe["children"], DEGRADED_HEADER_CHILDREN, HEALTHY_HEADER_CHILDREN,
+               probe["tags"]))
+    finally:
+        chrome.close()
