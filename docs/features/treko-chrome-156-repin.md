@@ -554,6 +554,23 @@ that by design (see §Inventory). (b) A colour change that collides with another
 each fault ran once. (f) The 4b figures are the helper's, checked by me only against the last line of
 its `summary.txt` (`180 of 180 met`), not re-run.
 
+### Task 6, first half: the full suite on 156, twice (2026-11-01, HEAD `64b2f27`)
+
+From `treko/`, with `TREKO_CHROME_DENY_BIRD=1 COLUMNS=400 python3 -B -m pytest -q`, output redirected
+to a file and the tally line read from it. `--version` read `Google Chrome 156.0.8078.79` before run
+1, between the runs and after run 2, so each run is bracketed by two equal readings.
+
+| run | tally | node-ID set (`--collect-only -q`, `::` lines, sorted, `shasum -a 256`) |
+|---|---|---|
+| 1 | `310 passed in 153.37s` | `c1c4d1d945b66c9f74d9bb56d781930dcaad0761a3854c228c48410c947d539e` |
+| 2 | `310 passed in 152.79s` | `c1c4d1d945b66c9f74d9bb56d781930dcaad0761a3854c228c48410c947d539e` |
+
+Both hashes equal step 3's expected value, so the suite is the same 310 nodes it was at `dddd183`.
+**Criterion 1:** `git diff --stat dddd183 -- treko/` names one file, `treko/cdp_harness.py`
+(9 insertions, 1 deletion). **Criterion 2** was measured at task 1 (64 passed, grep 0). **Criterion
+5:** `git grep -n 'cdp_harness.py:60' -- ':!*.jsonl' ':!docs/features/treko-chrome-156-repin.md'`
+prints nothing. Criterion 6 (the judge verdict) and the PR are still open.
+
 ### Corrections made while verifying the plan's inventory
 
 - `treko-card-d-followups.md` says not to reopen card D's branch at `:36`, not `:39`. Its "Why a
