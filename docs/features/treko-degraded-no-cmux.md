@@ -6,7 +6,7 @@ branch: feat/treko-degraded-no-cmux
 
 # Treko: serve a degraded, no-control-channel board instead of refusing to start
 
-Planned 2026-08-23 on `main` @ `984e7ac`, after PR #68 (card `treko-store-location`) merged. The
+**Status as of 2026-11-02 (supersedes the planning-era notes that follow, which are kept as history):** phase `review`, branch `feat/treko-degraded-no-cmux`, tasks 1-14 done, task 15 (judge + PR) in progress; the ADR landed as **0055**, not the 0038 named below, and the "no branch" / `phase: planning` / checkpoint-2 statements below are no longer true. Planned 2026-08-23 on `main` @ `984e7ac`, after PR #68 (card `treko-store-location`) merged. The
 work was **deferred from card 1** and the deferral is recorded in the tree itself: the test that
 pins today's refusal says in its own docstring that §Deferred proposes changing it.
 
@@ -1688,14 +1688,31 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       server (`:157`, `:195`), run again against a degraded one. Never `nohup`/`setsid`/`&` the
       server under test, for the same reason as task 13.
 - [ ] 15. Observability judge, then the PR.
+      Round 1 (2026-11-02, Opus 5.5 xhigh, head `ec7bd26`): risk medium, confidence high, no
+      dimension failed. Fixed after it, with the user's OK: the `test_degraded.py` no-subprocess
+      assertion could print the full child environment on failure (`69e2139`); two imports D6
+      left unused in `server.py` (`d35ff38`, which shifted every later `server.py` line up by 2:
+      the ADR's and `test_degraded.py`'s citations were shifted to match and checked to land on
+      identical text; this card's own `server.py:N` citations are layout snapshots and were not
+      shifted); the "fatal stays fatal" explanation in ADR 0055 and §Risks, re-worded from a
+      measured mutation run; a status line at the top of this card.
+      Gotcha: a full run with `TMPDIR` inside a git repo fails 2 `test_autolaunch.py` nodes
+      (environmental; same as the task 11 note). Run with `TMPDIR` outside any repo.
 
 ## Risks
 
-- **The narrow `except` widens by accident.** The whole "fatal stays fatal" property is one
-  `except SurfaceUnavailable` around one call. Catching `StartupAbort` there instead — a one-word
-  slip that reads fine — silently converts the port, manifest, index and store-dir aborts into
-  degraded launches, and every one of them would then serve a broken page instead of saying why.
+- **The narrow `try` widens by accident.** The whole "fatal stays fatal" property is one
+  `except SurfaceUnavailable` around one call, and it is the *one call* that holds it: the `try`
+  wraps only `bind_surface()`, whose own raises are all `SurfaceUnavailable`, so changing the
+  handler to `except StartupAbort` alone changes nothing (measured 2026-11-02 by mutation in a
+  scratch copy: no test red). The real slip is widening the `try` over the other startup checks.
+  Measured: that alone crashed every degraded launch (13 tests red); widened *and* catching
+  `StartupAbort`, it also served a corrupt legacy store instead of refusing it, caught by one of
+  criterion 9's nine cases. The other eight stayed green under that mutation, and why was not
+  measured, so the degraded-launch tests are as much a part of the guard as criterion 9.
   Criterion 9's nine cases are the guard, and they must be seen failing before D2 is written.
+  (Not recorded at task 4, whose commits say they pass by design; the 2026-11-02 mutation above
+  is the first recorded evidence that one of them can fail.)
 - **A hidden button mistaken for a control.** The page-side split (D4) is the visible half and the
   easy half. If the server-side guard (D3) is skipped, forgotten, or placed *after*
   `confirm_surface`, every page-level test still passes. Criterion 5's "no subprocess was invoked"

@@ -30,9 +30,9 @@ control channel**: it binds a port and serves in a state it used to refuse. That
 **1. A startup abort becomes a served, degraded page.** `bind_surface` (now in
 `treko/channel.py:63`) raises `SurfaceUnavailable`, a subclass of `StartupAbort`
 (`treko/channel.py:50`), carrying a `Reason`. `main()` catches only that subclass around only that
-call (`treko/server.py:713-719`), writes the original message and a second
+call (`treko/server.py:711-717`), writes the original message and a second
 `degraded -- no control channel (<reason>)` line to stderr, and continues with `surface = None`.
-Every other `StartupAbort` still reaches the handler at `treko/server.py:729` and exits `2`.
+Every other `StartupAbort` still reaches the handler at `treko/server.py:727` and exits `2`.
 
 **2. All four conditions degrade, not just the unset case.** `surface_unset`, `probe_timeout`,
 `probe_failed` and `cmux_unrunnable` (`treko/channel.py:31`). From the user's seat each means
@@ -43,9 +43,9 @@ three; the fourth (`OSError` from running the binary) is the same class of condi
 included — if the user meant three, that is the line to correct.
 
 **3. `clear` and `handoff` are refused by the server with `503 no_channel`.** The guard is the
-first statement of `_run_send` (`treko/server.py:613-621`), keyed off `config["surface"] is None`
+first statement of `_run_send` (`treko/server.py:611-619`), keyed off `config["surface"] is None`
 and placed before `confirm_surface`, so a degraded server spawns no `cmux` subprocess. It goes
-through `_fail` (`treko/server.py:396`), so the body is `{"ok": false, "error": "no_channel"}` and
+through `_fail` (`treko/server.py:394`), so the body is `{"ok": false, "error": "no_channel"}` and
 echoes no request content. `reanalyze` is a local command and stays live under the same token.
 A hidden button is not an authorization control — the token is in the DOM and `POST /command` is
 reachable by anything that can read the page — so the refusal lives on the server, not only in the
@@ -54,7 +54,7 @@ rendering.
 **4. `503`, because every other candidate says something false.** `403` collapses with
 `bad_token`, which the page answers with "reload", and reloading cannot help. `409` tells the user
 their session ended when none ever existed. `501` is excluded by the existing status table
-(`treko/server.py:373-374`). `502` means "tried and could not confirm"; nothing was tried. `503`
+(`treko/server.py:371-372`). `502` means "tried and could not confirm"; nothing was tried. `503`
 was unused and means what happened: the capability is absent from this server for its lifetime.
 
 **5. No surface is ever deduced.** When `bind_surface` cannot prove the inherited UUID is a
@@ -64,7 +64,7 @@ once reached a different live Claude session at exit 0, and the fix was to delet
 Degraded mode serves with no surface rather than a plausible one.
 
 **6. The page learns the state from a closed-enum meta.** `_serve_index` injects a second
-`<meta name="tracker-channel">` beside the token (`treko/server.py:467-471`), whose content is
+`<meta name="tracker-channel">` beside the token (`treko/server.py:465-469`), whose content is
 `CHANNEL_OK` (`treko/channel.py:47`) or a `Reason` member's `.value` — one of five fixed strings.
 The page treats `channelOk` as a strict `=== 'ok'` (`treko/Treko.dc.html:610`) and maps the
 reason through a `hasOwnProperty`-guarded table with a fixed fallback (`:464-466`), rendering
@@ -91,18 +91,22 @@ so `.value` is required at every boundary rather than correct by accident.
 
 - **Added trust-boundary fact:** the page now receives one new server-generated value, and it is
   one of five fixed tokens. Auth, CSP, host and origin checks, the manifest, the audit format, the
-  allowlist (`treko/server.py:70-79`) and the watchdog (`treko/server.py:660`) are unchanged: a
+  allowlist (`treko/server.py:68-77`) and the watchdog (`treko/server.py:658`) are unchanged: a
   narrower server, not a looser one. No route, manifest row or verb is added.
 - **Fatal stays fatal** — bad or busy port, unmapped extension, unreadable index, store directory
-  that is a file, corrupt legacy store. The property rests on one `except SurfaceUnavailable`;
-  widening it to `StartupAbort` would silently turn all of those into served broken pages, so the
-  card pins nine cases as the guard.
+  that is a file, corrupt legacy store. The property rests on the inner `try` covering exactly one
+  call, `bind_surface()`, whose own raises are all `SurfaceUnavailable` (`treko/channel.py`) — not
+  on the handler's type. Measured 2026-11-02 in scratch copies: changing the handler to
+  `except StartupAbort` turned no test red; widening the `try` over the other startup checks
+  crashed every degraded launch (13 tests red); widening it *and* catching `StartupAbort` also
+  served a corrupt legacy store instead of refusing it, which one of the card's nine criterion-9
+  cases caught. Those nine cases and the degraded-launch tests together are the guard.
 - **Risk — server guard skipped:** if the `503` guard were removed or moved after
   `confirm_surface`, every page-level test would still pass; only the "no subprocess was invoked"
   assertion can tell. Tests: `treko/test_degraded.py`.
 - **Cost:** the 5-second probe now precedes a working board instead of an exit. Not a defect.
 - **Operator visibility:** a degraded launch is announced on stderr twice and in the banner
-  (`surface=none reason=…`, `treko/server.py:777-784`); the healthy banner is byte-identical to
+  (`surface=none reason=…`, `treko/server.py:775-782`); the healthy banner is byte-identical to
   before.
 - **Reversal cost:** adding a fifth reason is a spec change; re-introducing inference is
   prohibited by this record, not merely discouraged.
