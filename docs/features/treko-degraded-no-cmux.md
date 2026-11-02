@@ -1600,7 +1600,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       new one (criterion 13); per-module counts; `wc -l` for criterion 14 — including `Treko.dc.html`, which is
       what re-captures the fence's grown byte range (D4); if its own end marker has moved from
       `:492`, this document's citations to it must be corrected in the same pass.
-- [ ] 13. Launch for real **three times**. For the two that go through `server.py`, never with
+- [x] 13. Launch for real **three times**. For the two that go through `server.py`, never with
       `nohup`/`setsid`/`&` (any of the three detaches the server from the parent whose death its
       watchdog is watching for via `getppid()`). Once outside cmux (`env -u CMUX_SURFACE_ID
       python3 treko/server.py --open`): confirm the board renders, the reason line matches the
@@ -1632,6 +1632,24 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       condition D5 and criterion 7 name explicitly (`hasToken && !channelOk`) — no reason text
       renders beside them. This third launch is what keeps criterion 7's `file://` clause and the
       "a file:// launch shows no reason text" Gherkin scenario from being unverified promises.
+      Done 2026-11-01, all three PASS, run by a Sonnet helper and spot-checked against its server
+      logs in the main session. Measured in headless Chrome via `cdp_harness` under an in-memory
+      pin patch (`PINNED_VERSION` = `156.0.8078.79`; see 9c); servers started with the Bash tool's
+      background mode, no `nohup`/`setsid`/`&`, and stopped by PID afterwards. (1) Degraded,
+      `env -u CMUX_SURFACE_ID ... --open`: stderr `degraded -- no control channel (surface_unset)`,
+      reason line = `TRACKER_CHANNEL_REASONS.surface_unset` (`Treko.dc.html:459`), only Re-analyze
+      is a button; Re-analyze -> `/command` 200 + page reload, server log `accepted id=reanalyze`
+      x2; chips request `/clear` and `/handoff` (observed by wrapping `navigator.clipboard.writeText`,
+      which proves the page asked to copy, not that the OS clipboard changed); `surface_unset`
+      occurs 0 times in `#dc-root` innerHTML, before and after the reload, and 2 times in the
+      served bytes (head meta + reasons key), the control that the check can see it. (2) Live
+      surface: banner has no `reason=` (the 43 `reason=` lines in that log are per-request access
+      lines, 42 `reason=-` and one 404); Clear, Handoff, Re-analyze all live; no chip, no reason
+      text; meta `ok` and component state `cmdChannel === 'ok'`, read from the React instance
+      under `#dc-root`. No command button was clicked. (3) `file://`: no `tracker-token` or
+      `tracker-channel` meta, `hasToken` false, `cmdChannel` null, all three commands are chips,
+      none of the five reason strings in `#dc-root`. Not observed: what the real-browser `--open`
+      tabs showed. Side effect: Re-analyze rewrote the survey in `~/.local/state/treko`.
 - [x] 14. Red test in `test_degraded.py` for criterion 17: a server launched with no surface still
       exits within `poll_secs` of its parent dying, and still exits after `idle_secs` of
       inactivity — the same two assertions `test_server_lifetime.py` already makes for a healthy
