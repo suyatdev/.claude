@@ -1,6 +1,6 @@
 ---
-phase: implementation
-model_tier: low
+phase: review
+model_tier: high
 branch: feat/treko-degraded-no-cmux
 ---
 
