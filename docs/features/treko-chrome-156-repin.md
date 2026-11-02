@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: chore/treko-chrome-156-repin
 ---
@@ -239,7 +239,7 @@ with the approved plan's step numbers 6-11.
       citation in several historical rows, and the count grows whenever a new verdict quotes it
       (count it with `git grep -c`, don't trust a figure here). A judge ledger is append-only, and without the exclusion the
       grep can never come back empty.
-- [ ] 6 — **Full suite twice, then the judge, the PR, and review (plan step 11).** From `treko/`,
+- [x] 6 — **Full suite twice, then the judge, the PR, and review (plan step 11).** From `treko/`,
       run twice, bracketing each run with `--version`:
       - `TREKO_CHROME_DENY_BIRD=1 COLUMNS=400 python3 -m pytest -q` must report `310 passed`;
       - `python3 -m pytest --collect-only -q | grep '::' | sort | shasum -a 256` must give
@@ -569,7 +569,13 @@ Both hashes equal step 3's expected value, so the suite is the same 310 nodes it
 **Criterion 1:** `git diff --stat dddd183 -- treko/` names one file, `treko/cdp_harness.py`
 (9 insertions, 1 deletion). **Criterion 2** was measured at task 1 (64 passed, grep 0). **Criterion
 5:** `git grep -n 'cdp_harness.py:60' -- ':!*.jsonl' ':!docs/features/treko-chrome-156-repin.md'`
-prints nothing. Criterion 6 (the judge verdict) and the PR are still open.
+prints nothing. **Criterion 6:** the observability judge (Opus, implementation stage) scored
+`15556f8` `risk: low`, `confidence: high`, one concern (`success_masking`), recorded in
+`coding-memory/observability-judge/verdicts.jsonl`. It re-ran the full suite itself (310 passed), the
+old-pin check and one of 4b's 180 cases. Its first run showed 2 failures in `test_autolaunch.py`'s
+"outside a repository" tests, because its scratch folder sat inside the `~/.claude` repo; with the
+folder outside any repo they passed. That trap predates this card. The PR is #125, opened as a draft
+and marked ready after this audit-trail commit.
 
 ### Corrections made while verifying the plan's inventory
 
