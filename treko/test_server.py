@@ -70,11 +70,12 @@ REASON_STATUS = {
     "send_failed": 502,
     "confirm_failed": 502,
     "confirm_timeout": 502,
+    "no_channel": 503,
 }
 
 # Every status the contract table carries. `204` (the OPTIONS preflight) and `200` are
 # successes and log `reason=-`, so they are not part of the refusal enum.
-CONTRACT_STATUSES = {400, 403, 404, 405, 409, 413, 415, 500, 502}
+CONTRACT_STATUSES = {400, 403, 404, 405, 409, 413, 415, 500, 502, 503}
 
 # Filled in as tests drive requests; the last test compares it against REASON_STATUS.
 # A coverage claim assembled from what actually ran, never from a hand-written list.
@@ -271,6 +272,16 @@ def test_an_absent_surface_is_a_409_and_no_keystroke_is_sent(launcher):
     assert line["sent"] == "no"
 
 
+def test_a_server_with_no_surface_refuses_a_send_with_503_no_channel(launcher):
+    """Driven here, not only in test_degraded.py, so OBSERVED_REASONS sees it."""
+    srv = launcher(surface="")
+    response = srv.command("clear")
+
+    assert response.status == 503
+    assert response.json() == {"ok": False, "error": "no_channel"}
+    assert assert_reason(srv, "no_channel", status="503")["sent"] == "no"
+
+
 # --------------------------------------------------------------------------
 # criterion 10 — the token reaches the page and nowhere else
 # --------------------------------------------------------------------------
@@ -309,6 +320,10 @@ def test_the_token_never_leaves_the_served_page(srv, tmp_path):
     # subprocess, so a child's environment is the server's verbatim — asserted, not assumed.
     source = (srv.tree / "server.py").read_text()
     assert "env=" not in source, "server.py now passes env= somewhere; widen this check"
+    # D6 moved the cmux probe into channel.py, so the same claim has to be asserted there
+    # too -- otherwise this check silently stops covering the subprocess it was written for.
+    channel_source = (srv.tree / "channel.py").read_text()
+    assert "env=" not in channel_source, "channel.py now passes env= somewhere; widen this check"
     children = srv.cmux_calls()
     assert children, "no child was spawned, so this clause proved nothing"
     for call in children:

@@ -58,7 +58,7 @@ python3 treko/server.py --open
 `--repo <path>` is optional and overrides the resolved repo when the cwd isn't inside the one you
 want surveyed. There is no longer a second step: no URL to copy, no browser tab to open by hand.
 
-It prints its own address, the surface it bound, its two timers and its resolved store directory,
+It prints its own address, the surface it bound (`surface=none reason=…` when degraded — see "When it starts degraded"), its two timers and its resolved store directory,
 then one audit line per request:
 
 ```
@@ -178,6 +178,23 @@ mode above — starts again from those defaults.
 (`TREKO_IDLE_SECS`, floor 60s, cannot be disabled) or within ~5s of the session ending. There
 is no daemon and no launchd job — nothing to clean up afterwards.
 
+## When it starts degraded
+
+**The board is always served.** When the cmux control channel cannot be bound, the server does not
+refuse: it still serves the page, and Re-analyze still works (it never needed a keystroke). Only
+`clear` and `handoff` lose their channel — they become copy-to-clipboard chips with a one-line reason
+beside them, and `POST /command` for either returns `503 no_channel` without spawning any cmux
+process. Stderr says so at launch, in two places: a `server: degraded -- no control channel
+(<reason>)` line after the cause, and a banner that reads `surface=none reason=<reason>` where a
+bound launch prints `surface=<uuid>`.
+
+| Message (`<reason>`) | What actually happened |
+|---|---|
+| `CMUX_SURFACE_ID is unset or empty` (`surface_unset`) | Launched outside cmux, or detached. The surface is inherited, never deduced — a send at a *deduced* surface once reached a different live Claude session at exit 0. |
+| `` `cmux read-screen` exceeded Ns probing the surface `` (`probe_timeout`) | cmux did not answer the 5s probe — the control channel may be wedged. |
+| `` `cmux read-screen --surface …` exited N `` (`probe_failed`) | That surface is not a terminal (an agent-session surface has no control channel). |
+| `` cannot run `cmux`: … `` (`cmux_unrunnable`) | cmux could not be executed on this host (not installed, not on `PATH`, or not executable). |
+
 ## When it refuses to start
 
 Every case below exits `2` before serving anything, with the reason on stderr. A bind failure is an
@@ -187,8 +204,6 @@ one, which holds a different token, and every button then returns the deliberate
 
 | Message | What actually happened |
 |---|---|
-| `CMUX_SURFACE_ID is unset or empty` | Launched outside cmux, or detached. The surface is inherited, never deduced — a send at a *deduced* surface once reached a different live Claude session at exit 0. |
-| `read-screen --surface … exited N` | That surface is not a terminal (an agent-session surface has no control channel). |
 | not inside a git repository (no `--repo`, `git rev-parse --show-toplevel` fails) | `--repo` was omitted and the cwd is not inside a repo. No survey of an arbitrary directory. |
 | `port … is already in use -- the probe answered as a Treko page already serving there` | Another session's Treko still holds it. Stop that one; this server will not probe for a free port, and it does not open a browser at the existing one — that server belongs to a different session. |
 | `port … is already in use -- the probe did not answer as a Treko page (something else holds this port)` | Something other than Treko holds the port. Same non-fallback rule: pick a different `TREKO_PORT` or free it. |

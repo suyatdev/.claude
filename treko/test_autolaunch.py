@@ -348,22 +348,23 @@ def test_busy_port_opens_no_browser(tmp_path, browser_log, git_repo):
 
 
 # --------------------------------------------------------------------------
-# criterion 15 — no cmux surface is still a refusal. GREEN today, pinned.
+# criterion 15 — no cmux surface is now a degraded launch, not a refusal.
 # --------------------------------------------------------------------------
 
 
-def test_without_a_cmux_surface_the_server_still_refuses(tmp_path, browser_log, git_repo):
-    """Pre-existing behaviour, asserted rather than assumed.
+def test_without_a_cmux_surface_the_server_still_launches_degraded(tmp_path, browser_log,
+                                                                   git_repo):
+    """§Deferred's flip, landed: no surface no longer aborts auto-launch.
 
-    §Deferred proposes changing this to a degraded no-control-channel page. Pinning it now
-    means that change flips a test rather than filling a gap.
+    The three assertions this test used to pin — exit `EXIT_ABORT`, name the cause, never
+    open a browser — invert to: serves, still names the cause (D1 keeps the human message
+    unchanged), and `--open` does open one.
     """
-    run = launch(tmp_path, browser_log, cwd=git_repo.nested, surface="",
-                 open_browser=False)
+    run = launch(tmp_path, browser_log, cwd=git_repo.nested, surface="")
     try:
-        assert run.wait() == EXIT_ABORT
+        run.await_serving()
         assert "CMUX_SURFACE_ID" in run.stderr
-        assert browser_log.opens == []
+        assert browser_log.opens, "no browser opened for a degraded launch"
     finally:
         run.stop()
 

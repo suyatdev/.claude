@@ -30,6 +30,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import channel  # noqa: E402
+import server  # noqa: E402
 import server_harness as harness  # noqa: E402
 
 NODE = shutil.which("node")
@@ -47,6 +49,7 @@ ROW_OUTCOMES = {
     "page_bug",         # 400 / 413 / 415
     "unexpected",       # an `error` code absent from the table
     "server_gone",      # fetch rejects
+    "no_channel",       # 503 no_channel (a degraded server, D5)
 }
 OBSERVED_OUTCOMES = set()
 
@@ -100,9 +103,39 @@ function stubFetch(spec) {
   };
 }
 
+// The fence's pure functions, called directly. Each one is guarded so a missing export
+// reads as a null the test can name, rather than one TypeError failing every test at once.
+function probe(handler, spec) {
+  const fn = function (name) { return typeof handler[name] === 'function'; };
+  const live = {};
+  for (const hasToken of [true, false]) {
+    for (const channelOk of [true, false]) {
+      live[hasToken + ',' + channelOk] =
+        fn('liveIds') ? handler.liveIds(hasToken, channelOk) : null;
+    }
+  }
+  const reasons = {};
+  for (const token of spec.tokens) {
+    reasons[token] = fn('channelReason') ? handler.channelReason(token) : null;
+  }
+  return {
+    ids: handler.IDS,
+    localIds: handler.LOCAL_IDS === undefined ? null : handler.LOCAL_IDS,
+    sendIds: handler.SEND_IDS === undefined ? null : handler.SEND_IDS,
+    channelReasons: handler.CHANNEL_REASONS === undefined ? null : handler.CHANNEL_REASONS,
+    healthyIsIds: fn('liveIds') ? handler.liveIds(true, true) === handler.IDS : null,
+    live: live,
+    reasons: reasons,
+  };
+}
+
 async function main() {
   const spec = JSON.parse(process.argv[1]);
   const handler = loadHandler(spec.htmlPath);
+  if (spec.mode === 'probe') {
+    process.stdout.write(JSON.stringify(probe(handler, spec)));
+    return;
+  }
   const before = handler.idleView(spec.analyzedAt);
   const fetchImpl = spec.stub ? stubFetch(spec.stub) : fetch;
   const after = await handler.applyCommand(before, {
@@ -138,6 +171,18 @@ def drive(*, url="http://127.0.0.1:1/command", token="t", id="clear", stub=None,
         "stub": stub,
         "analyzedAt": analyzed_at,
     })
+    proc = subprocess.run(
+        [NODE, "-e", NODE_BRIDGE, "--", spec],
+        capture_output=True, text=True, timeout=60,
+    )
+    if proc.returncode != 0:
+        raise AssertionError("node rejected the handler:\n%s" % proc.stderr)
+    return json.loads(proc.stdout)
+
+
+def probe_fence(tokens=()):
+    """Call the fence's pure functions directly, off the same sliced region `drive` loads."""
+    spec = json.dumps({"htmlPath": str(HTML), "mode": "probe", "tokens": list(tokens)})
     proc = subprocess.run(
         [NODE, "-e", NODE_BRIDGE, "--", spec],
         capture_output=True, text=True, timeout=60,
@@ -268,6 +313,99 @@ def test_a_stopped_server_is_a_terminal_state_with_the_copyable_text(srv):
     assert_row(result, "server_gone")
     assert result["after"]["offersButton"] is False, "offered a button with no server"
     assert result["after"]["offersCopyText"] is True, "no fallback once the server is gone"
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_503_no_channel_keeps_the_button_for_what_still_works(launcher):
+    """A degraded server — launched with no surface, never a stubbed 503 — refuses a send.
+
+    The row is deliberately not terminal (D5): terminality is applied to every id, so a
+    terminal `no_channel` would withdraw Re-analyze in the one mode where it still works.
+    """
+    srv = launcher(surface="")
+    result = drive(url=command_url(srv), token=srv.token, id="clear")
+    assert_row(result, "no_channel")
+    assert result["after"]["offersButton"] is True, "no_channel withdrew every button"
+    assert result["after"]["offersCopyText"] is False
+
+
+# --------------------------------------------------------------------------
+# D4 / D5 — the fence's pure functions, called off the node bridge
+
+# Transcribed from §D5's table, not read back out of the page: a table derived from the
+# implementation asserts only that the implementation equals itself.
+CHANNEL_REASON_TEXT = {
+    "surface_unset": "Launched outside cmux, so there is no session to type into.",
+    "probe_timeout": "cmux did not answer within 5s — the control channel may be wedged.",
+    "probe_failed": ("This surface is not a terminal; an agent-session surface has no "
+                     "control channel."),
+    "cmux_unrunnable": "cmux could not be run on this host.",
+}
+CHANNEL_REASON_FALLBACK = "No control channel."
+
+# Pinned, never invented by the test. The assertion is whole-token absence from the
+# returned string, so a probe like `control` or `No` — itself a substring of the fallback
+# — would fail a correct implementation. This token shares `channel` with the fallback;
+# that is fine, because what is asserted is that the *whole* token is absent.
+PROBE_TOKEN = "zz_not_a_channel_token"
+
+REASON_TOKENS = {member.value for member in channel.Reason}
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_live_ids_resolve_for_all_four_token_and_channel_combinations():
+    """`[]` with no token; all three with a token and a channel; Re-analyze alone when the
+    channel is down — every value other than `'ok'` reaches the fence as `channelOk=false`.
+    """
+    result = probe_fence()
+    ids = ["clear", "handoff", "reanalyze"]
+    assert result["live"] == {
+        "true,true": ids,
+        "true,false": ["reanalyze"],
+        "false,true": [],
+        "false,false": [],
+    }
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_a_healthy_channel_is_never_handed_the_degraded_button_set():
+    """Criterion 10's second half: channel-ok resolves to the allowlist itself."""
+    assert probe_fence()["healthyIsIds"] is True
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_the_page_partition_matches_the_servers():
+    """Both sides read, neither trusted: a hand-written list would pin the copy, not the
+    agreement between them."""
+    result = probe_fence()
+    assert result["localIds"] is not None and result["sendIds"] is not None, \
+        "the fence exports no LOCAL_IDS / SEND_IDS"
+    assert set(result["localIds"]) == set(server.LOCAL_COMMANDS)
+    assert set(result["sendIds"]) == set(server.SEND_COMMANDS)
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_the_channel_reason_table_keys_match_the_reason_enum():
+    """A renamed member would otherwise fall through to the fallback — a legal, designed
+    outcome — and the page would quietly stop saying which of four things broke."""
+    reasons = probe_fence()["channelReasons"]
+    assert reasons is not None, "the fence exports no CHANNEL_REASONS"
+    assert set(reasons) == REASON_TOKENS
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_each_reason_token_maps_to_its_own_text():
+    reasons = probe_fence(sorted(REASON_TOKENS))["reasons"]
+    assert reasons == CHANNEL_REASON_TEXT
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_an_unrecognised_channel_token_falls_to_the_fixed_string():
+    """Criterion 7's security clause. A real server only ever emits one of five tokens, so
+    this direct call is the only place an unrecognised one can be exercised at all."""
+    shown = probe_fence([PROBE_TOKEN])["reasons"][PROBE_TOKEN]
+    assert shown == CHANNEL_REASON_FALLBACK
+    assert PROBE_TOKEN not in shown, "the attribute's own text reached the page"
 
 
 # --------------------------------------------------------------------------
