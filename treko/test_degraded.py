@@ -36,7 +36,7 @@ path for *every* test, so no test in this file can reach a real `cmux` on the de
 — including the `surface_unset` cases, which must fail before any subprocess is spawned at all.
 
 **The human messages are asserted verbatim.** D1 pins them as "unchanged from today, verbatim —
-it still goes to stderr", so today's `server.py:216-235` is the authority for the four strings
+it still goes to stderr", so today's `server.py:214-233` is the authority for the four strings
 below rather than a thing they are merely compared against. D2 writes the exception with
 `"server: %s\n" % exc`, so `str(exc)` carrying the message is part of the contract, not an
 incidental of how `StartupAbort` was constructed.
@@ -412,7 +412,7 @@ def test_an_out_of_range_port_aborts_before_serving(launcher):
 @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores the permission bits this drives")
 def test_an_unreadable_index_aborts_before_serving(launcher, tree):
     """`check_index_injectable` reads the index at startup; unreadable is not `<head>`-less,
-    and the two abort on different branches (`server.py:207-211`)."""
+    and the two abort on different branches (`server.py:205-209`)."""
     index = tree / server.INDEX_FILE
     index.chmod(0o000)
     try:
@@ -451,7 +451,7 @@ def test_a_corrupt_legacy_store_aborts_before_serving(launcher, tree, tmp_path):
     default -- `TREKO_STORE_DIR` pointing at the tree itself, where `store_path` and
     `legacy_path` are the same existing file -- short-circuits to "already present" and
     never reads the legacy bytes. So: corrupt the legacy file the server actually names
-    (`SERVE_ROOT / FIRST_RUN_OPTIONAL`, i.e. the tree's own copy -- `server.py:709-710`),
+    (`SERVE_ROOT / FIRST_RUN_OPTIONAL`, i.e. the tree's own copy -- `server.py:707-708`),
     and point the store at a directory where `store_path` does not exist yet.
     """
     (tree / server.FIRST_RUN_OPTIONAL).write_text("window.NOT_TRACKER_DATA = 1;\n")
@@ -516,7 +516,7 @@ def test_the_refusal_spawns_no_cmux_subprocess_at_all(launcher, command_id):
 
 
 def test_reanalyze_still_succeeds_on_a_degraded_server(launcher):
-    """`reanalyze` is local (`server.py:556`) and never reaches the guard at all."""
+    """`reanalyze` is local (`server.py:554`) and never reaches the guard at all."""
     srv = launcher(**DEGRADED_KWARGS)
 
     response = srv.command("reanalyze", timeout=120)
@@ -527,7 +527,7 @@ def test_reanalyze_still_succeeds_on_a_degraded_server(launcher):
 
 
 def test_an_unknown_command_id_is_still_403_before_the_channel_guard_runs(launcher):
-    """The allowlist check (`server.py:553`) runs before `_run_send`, so a degraded server
+    """The allowlist check (`server.py:551`) runs before `_run_send`, so a degraded server
     still answers an unknown id with the same `bad_token`/`unknown_id`/`host_mismatch`
     collapse everyone else gets -- never a `503` that would tell an unauthenticated caller
     the id was at least real (§D3's third property, read together with `_handle_command`'s
