@@ -16,6 +16,7 @@ service; see `allocating-local-ports` for when that's required.
 
 | Port | Owner project | Service | Type | Notes |
 |---|---|---|---|---|
+| 4317 | mtg-wizard | `vite preview` of the built website, for the D14 Playwright layout check | Local dev/test process | Bound only while `npm run test:e2e:web` runs (`apps/desktop/playwright.web.config.ts`, `--host 127.0.0.1 --port 4317 --strictPort`, `reuseExistingServer: false`). Allocated 2026-10-18 for `docs/features/mobile-responsive.md` (D14). Not 5173: mtg-wizard `preview:web`/`dev:web` use it and an unrelated vibescape vite already listens on `*:5173`. |
 | 5432 | mtg-wizard | Postgres (`pgvector/pgvector:pg16`) | Docker container | `docker-compose.yml`; hardcoded in CI + service defaults, do not move. |
 | 5433 | vibescape | Postgres (`postgresql@18`, Homebrew) | Homebrew service | Moved from 5432 on 2026-07-14 to stop shadowing mtg-wizard's Docker Postgres. Set in `/opt/homebrew/var/postgresql@18/postgresql.conf` (`port = 5433`). vibescape's connection string updated to 5433 in `.env/cloud.env` on 2026-07-14. |
 | 5434 | snatch-bracket | Postgres (`postgres:16`) | Docker container | `docker-compose.yml` maps `5434:5432` (allocated 2026-07-14; 5432/5433 taken). In-repo defaults (`config.py`, `tests/conftest.py`) point here; CI unaffected (sets `DATABASE_URL` explicitly). |

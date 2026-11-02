@@ -797,7 +797,7 @@ Carried forward from `docs/features/treko-rename.md` §"Pinned versions", unchan
 | Phosphor Icons | 2.1.1 | already vendored under `vendor/phosphor/` — do not re-fetch |
 | Inter | vendored `inter-latin.woff2` | `vendor/inter/` — no version upstream; the file is the pin |
 | Nocturne export | `73641b21-c7ad-488a-8264-a28262dfe83e`, schema `version: 1` | `_ds/` directory name; ADR 0023 |
-| Chrome | `152.0.7977.54` | measured in this checkout: `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --version`. Both Proof B and Proof C invoke this exact build — two hashes, or two contrast reads, from different Chrome builds are not comparable. **Re-pinned from `151.0.7922.172` on 2026-08-24, mid-task-7** (see below). |
+| Chrome | `156.0.8078.79` | measured in this checkout: `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --version`; the live pin is `cdp_harness.PINNED_VERSION`. Both Proof B and Proof C invoke this exact build — two hashes, or two contrast reads, from different Chrome builds are not comparable. **Re-pinned from `151.0.7922.172` on 2026-08-24, mid-task-7** (see below). **Since moved on to `156.0.8078.79`** (approved 2026-10-31; record in `treko-chrome-156-repin.md`) — this row named `152.0.7977.54` until then. |
 
 **The Chrome re-pin, 2026-08-24.** Chrome auto-updated on this machine at 15:04 local, from
 `151.0.7922.172` to `152.0.7977.54`. `cdp_harness.Chrome.__init__` asserts the pin before it

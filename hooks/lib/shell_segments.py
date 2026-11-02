@@ -24,6 +24,12 @@ import shlex
 # while `( gh pr create )` did not.
 OPS = "(){};<>|&"
 
+# The subset of OPS that opens or closes a COMMAND GROUP rather than separating
+# two commands. `<(` and `>(` are process substitutions: they contain `(` and open
+# a command context exactly as `(` does, which is why _is_redirect already refuses
+# to treat them as redirections.
+GROUPING = "(){}"
+
 
 def _is_redirect(tok):
     """True for a punctuation token that redirects rather than separates two commands.
@@ -65,19 +71,121 @@ WRAPPERS = ("rtk", "time", "eval", "command", "builtin", "exec", "nohup")
 
 ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
+# Characters after which an unquoted, unescaped `#` BEGINS A WORD (and so can open a comment),
+# together with start-of-input and unquoted whitespace (space/tab/newline -- checked directly
+# in _strip_word_initial_comments below, not through this set, since bash's whitespace here is
+# narrower than Python's str.isspace()). Measured against real bash AND real zsh, which agreed
+# on every row -- see check_bash_fidelity() in the sibling test and ADR 0040 -- not read off
+# either manual.
+#
+# `)` and `}` are DELIBERATELY EXCLUDED even though a subshell's `)` and a brace group's `}`
+# really do begin a word in bash: the identical characters ALSO close `$( )` and `${ }`, where
+# they do NOT, and telling the two apart needs expansion-nesting tracking this pre-pass does
+# not do. Excluding them can only ever emit MORE tokens than bash would, never fewer -- the
+# subshell form is then read fail-CLOSED (a command bash would not have run becomes visible to
+# a guard) rather than fail-OPEN. Accepted deviation, pinned from both sides in the test suite.
+WORD_BREAK_CHARS = ";&|("
+WORD_BREAK_WHITESPACE = " \t\n"
 
-def segments(src):
-    """Return [(assignments, argv), ...] -- one entry per shell segment of `src`.
 
-    `assignments` maps the leading `VAR=value` prefixes of that segment to their values;
-    `argv` is the remaining tokens, with wrapper words already stripped, so argv[0] is the
-    command that segment really runs (or the segment is empty).
+def _strip_word_initial_comments(src):
+    """Delete an unquoted, unescaped `#` THAT BEGINS A WORD through the end of its LINE.
 
-    Returns [] for input shlex cannot parse. That is a deliberate fail-OPEN, not a bug: a
-    command that is valid bash but not shlex-parseable (some exotic quoting forms) is treated
-    as running nothing. Failing closed here would block unrelated commands that merely contain
-    such quoting, which is wrong for a momentum guardrail -- the callers' repo/branch checks
-    still fail closed for the cases that matter.
+    A quote-aware pre-pass over the raw text, run in _lex() BEFORE the newline -> ';'
+    translation, so "end of line" here really means end of line and not end of input. See ADR
+    0040: shlex's own `commenters='#'` opens a comment at an unquoted `#` ANYWHERE in a word,
+    which is not bash's rule, and -- because _lex used to translate newline -> ';' first --
+    discarded to end of INPUT rather than end of LINE once it did open one. Both were fail-open:
+    `echo hi#; <anything>` hid <anything> from every guard built on this lexer.
+
+    Runs before shlex ever sees the string because shlex strips quotes as it tokenizes, and by
+    the time a re-scan of tokens could look for `#`, the quoting information the rule needs --
+    was this `#` inside a string literal -- is already gone. A derived parse cannot recover what
+    its own producer discarded.
+
+    Never raises. An unterminated quote is not this function's problem to catch: it copies the
+    rest of the string through unchanged (there is nothing left to close), and lets shlex raise
+    ValueError downstream exactly as it does today.
+    """
+    out = []
+    in_single = False
+    in_double = False
+    at_word_start = True  # start of input begins a word
+    i = 0
+    n = len(src)
+    while i < n:
+        c = src[i]
+
+        if in_single:
+            # Nothing is special in a single-quoted string except the closing quote itself.
+            out.append(c)
+            if c == "'":
+                in_single = False
+                at_word_start = False  # a closing quote does not begin a word
+            i += 1
+            continue
+
+        if in_double:
+            if c == "\\" and i + 1 < n:
+                out.append(c)
+                out.append(src[i + 1])
+                i += 2
+                at_word_start = False
+                continue
+            out.append(c)
+            if c == '"':
+                in_double = False
+                at_word_start = False
+            i += 1
+            continue
+
+        # Unquoted. A backslash escapes the very next character, including whitespace --
+        # `echo a\ # b` keeps its '#' as text because the escaped space does not end the word.
+        if c == "\\" and i + 1 < n:
+            out.append(c)
+            out.append(src[i + 1])
+            i += 2
+            at_word_start = False
+            continue
+
+        if c == "'":
+            in_single = True
+            out.append(c)
+            at_word_start = False
+            i += 1
+            continue
+
+        if c == '"':
+            in_double = True
+            out.append(c)
+            at_word_start = False
+            i += 1
+            continue
+
+        if c == "#" and at_word_start:
+            # Delete through end of line, keeping the newline (and everything after it) so a
+            # command on the next line is still seen. No newline left means the comment runs to
+            # end of input, same as bash at the end of a script.
+            nl = src.find("\n", i)
+            i = n if nl == -1 else nl
+            continue
+
+        out.append(c)
+        at_word_start = c in WORD_BREAK_WHITESPACE or c in WORD_BREAK_CHARS
+        i += 1
+
+    return "".join(out)
+
+
+def _lex(src):
+    """Return the raw shlex token list for `src`, or None if shlex cannot parse it.
+
+    The token-producing head of segments(), extracted so has_grouping() can take a SECOND
+    VIEW of the same tokens. One lexer, two views: a second parser would be free to disagree
+    with this one about what is quoted, and the disagreement would land in a guard.
+
+    None, not [], for unparseable input -- segments() has to tell that case apart from a
+    genuinely empty command, and both legitimately produce no tokens.
     """
     # A backslash-newline is a line CONTINUATION: bash joins the two lines into one command. So
     # this pair is deleted BEFORE the newline translation below, which routes the result into the
@@ -96,12 +204,88 @@ def segments(src):
     # CLOSED, and writing that text is routine here. Trading a rare false negative for a common
     # false positive that blocks legitimate work is the wrong direction for a momentum guardrail.
     # Recorded in ADR 0012 as an open shape.
+    #
+    # The word-initial comment pre-pass runs HERE, between the continuation join and the newline
+    # translation -- ordering is load-bearing (ADR 0040). It must see real newlines to scope a
+    # comment to end of LINE, so it has to run before they become ';'. commenters="" below is not
+    # optional once the pre-pass runs: shlex's own '#'-anywhere-in-a-word rule would otherwise
+    # still fire on whatever the pre-pass correctly left as ordinary text (e.g. `fix#123`).
     try:
         joined = src.replace("\\\n", "")
-        lex = shlex.shlex(joined.replace("\n", ";"), posix=True, punctuation_chars=True)
+        stripped = _strip_word_initial_comments(joined)
+        lex = shlex.shlex(stripped.replace("\n", ";"), posix=True, punctuation_chars=True)
         lex.whitespace_split = True
-        toks = list(lex)
+        lex.commenters = ""
+        return list(lex)
     except ValueError:
+        return None
+
+
+def has_grouping(src):
+    """True if `src` holds a command-grouping operator OUTSIDE quotes.
+
+    segments() appends a fresh segment for every control operator and throws the operator
+    away, so `(`, `)`, `{` and `}` are indistinguishable in its return value. That distinction
+    is load-bearing and unrecoverable from the outside: bash discards a `cd` at `)` but keeps
+    it past `}`, so an index-ordered rule over the flat segment list carries a subshell's `cd`
+    to segments bash would never have applied it to. A caller that cannot resolve the
+    ambiguity can at least refuse to guess, which is what this answers.
+
+    False for unparseable input: it reports what the lexer SAW, and it saw nothing. Callers
+    that must fail closed on that read it off segments() returning [], which is the signal
+    that already exists for it.
+    """
+    toks = _lex(src)
+    if toks is None:
+        return False
+    return any(tok and all(ch in OPS for ch in tok) and any(ch in GROUPING for ch in tok)
+               for tok in toks)
+
+
+def program(token):
+    """Canonical program name for a token in COMMAND POSITION.
+
+    Strips any directory component and folds case, so `/usr/bin/Git`, `GIT` and
+    `git` all answer `git`.
+
+    Total by contract: never raises, for any str input. Callers are Tier-1 guards
+    whose fail directions differ (see "Fail direction"), so a raising helper would
+    disarm one guard while blocking another. A non-str input is the caller's bug
+    and is allowed to raise.
+
+    Use ONLY where the token is in command position -- never for subcommands,
+    flags, `cd`, or a scan over `argv[1:]`, all of which are case-sensitive or
+    position-sensitive at runtime (see the measurement tables).
+
+    Args:
+        token: the raw argv[0] string from `segments()`.
+
+    Returns:
+        The lowercased basename, or "" for a token that cannot name an
+        executable (empty, or ending in "/").
+    """
+    if token.endswith("/"):
+        return ""
+    return token.rsplit("/", 1)[-1].lower()
+
+
+def segments(src):
+    """Return [(assignments, argv), ...] -- one entry per shell segment of `src`.
+
+    `assignments` maps the leading `VAR=value` prefixes of that segment to their values;
+    `argv` is the remaining tokens, with wrapper words already stripped, so argv[0] is the
+    command that segment really runs (or the segment is empty).
+
+    Returns [] for input shlex cannot parse. That is a deliberate fail-OPEN, not a bug: a
+    command that is valid bash but not shlex-parseable (some exotic quoting forms) is treated
+    as running nothing. Failing closed here would block unrelated commands that merely contain
+    such quoting, which is wrong for a momentum guardrail -- the callers' repo/branch checks
+    still fail closed for the cases that matter. classify-git-command.py is the one caller
+    that overrides this, because it is the last line of defence and this rationale is written
+    for callers that are not.
+    """
+    toks = _lex(src)
+    if toks is None:
         return []
 
     # A redirection is consumed with its target instead of splitting; only control operators split.

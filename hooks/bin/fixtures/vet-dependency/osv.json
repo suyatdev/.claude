@@ -1,0 +1,13 @@
+{
+  "clean": {"status": 200, "body": {}},
+  "lodash_vulns": {"status": 200, "body": {"vulns": [
+    {"id": "GHSA-29mw-wpgm-hmr9", "summary": "Regular Expression Denial of Service (ReDoS) in lodash", "aliases": ["CVE-2020-28500"], "modified": "2024-01-01T00:00:00Z"},
+    {"id": "GHSA-35jh-r3h4-6jhm", "summary": "Command Injection in lodash", "aliases": ["CVE-2021-23337"], "modified": "2024-01-01T00:00:00Z"}
+  ]}},
+  "error_body": {"status": 200, "body": {"code": 3, "message": "invalid"}},
+  "page_token_only": {"status": 200, "body": {"next_page_token": "abc"}},
+  "vulns_with_page_token": {"status": 200, "body": {"vulns": [{"id": "GHSA-29mw-wpgm-hmr9"}], "next_page_token": "abc"}},
+  "vulns_with_extra_key": {"status": 200, "body": {"vulns": [{"id": "GHSA-29mw-wpgm-hmr9"}], "code": 3}},
+  "empty_vulns_list": {"status": 200, "body": {"vulns": []}},
+  "server_error": {"status": 500, "body": {"code": 13, "message": "internal"}}
+}

@@ -508,6 +508,37 @@ git commit --patch -m msg
 git commit --interactive
 TABLE
 
+# argv0-spelling-blindness (docs/features/argv0-spelling-blindness.md, tasks 2/3, RED).
+# decide-commit-gate.py:76's OWN `argv[0] != "git"` check re-derives which of the four
+# UNSUPPORTED triggers fired, for the message only -- it never decides block/allow, which
+# classify-commit-command.py already settled. It cannot be exercised end to end through
+# `block` above: classify-commit-command.py:213 (a SEPARATE call site, covered in
+# classify-commit-command.test.py) already reads a capitalized "Git" as kind=OTHER before
+# _unsupported_trigger() is ever called, so the door never opens for this input at all --
+# fixing :213 alone would not fix :76, and a fixture that routed through the door would
+# leave :76 untested by construction. Called directly instead, the same way the
+# `_EXEMPT_RE.match` vs `_valid_exempt` case above isolates one internal rule from the
+# doors around it. Measured against this checkout, pre-fix, 2026-09-01: "Git commit -i -m
+# x" reports OFF_WHITELIST (falling through every branch, since argv[0] != "git" skips the
+# segment before the -i check ever runs), matching neither "git commit -i -m x"
+# (INCLUDE_OR_FROM_FILE) nor its own capitalized self after the fix.
+if python3 -c "
+import importlib.util
+spec = importlib.util.spec_from_file_location('decide_commit_gate', '$HOOKS/lib/decide-commit-gate.py')
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+got_lower = mod._unsupported_trigger('git commit -i -m x')
+assert got_lower == 'INCLUDE_OR_FROM_FILE', 'control: lowercase must report INCLUDE_OR_FROM_FILE, got %r' % (got_lower,)
+for spelling in ('Git commit -i -m x', 'GIT commit -i -m x', '/usr/bin/git commit -i -m x'):
+    got = mod._unsupported_trigger(spelling)
+    assert got == 'INCLUDE_OR_FROM_FILE', \
+        'argv0-spelling RED: %r must report INCLUDE_OR_FROM_FILE like the lowercase form, got %r (measured pre-fix: OFF_WHITELIST)' % (spelling, got)
+" 2>&1; then
+  ok "argv0-spelling RED: decide-commit-gate.py:76's own git check folds case and path"
+else
+  bad "argv0-spelling RED: decide-commit-gate.py:76's own git check folds case and path (see stderr above)"
+fi
+
 # Measured: the amended commit's contents are `git diff --cached HEAD^`, not HEAD.
 R="$(new_repo adopt)"
 mark "$R" hooks/foo.test.sh
@@ -911,7 +942,8 @@ MSG_GIT_FAILED|-
 MSG_NO_MARKER|pair
 MSG_BAD_MARKER|pair
 MSG_STALE_SUBJECT|pair
-MSG_STALE_TEST|pair'
+MSG_STALE_TEST|pair
+MSG_STALE_PART|pair'
 
 DOORS_BASH='MSG_CLASSIFIER_MISSING|-
 MSG_BAD_PAYLOAD|-
@@ -954,6 +986,16 @@ setup_door() {
       mark "$repo" hooks/foo.test.sh
       edit "$repo" hooks/foo.test.sh 'v2 suite'
       stage "$repo" hooks/foo.test.sh ;;
+    MSG_STALE_PART)
+      # A part is committed and recorded in the receipt, then edited and staged alone: the
+      # runner and the subject both still match, so only the part list disagrees.
+      mkdir -p "$repo/hooks/foo.test.d"
+      edit "$repo" hooks/foo.test.d/10-a.sh 'v1 part'
+      git -C "$repo" add -- hooks/foo.test.d/10-a.sh
+      git -C "$repo" commit -qm part
+      mark "$repo" hooks/foo.test.sh
+      edit "$repo" hooks/foo.test.d/10-a.sh 'v2 part'
+      stage "$repo" hooks/foo.test.d/10-a.sh ;;
     MSG_CLASSIFIER_MISSING)
       stage "$repo" hooks/foo.sh
       gate="$(stub_gate door-noentry OMIT REAL)" ;;
@@ -999,7 +1041,7 @@ stage "$R" docs/notes.md
 allow "an allowed commit writes no log line" "$R" 'git commit -m msg'
 expect_log_count "an allowed commit writes no log line" "$R" 0
 
-# MSG_NO_PYTHON is the thirteenth door and the only machine-global one: no toplevel has been
+# MSG_NO_PYTHON is the fourteenth door and the only machine-global one: no toplevel has been
 # resolved, so there is no <repo>/hooks/state/ to append to. The PATH below grants exactly the
 # externals the gate is allowed to need -- adding one to the gate means adding it here.
 NOPY="$TMP/nopy"
@@ -1018,7 +1060,7 @@ expect_exit "python3 missing blocks at MSG_NO_PYTHON" 2
 expect_msg "python3 missing blocks at MSG_NO_PYTHON" MSG_NO_PYTHON
 expect_log_count "the door that fires before a repo is known writes no line" "$R" 0
 
-# Nine of the thirteen doors fire before a pair exists; field 4 is total because it has a
+# Nine of the fourteen doors fire before a pair exists; field 4 is total because it has a
 # defined value for them, not because every door reaches one.
 R="$(new_repo adopt)"
 stage "$R" hooks/foo.sh

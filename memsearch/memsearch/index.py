@@ -4,6 +4,7 @@ interrupt-safe: each source commits atomically in replace_source, so a killed
 backfill resumes where it left off."""
 from __future__ import annotations
 
+import fnmatch
 import glob as globmod
 import json
 import os
@@ -47,7 +48,8 @@ ARCHIVE_FILENAME = "CODING_MEMORY.md"
 JUDGE_DIRS = frozenset({"observability-judge", "compliance-judge"})
 
 
-def _doc_source_type(path: Path, default: str) -> str:
+def _doc_source_type(path: Path, default: str,
+                     archive_pattern: str | None = None) -> str:
     """Classify by path, not by which bucket found it.
 
     The archive has three copies — the ~/.claude one reached via curated_docs
@@ -61,25 +63,81 @@ def _doc_source_type(path: Path, default: str) -> str:
     measured, and coding-memory/ as a whole is 461 chunks wider than that
     measurement. The archive check runs first, so the two rules cannot
     disagree about a CODING_MEMORY.md sitting under a judge directory.
+
+    `archive_pattern` widens this off the single retired CODING_MEMORY.md
+    filename: a file matching cfg.archive_pattern (session-state.archive*.md)
+    is typed archive_doc too, regardless of which bucket — curated_docs,
+    repo_roots, or the dedicated archive_roots walk — found it. Optional and
+    keyword-only in effect, so existing 2-arg call sites are unaffected.
     """
     if path.name == ARCHIVE_FILENAME:
+        return "archive_doc"
+    if archive_pattern and fnmatch.fnmatch(path.name, archive_pattern):
         return "archive_doc"
     if path.parent.name in JUDGE_DIRS:
         return "judge_doc"
     return default
 
 
+def _iter_archive_docs(cfg: Config,
+                       seen: set[Path]) -> list[tuple[Path, str, str, str]]:
+    """archive_roots/archive_pattern via Path.rglob, typed archive_doc
+    directly — these roots (~/.claude, ~/Other Docs, ~/.worktrees) exist
+    specifically to reach notepads that curated_docs and repo_roots do not.
+
+    Not glob.glob. Two separate failures, both measured on the live tree on
+    2026-09-10 rather than reasoned about:
+      - glob.glob never expands `~`. Passed the roots as written, it returns
+        0 matches for all three, for any pattern.
+      - With `~` expanded, its `**` still does not descend into dot-prefixed
+        directories, which is where every notepad lives. Over these three
+        roots, pattern `session-state*.md`: glob.glob `**` finds 6,
+        Path.rglob finds 29.
+    Note the shipped pattern (session-state.archive*.md) returns 0 for BOTH
+    today, because no archive file exists yet — so the 6-vs-29 figure is the
+    honest evidence for the choice, and any check that used the shipped
+    pattern to prove rglob was needed would pass by construction.
+    `seen` skips a file another bucket's *.md walk already
+    yielded — that walk already types it archive_doc via the widened
+    _doc_source_type above, so this only fills in what those buckets miss.
+    A root matching nothing is reported rather than silently indexing as if
+    nothing changed (finding O5)."""
+    out: list[tuple[Path, str, str, str]] = []
+    for root in cfg.archive_roots:
+        matches = sorted(root.rglob(cfg.archive_pattern))
+        if not matches:
+            print(f"memsearch: archive root matched nothing: {root} "
+                  f"(pattern {cfg.archive_pattern!r})", file=sys.stderr)
+            continue
+        for f in matches:
+            if f in seen or is_excluded(f, cfg):
+                continue
+            repo_id, repo_name = repo_for_cwd(str(f.parent), cfg)
+            out.append((f, repo_id, repo_name, "archive_doc"))
+            seen.add(f)
+    return out
+
+
 def _iter_docs(cfg: Config) -> list[tuple[Path, str, str, str]]:
     """Yields (path, repo_id, repo_name, source_type)."""
     out: list[tuple[Path, str, str, str]] = []
+    seen: set[Path] = set()
     for entry in cfg.curated_docs:
         files = [entry] if entry.is_file() else sorted(entry.rglob("*.md"))
-        out.extend((f, *CLAUDE_REPO, _doc_source_type(f, "curated_doc"))
-                   for f in files if not is_excluded(f, cfg))
+        for f in files:
+            if is_excluded(f, cfg):
+                continue
+            out.append((f, *CLAUDE_REPO,
+                       _doc_source_type(f, "curated_doc", cfg.archive_pattern)))
+            seen.add(f)
     for r in cfg.repo_roots:
-        out.extend((f, r.id, r.name, _doc_source_type(f, "repo_doc"))
-                   for f in sorted(r.root.rglob("*.md"))
-                   if not is_excluded(f, cfg))
+        for f in sorted(r.root.rglob("*.md")):
+            if is_excluded(f, cfg):
+                continue
+            out.append((f, r.id, r.name,
+                       _doc_source_type(f, "repo_doc", cfg.archive_pattern)))
+            seen.add(f)
+    out.extend(_iter_archive_docs(cfg, seen))
     return out
 
 

@@ -128,11 +128,16 @@ if isinstance(ti, dict):
 # Contrast git-guard.sh, which fails closed on the same condition.
 facts=$(printf '%s' "$command_line" | "$py" "$CLASSIFIER" 2>/dev/null) || exit 0
 
+# One fact per LINE, and compared as a whole line -- the same reader git-guard.sh
+# already uses, ported here. An unquoted `for f in $facts` splits on bash's default
+# IFS, which includes the TAB that carries a path in `COMMIT_PATH<tab><path>` -- so
+# committing a file named COMMIT_ALL produced the token COMMIT_ALL and made this hook
+# judge HEAD's diff instead of the index it was about to commit.
 has_fact() {
   local f
-  for f in $facts; do
+  while IFS= read -r f; do
     [ "$f" = "$1" ] && return 0
-  done
+  done <<< "$facts"
   return 1
 }
 
@@ -163,9 +168,11 @@ src_lines=0
 while IFS=$'\t' read -r add del path; do
   [ -z "$path" ] && continue
   case "$path" in
-    # Broader than git-guard.sh's `docs/*.md`, deliberately: the question here is
+    # Deliberately not git-guard.sh's allowlist: the question here is
     # "did documentation ride along with this commit?", and a diagram or screenshot
     # counts. git-guard asks "may this reach main unreviewed?", where it must not.
+    # Neither set contains the other — this one takes any file under `docs/`, while
+    # git-guard also admits the two judge ledgers, which are not documentation.
     # The two rules are not meant to agree — do not align them.
     docs/*) has_doc=1; continue ;;
   esac

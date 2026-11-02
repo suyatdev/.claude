@@ -34,6 +34,8 @@ class Config:
     transcripts_glob: str
     curated_docs: tuple[Path, ...]
     repo_roots: tuple[RepoRoot, ...]
+    archive_roots: tuple[Path, ...]
+    archive_pattern: str
     exclude_paths: tuple[str, ...]
     weights: dict
 
@@ -88,6 +90,8 @@ def load_config(path: Path | None = None) -> Config:
             RepoRoot(r["id"], r["name"], _expand(r["root"]))
             for r in raw.get("repo_roots", ())
         ),
+        archive_roots=tuple(_expand(p) for p in raw.get("archive_roots", ())),
+        archive_pattern=raw.get("archive_pattern", "session-state.archive*.md"),
         exclude_paths=excludes,
         weights=_validate_weights(raw["weights"]),
     )

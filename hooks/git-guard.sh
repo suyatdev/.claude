@@ -90,6 +90,41 @@ has_fact() {
   return 1
 }
 
+# --- Guard 0: the lexer could not read this command at all ---
+# SEG_UNPARSED (lib/classify-git-command.py) means segments() returned [] for a
+# non-empty command -- the classifier could not lex it into anything, usually an
+# unbalanced quote. This is the SAME "cannot inspect the command" condition the
+# file header above already commits to failing closed on (no python3 on PATH, an
+# unrunnable classifier) -- reached by a third route. An empty fact set reads as
+# "no COMMIT here, no PUSH_FORCE here", but an absent fact is not safety: it is
+# exactly what let a plain typo (`git commit -m 'unbalanced -- foo.sh`) reach
+# Guard 1 and Guard 2 below with nothing to trip, and sail through unblocked.
+# worktree-guard.sh has always refused on this fact (lib/worktree_guard_bash_arms.sh,
+# the `has_fact SEG_UNPARSED` arm); this guard now agrees with it.
+#
+# Checked first, before any per-fact guard and before current_branch() below is
+# even called: a command the guard cannot read cannot be shown safe on any
+# branch, so which branch is checked out is not a question worth asking yet.
+#
+# Scoped to commands that MENTION git: this guard's whole subject is `git`
+# (Guard 1 commits, Guard 2 force-pushes), so refusing a git-free command that
+# merely fails to lex is overreach, not caution -- measured, not hypothetical:
+# `echo $'a\'b'` is valid bash (`bash -n` exit 0) and was refused before this
+# scoping existed. The match is a case-pattern SUBSTRING on the raw command
+# line on purpose -- not a word match -- so `curl https://github.com/x#'...`
+# still blocks; wider is the fail-closed direction here. `gh` is deliberately
+# NOT matched: this guard never keys on gh at all, so a real `gh pr create` or
+# a `highlight` substring must not trip it.
+if has_fact SEG_UNPARSED; then
+  case "$command_line" in
+    *git*)
+      printf 'git-guard: this command cannot be lexed -- the lexer returned no segments for a non-empty command, usually from an unbalanced quote. Refusing rather than guessing what it runs.\n' >&2
+      printf 'Rewrite the command so it lexes (check for an unbalanced quote) and try again.\n' >&2
+      exit 2
+      ;;
+  esac
+fi
+
 current_branch() {
   git symbolic-ref --short HEAD 2>/dev/null || echo ""
 }
@@ -231,7 +266,7 @@ remedy_line() {
         esac
       else
         case "$kind" in
-          commit) printf 'Create a feature branch instead (git switch -c <name>), or stage only documentation.' ;;
+          commit) printf 'Create a feature branch instead (git switch -c <name>), or stage only docs/*.md or a judge ledger.' ;;
           push)   printf 'Push from a feature branch instead (git switch -c <name>).' ;;
         esac
       fi ;;
@@ -320,7 +355,7 @@ PRINTS_AND_EXITS = {
 }
 
 for _assigns, argv in mod.segments(sys.stdin.read()):
-    if len(argv) < 2 or argv[0] != "git":
+    if len(argv) < 2 or mod.program(argv[0]) != "git":
         continue
     subcommand, rest, blocking = mod.resolve_subcommand(argv)
     if subcommand != "commit":
@@ -384,11 +419,28 @@ if has_fact COMMIT && on_main; then
       # `*` spans `/` in a case pattern, so `docs/*.md` covers any depth while
       # still rejecting `docs/tool.sh` — and `docs/notes.md.sh`.
       docs/*.md) ;;
+      # The two judge verdict ledgers, spelled as EXACT literals rather than
+      # `coding-memory/*/verdicts.jsonl`. ADR 0031 kept precisely these two files
+      # tracked under the otherwise-retired coding-memory/ tree -- they are the
+      # accumulated cross-repo judge record, and untracking them would fragment it
+      # per worktree -- while the same change narrowed this allowlist to docs/*.md
+      # alone. That left them tracked but un-committable here, a combination whose
+      # only possible outcome is accumulated uncommitted drift
+      # (docs/features/judge-ledger-commitability.md).
+      #
+      # Literals, not a pattern, for two reasons: a third judge is hypothetical, so
+      # the guard should be exactly as wide as the rule it enforces; and `*` spans
+      # `/` here (see above), so `coding-memory/*/verdicts.jsonl` would admit any
+      # depth. An exact literal also cannot be satisfied by a traversing string at
+      # all, which is the hazard the `..` arm above exists for.
+      coding-memory/observability-judge/verdicts.jsonl) ;;
+      coding-memory/compliance-judge/verdicts.jsonl) ;;
       *) allowed=0 ;;
     esac
   done <<< "$files"
   if [ "$allowed" -ne 1 ]; then
-    printf 'git-guard: refusing this commit -- the checkout is %s, where commits are restricted to documentation (docs/*.md).\n' "$(checkout_desc "$checkout_branch")" >&2
+    printf 'git-guard: refusing this commit -- the checkout is %s, where commits are restricted to documentation (docs/*.md) and the two judge verdict ledgers.\n' "$(checkout_desc "$checkout_branch")" >&2
+    printf 'The ledgers are these two paths and nothing else under coding-memory/:\n  coding-memory/observability-judge/verdicts.jsonl\n  coding-memory/compliance-judge/verdicts.jsonl\n' >&2
     printf '%s:\n%s\n' "$label" "$files" | sed 's/^/  /' >&2
     printf '%s\n' "$(remedy_line commit "$checkout_branch")" >&2
     exit 2
@@ -417,7 +469,66 @@ fi
 # all `printf ... >&2`), and correct whether or not it turns out redundant.
 scope_tab=$(printf '\t')
 scope_option=$(printf '%s\n' "$facts" | grep "^SCOPE_UNKNOWN${scope_tab}" | head -1 | cut -f2-)
+
+# --- Guard 3, quiet: `git-guard quiet` (docs/features/git-guard-quiet.md) ---
+# With a quiet flag for THIS session, a line made only of the shapes the card allows (read-only
+# lookups, `git add`, a plain feature-branch commit or `push <remote> HEAD`) passes without the
+# prompt below. This is the ONLY place quiet acts, it runs after every deny above, and it can only
+# turn the ask into an allow -- never into a deny, and never touching a decision made above.
+#
+# The decision is a CHILD PROCESS (lib/git_guard_quiet.py), not a sourced function: round 6
+# measured a sourced function aborting under `set -u` ending THIS hook at rc=1 with no decision,
+# which Claude Code treats as a non-blocking failure -- the command runs. Here a crashed, missing,
+# unreadable, slow or lying child is one more way to answer "no", and "no" is today's ask.
+# Allow means exit 0 with NOTHING on stdout: a `permissionDecision: allow` would also skip Claude
+# Code's own permission check for every non-git command on the line.
+#
+# The request is JSON built by "$py", never by string concatenation here, so a multi-line command
+# cannot pose as a fact line. Without a valid session_id and a flag file for it, none of this
+# runs and Guard 3 below is byte-for-byte what it was.
+QUIET_LIB="$(cd "$(dirname "$0")" && pwd)/lib/git_guard_quiet.py"
+QUIET_STATE_SUBPATH=".claude/hooks/state/git-guard-quiet"
+
+quiet_session_id() {
+  printf '%s' "$payload" | "$py" -c '
+import json, re, sys
+try:
+    session_id = json.load(sys.stdin).get("session_id")
+except (ValueError, AttributeError):
+    sys.exit(0)
+if isinstance(session_id, str) and re.fullmatch(r"[A-Za-z0-9-]{1,128}", session_id):
+    sys.stdout.write(session_id)
+' 2>/dev/null
+}
+
+quiet_request() {
+  printf '%s' "$payload" | "$py" -c '
+import json, sys
+payload = json.load(sys.stdin)
+print(json.dumps({
+    "command": payload["tool_input"]["command"],
+    "cwd": payload.get("cwd"),
+    "session_id": payload["session_id"],
+    "facts": [line for line in sys.argv[1].split("\n") if line],
+}))
+' "$facts" 2>/dev/null
+}
+
+# Returns 0 only when the quiet child exited 0 AND its whole stdout is exactly `allow`.
+quiet_allows() {
+  local session_id request answer
+  [ -n "${HOME:-}" ] || return 1
+  session_id=$(quiet_session_id) || return 1
+  [ -n "$session_id" ] || return 1
+  [ -f "$HOME/$QUIET_STATE_SUBPATH/$session_id" ] || return 1
+  [ -r "$QUIET_LIB" ] || return 1
+  request=$(quiet_request) || return 1
+  answer=$(printf '%s' "$request" | "$py" -I "$QUIET_LIB" 2>/dev/null) || return 1
+  [ "$answer" = "allow" ]
+}
+
 if [ -n "$scope_option" ]; then
+  quiet_allows && exit 0
   reason="This command carries $scope_option ahead of the subcommand, which git-guard cannot account for -- it may point git at a different repository or change how a pathspec is read. Confirm this is intended."
   printf 'git-guard: %s\n' "$reason" >&2
   "$py" -c '

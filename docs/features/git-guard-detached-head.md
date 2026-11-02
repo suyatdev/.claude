@@ -338,7 +338,7 @@ rebase_head_name() {
 | Path | Replacement text (exact) |
 |---|---|
 | Guard 2 refusal | `git-guard: refusing --force-with-lease -- the checkout is %s.` |
-| Guard 1 refusal | `git-guard: refusing this commit -- the checkout is %s, where commits are restricted to documentation (CODING_MEMORY.md, coding-memory/*, docs/*.md).` |
+| Guard 1 refusal | `git-guard: refusing this commit -- the checkout is %s, where commits are restricted to documentation (CODING_MEMORY.md, coding-memory/*, docs/*.md).` **SUPERSEDED — see the table at the end of this file.** |
 | Guard 1, empty index (`git-guard.sh:164`) | `git-guard: the checkout is %s, and nothing is staged -- so this commit is judged by the paths it names, and it names none that can be checked.` |
 
 **Every refusal ends with a remedy line, and the remedy is state-dependent.** A single unconditional
@@ -347,7 +347,7 @@ so the remedy is specified per state rather than left to the implementer:
 
 | Observed state | Remedy line for a **commit** refusal (exact) | Remedy line for a **push** refusal (exact) |
 |---|---|---|
-| branch `main`/`master`, no sequencer | `Create a feature branch instead (git switch -c <name>), or stage only documentation.` | `Push from a feature branch instead (git switch -c <name>).` |
+| branch `main`/`master`, no sequencer | `Create a feature branch instead (git switch -c <name>), or stage only documentation.` **SUPERSEDED — see the table at the end of this file.** | `Push from a feature branch instead (git switch -c <name>).` |
 | **plain detached HEAD, nothing in progress** | `Create a feature branch first: git switch -c <name>. Commits made here belong to no branch.` | `Create a feature branch first: git switch -c <name>, then push it.` |
 | branch `main`/`master`, sequencer marker present | `Finish the operation first (git rebase --continue, or git merge --continue); do not switch branches -- git will refuse.` | `Finish the operation first; do not switch branches -- git will refuse.` |
 | detached mid-rebase that will update `main`/`master` | `Let the rebase make this commit: git rebase --continue. Committing by hand here puts unreviewed work on <branch>.` | `Finish the rebase first: git rebase --continue.` |
@@ -864,3 +864,39 @@ The observability judge still gates the PR, and that gate is not waived.
 - **Open, deliberately, per ADR 0026:** `merge`/`cherry-pick`/`revert`/`am`/`rebase` still bypass the
   commit allowlist entirely (pre-existing, unrelated to this fix); the sequencer carve-out knowingly
   widens that gap slightly for a hand-written commit mid-conflict on a detached HEAD.
+
+---
+
+## Superseded quoted strings — appended 2026-09-17, nothing above this line edited
+
+This card quotes `hooks/git-guard.sh`'s refusal and remedy text as **exact** strings in three
+places. Two of them — 341 and 350 — are this card's own contract tables, and the text they pin has
+since been changed by later work. The third, 732, is **not** superseded: it is a record of a
+rendered-output check that was actually run at the time, and rewriting a past measurement to match
+a present one destroys the only evidence that the measurement happened. So one line here is
+history and two are stale contract, which is why the table below marks each one rather than
+treating all three alike.
+
+This note is appended rather than spliced in for the same reason anchors are named rather than
+numbered: **two** other cards carry **three** line-range citations into the second half of this
+file — `global-option-blindness.md` at its own 417 and 782, and `memsearch-freshness.md` at 1898 —
+and an insert above them would move every one. Verified after appending: lines 341 and 350 still
+land on the rows this table names. Rows 341 and 350 additionally carry an inline
+**SUPERSEDED** marker, so a reader who lands on either one is told here rather than having to
+reach the end of an 800-plus-line file to find out.
+
+| Line | Quoted as | Superseded by | Changed in |
+|---|---|---|---|
+| 341 | `...commits are restricted to documentation (CODING_MEMORY.md, coding-memory/*, docs/*.md).` | `...commits are restricted to documentation (docs/*.md) and the two judge verdict ledgers.`, followed by a second line naming both ledger paths in full | PR #59 narrowed it to `docs/*.md` alone; PR #104 re-added the two ledgers |
+| 350 | `Create a feature branch instead (git switch -c <name>), or stage only documentation.` | `Create a feature branch instead (git switch -c <name>), or stage only docs/*.md or a judge ledger.` | PR #104 |
+| 732 | same text as 341 and 350, inside an implementation log | — | not superseded: this one is a **historical record** of a rendered-output check run at that time, not a contract. It is correct as history and must not be rewritten |
+
+The live strings are in `hooks/git-guard.sh` — the `commit)` arm of `remedy_line()`, and the Guard 1
+refusal block. `hooks/git-guard.test.sh` pins the remedy string exactly, so that file, not this one,
+is what fails if the text drifts again.
+
+⚠️ **Why 350 changed.** PR #104 allowlisted two judge ledgers for commits on the default branch, so
+"stage only documentation" became advice that would fail. The first replacement drafted was
+"stage only one of the paths named above" — rejected on inspection, because the text printed
+immediately above the remedy line is the list of files the commit was *refused* for, so it read as
+"re-stage what was just rejected". The shipped wording is self-contained instead.

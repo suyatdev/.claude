@@ -1,0 +1,20 @@
+{
+  "pypi_requests": {"status": 200, "body": {
+    "info": {"name": "requests", "version": "2.32.3", "yanked": false, "yanked_reason": null,
+             "project_urls": {"Source": "https://github.com/psf/requests", "Homepage": "https://requests.readthedocs.io"}},
+    "urls": [
+      {"filename": "requests-2.32.3-py3-none-any.whl", "upload_time_iso_8601": "2024-05-29T15:37:49.000000Z"},
+      {"filename": "requests-2.32.3.tar.gz", "upload_time_iso_8601": "2024-05-29T15:37:47.123456Z"}
+    ],
+    "vulnerabilities": []
+  }},
+  "pypi_exists": {"status": 200, "body": {"info": {"name": "exists"}, "urls": []}},
+  "crates_serde_version": {"status": 200, "body": {"version": {"crate": "serde", "num": "1.0.210", "yanked": false, "created_at": "2024-09-06T17:52:06.317343+00:00"}}},
+  "crates_serde_crate": {"status": 200, "body": {"crate": {"id": "serde", "name": "serde", "repository": "https://github.com/serde-rs/serde"}, "versions": []}},
+  "crates_exists": {"status": 200, "body": {"crate": {"id": "exists", "name": "exists"}, "versions": []}},
+  "not_found": {"status": 404, "body": {"error": "Not found"}},
+  "brew_jq": {"formulae": [{"name": "jq", "full_name": "jq", "versions": {"stable": "1.7.1", "head": "HEAD", "bottle": true}}], "casks": []},
+  "osv_scanner_findings": {"results": [{"source": {"path": "package-lock.json", "type": "lockfile"},
+    "packages": [{"package": {"name": "zod", "version": "3.23.8", "ecosystem": "npm"},
+                  "vulnerabilities": [{"id": "GHSA-aaaa-bbbb-cccc", "summary": "made-up fixture advisory"}]}]}]}
+}

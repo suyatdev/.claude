@@ -175,6 +175,65 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# worktree-location-guard task 5: the fact READER. git-guard fixed this bug in
+# its own copy and recorded why; doc-guard kept the unquoted `for f in $facts`
+# form, which splits on bash's default IFS -- and that includes the TAB carrying
+# a path in `COMMIT_PATH<tab><path>`. The classifier now emits seven more
+# tab-bearing facts, so the exposure was about to widen; the reader was ported
+# BEFORE any of them shipped.
+#
+# doc-guard reads exactly two facts, COMMIT and COMMIT_ALL, so the discriminating
+# file name is one of those. Committing a file called COMMIT_ALL by pathspec used
+# to make the split hand back the token COMMIT_ALL, which switched the hook from
+# inspecting the (trivial) index to diffing HEAD -- where three unrelated dirty
+# source files were waiting. Behaviour, not the fact set: the fact set necessarily
+# grows, so asserting it is unchanged is impossible.
+# ---------------------------------------------------------------------------
+# reset_tree FIRST, and commit with a pathspec: a bare `git commit` here would
+# sweep the previous case's staged src/ files into HEAD, and every later case
+# would then stage a file identical to HEAD, produce an empty numstat and allow.
+reset_tree
+printf 'seed\n' > "$REPO/COMMIT_ALL"
+git -C "$REPO" add -- COMMIT_ALL
+git -C "$REPO" commit -qm 'add a file whose name is a fact token' -- COMMIT_ALL
+
+modify_unstaged src/f1.sh src/f2.sh src/f3.sh
+printf 'edited\n' > "$REPO/COMMIT_ALL"
+git -C "$REPO" add -- COMMIT_ALL
+run_case "a file NAMED COMMIT_ALL does not word-split into the fact -> allow" 0 \
+  'git commit -m msg -- COMMIT_ALL'
+
+# Control, so the row above cannot pass because the fixture was inert: the SAME
+# dirty tree with a real -am commit still blocks. If this ever allows, the case
+# above is proving nothing.
+modify_unstaged src/f1.sh src/f2.sh src/f3.sh
+run_case "  ...control: the same dirty tree with a real -am -> block"        2 'git commit -am msg'
+
+# The new facts must not disturb doc-guard at all. Each command below emits at
+# least one SEG_* fact the hook has never seen, and each must land exactly where
+# it landed before task 5.
+stage src/f1.sh src/f2.sh src/f3.sh
+run_case "SEG_CD rides along, commit still judged -> block"   2 'cd . && git commit -m msg'
+stage src/f1.sh src/f2.sh src/f3.sh docs/note.md
+run_case "SEG_CD rides along, docs satisfy it -> allow"       0 'cd . && git commit -m msg'
+stage src/f1.sh src/f2.sh src/f3.sh
+run_case "SEG_ENV rides along, commit still judged -> block"  2 'GIT_AUTHOR_NAME=x git commit -m msg'
+stage src/f1.sh src/f2.sh src/f3.sh
+run_case "SEG_OPAQUE rides along, no commit fact -> allow"    0 'timeout 5 git commit -m msg'
+
+# SEG_UNPARSED — this guard DELIBERATELY still allows, and that is a decision, not an
+# oversight. The observability judge (round 3, 2026-08-31) proposed making both this guard
+# and git-guard.sh refuse a command the lexer cannot read. git-guard.sh now does, because
+# its own header already commits it to failing closed when it cannot inspect a command.
+# This one says the opposite in two places -- "it fails OPEN (missing note) rather than
+# block legitimate work" -- and reversing a documented decision was not what the change was
+# for. The harm the judge found (an unreviewable commit reaching main, a force push) is
+# git-guard's to refuse and now is refused there; what stays open here is a missing
+# documentation note, which is exactly what this guard's policy says is not worth blocking
+# work over. Pinned so the choice is visible rather than merely absent.
+run_case "SEG_UNPARSED -> allow, deliberately (see git-guard)" 0 "git commit -m 'unbalanced"
+
+# ---------------------------------------------------------------------------
 printf '\ndoc-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
   "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }

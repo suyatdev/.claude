@@ -54,6 +54,7 @@ forward (branch → is it claimed?), never backward (write → which feature?).
 | No `docs/features/` at all | any | **allow**, silently — answers Q5 |
 | All files `review`, or `implementation` on other branches | any | **allow** |
 | A file is `implementation` with `branch: B` | `B` | **allow** |
+| A file is `review` with `branch: B` | `B` | **allow** — added by `docs/features/trim-safety-followups.md` (item B): a card at review is still that branch's open gate |
 | A file is `planning` *and un-superseded* | branch unclaimed (`main`, worktree, hotfix) | **deny** |
 | Feature A `implementation` on `bA`; feature B `planning` | `bA` | **allow** — B's planning must not revoke A's permission |
 | File reads `planning` here, but some branch has it at `implementation` **or `review`** | any | **allow** — superseded; its gate already opened (the narrowing) |
@@ -266,7 +267,10 @@ an existing one). Exit 0 = allow silently; exit 2 = deny with reason on stderr.
    branches) is not a failure: nothing supersedes, so every candidate survives to step 9.
 9. Read the current branch: `git rev-parse --abbrev-ref HEAD`. **Nonzero exit or empty output → ⊘.**
    Output is the literal `HEAD` (detached) → ⊘. Otherwise `claimed` = any working-tree feature file
-   with `phase: implementation` **and** `branch:` equal to that value. Claimed → ⊘.
+   with `phase: implementation` **or `review`** **and** `branch:` equal to that value. Claimed → ⊘.
+   *(`review` added by `docs/features/trim-safety-followups.md`, item B. The claim set is built in
+   step 7's parse loop; this sentence and the decision-table row above are the same rule stated
+   twice, so they move together.)*
 10. Otherwise **deny (exit 2)**.
 
 **Fail-closed only at step 10** — after a `planning` file is positively identified, confirmed

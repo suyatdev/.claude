@@ -1,6 +1,6 @@
 ---
 name: securing-agentic-systems
-description: Use when designing security for a system that runs autonomous agents — sandboxing agent-written code, supply-chain defence, agent identity and least privilege, gating tool calls through a policy server, human approval of high-stakes actions, and agent observability. Not for ordinary application security review of a diff (see /security-review).
+description: Use when designing security for a system that runs autonomous agents — sandboxing agent-written code, supply-chain defence, agent identity and least privilege, gating tool calls through a policy server, human approval of high-stakes actions, and agent observability. Also use the moment secret-command-guard blocks a Bash command, or a read of a credential-bearing file looks uncertain, to run the `secret-gate override` approval procedure before touching SECRET_EXEMPT. Not for ordinary application security review of a diff (see /security-review).
 ---
 
 # Securing Agentic Systems
@@ -56,6 +56,22 @@ Instrument a unified "vibe trajectory" trace — API calls, tool inputs and outp
 ## The Tool-Call Gate
 
 Every proposed tool call should pass a two-layer policy gate before it reaches an external system: fast deterministic structural rules first, then a semantic layer that inspects what the call actually contains. Structural rules answer "is this tool allowed"; they cannot answer "is *this specific use* of an allowed tool a violation." Full design, including output sanitization and placeholder resolution: `references/policy-server.md`.
+
+## Human Approval of a Secret-Bearing Read
+
+When `hooks/secret-command-guard.sh` refuses a command — or when a read is merely *uncertain*: an unfamiliar dotfile, a config the guard's pattern list does not name, a dump whose contents you have not seen — the bypass is not yours to issue. `SECRET_EXEMPT=<reason>` exists so a **human** can authorize one specific read. An agent that types it on its own has converted a guard into a formality, and the guard's own header says it is not a security boundary; self-issuing the hatch is what would make that true in the worst way.
+
+Procedure, in order:
+
+1. **Stop.** Do not re-run, do not narrow the command, and do not go looking for a shape the classifier happens to allow. A shape the guard misses is a gap in the guard, not permission — `docs/features/secret-command-guard.md` lists seven measured ones, and routing around the block through one of them is the same leak the guard was written for.
+2. **Report in plain English:** the exact command, the file it would read, why you want it, and what you expect it to contain.
+3. **Ask the user to inspect that file themselves** and confirm it is safe to surface. This step is the point of the gate — the user is the only party who can see the contents without the transcript seeing them too.
+4. **Wait for the literal phrase `secret-gate override`.** "yes", "go ahead", "it's fine", and a menu selection are not permission. Same rule as `gate confirmed`, for the same reason: a phrase the user must type cannot be produced by momentum.
+5. On that phrase, re-run **once** as `SECRET_EXEMPT=<reason> <command>`, with the reason naming the user's approval. The override covers **that one command** — not the file, not the session, not a later read of the same path.
+
+**A full-environment dump can never be approved this way.** `os.environ`, `process.env`, a bare `env`/`printenv` — there is nothing for the user to inspect in advance, so step 3 cannot be satisfied at all. Ask for the one specific value out of band instead.
+
+**The false-positive case is not an exception.** The env-dump check is a substring match over the raw command text, so prose mentioning `process.env` in a commit message or PR body trips it (measured 2026-08-29). That is still a block, and it still needs the phrase — but say plainly that it is a false positive, and prefer rewording the message over asking for an override.
 
 ## Where the Friction Goes
 

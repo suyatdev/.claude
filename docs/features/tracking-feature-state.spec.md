@@ -1152,6 +1152,55 @@ The canonical invocation pins pytest explicitly:
 uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q
 ```
 
+⚠️ **That command no longer runs.** Measured 2026-09-11 and again 2026-09-12: it exits
+`ERROR: file or directory not found: task-tracker/`, with no tests run.
+
+⚠️ **Superseded paths — read every `task-tracker/` in this file as `treko/`, and
+`skills/tracking-feature-state/` as `skills/treko/`.** A later card, `treko-rename.md` (PR #64,
+`abfb33c`), renamed the directory, the skill and the served page after this card had merged; it
+states that it deliberately does not edit this card, and this card's branch was gone by then, so
+nothing updated the prose. The `.md` half has carried this banner since `ea403ef` (PR #101) and
+this half did not — in the same commit that edited this file — which is why this note exists.
+
+⚠️ **The served page is a rename, not a substitution: `Task Tracker.dc.html` is now
+`Treko.dc.html`** (`adfdc96`, the same PR). The directory mapping alone does not resolve a path
+that names it — measured 2026-09-12, `grep -n 'x-dc' 'treko/Task Tracker.dc.html'` exits
+`No such file or directory` while `grep -n 'x-dc' 'treko/Treko.dc.html'` resolves. **Do not
+generalise the rename past that one file:** `Task Tracker Directions.dc.html` kept its name and
+only changed directory, so `treko/Task Tracker Directions.dc.html` is correct as written.
+
+**The old paths are left exactly as written, on purpose.** Each records what was true at the
+moment it was measured, and rewriting them in place would turn accurate history into a false
+present-tense claim. No count of them is pinned here, per this file's own rule against stored
+tallies — re-derive it with
+`grep -o -F 'task-tracker/' docs/features/tracking-feature-state.spec.md | wc -l`, which counts
+occurrences rather than lines and includes this banner's own mentions.
+
+⚠️ **This banner sits here, beside the one command it corrects, rather than at the top of the
+file where the `.md` half puts its own — so most of the stale paths appear above it.** That is a
+deliberate trade, not an oversight: inserting lines above `## Security` would shift the line
+anchors that `treko-branch-graph-traversal.md` (`:198`, cited twice) and `treko-degraded-no-cmux.md`
+(`:675`) point at. Measured 2026-09-12: `treko-degraded-no-cmux.md` is under active edit on
+`feat/treko-degraded-no-cmux`, 18 commits ahead of `origin/main` touching that file, so repairing
+its anchor from here would have collided. (An earlier draft of this note said "two other
+worktrees"; the second, `chore/treko-degraded-round8-verdict`, is parked and fully contained in
+`origin/main`.) Re-find both anchors before moving this block.
+
+**`pytest treko/ -q` is not the substitute.** That directory now also holds later,
+unrelated cards of the treko series, several of whose tests need a browser and a CDP connection,
+so an unscoped run reports failures belonging to other features. The equivalent is the scoped
+run over the five files this card owns:
+
+```
+uv run --with pytest==9.1.1 --no-project pytest treko/test_analyze.py treko/test_store.py \
+  treko/test_server.py treko/test_server_lifetime.py treko/test_ui_commands.py -q
+```
+
+Reported as **170 passed, rc=0** by four independent runs, each with a date and an owner rather
+than a contract: two on 2026-09-11 (the audit that found this gap, and the observability judge
+that re-ran it) and two on 2026-09-12 (that day's judge round at 116.03s, and the main session at
+115.63s). Re-run it rather than trusting it.
+
 `cmux` is a host binary, not a dependency this repo can pin in a manifest; the version above is what
 the contract in §"Injection route" was verified against, and a mismatch is the first thing to check
 if `send` behaves differently.
@@ -1534,6 +1583,41 @@ forbids editing a spec.
 
       Closes the remote fetches on the token-bearing page and is what makes criterion 8's offline path
       actually pass. The CSP added in task 8 is what keeps it closed.
+
+- [x] 15 — Fix `_parse_frontmatter`'s blindness to a YAML trailing comment, which makes this repo's
+      own closed-card convention unreadable to this feature's own analyzer. A frontmatter line is
+      split on the first `:` and the remainder kept verbatim, so `branch: none  # merged via PR …`
+      reads as a branch *named* that whole string, the `none` test misses, and the card raises a
+      false "Where is this branch?" question. Plain `branch: none` is unaffected — which is why
+      only *closed* cards misreport.
+
+      **Added to this half 2026-09-11, after the fact.** Tasks 15 and 16 were appended to the `.md`
+      half during the card's reopen and never mirrored here, so the pair diverged and
+      `hooks/feature-sync-guard.sh` blocked every commit touching it (exit 3, naming 15 and 16).
+      The full detail, the measurements and the closing notes live in the `.md` half and are **not**
+      restated here; this entry exists so the two task lists compare equal, which is the guard's
+      whole contract.
+
+      Two findings from that task are worth carrying in the spec half, because both outlived it.
+      The fix strips only a comment introduced by whitespace-then-`#`, never a bare `#`, so a branch
+      name legitimately carrying one survives — proved falsifiable separately, since a temporary
+      strip-on-any-`#` truncated `feat/issue#42` to `feat/issue`. And the analyzer's question count
+      moved **19 → 20, not 19 → 16**: removing three false questions let four real ones surface that
+      the defect had been masking, one of which is a second, distinct defect —
+      `_ask_about_readiness` gates on `not card.branch` and never on completeness, so it asks
+      whether a fully-complete card is "ready to start". That defect is **not fixed**, has no card
+      of its own, and exists only as a paragraph here and in the `.md` half.
+
+- [x] 16 — Close the card: frontmatter to this repo's merged convention, an observability-judge
+      verdict at `implementation` stage pinning the final HEAD, then the PR.
+
+      **Added to this half 2026-09-11, after the fact** — same reason as task 15 above, and the
+      closing evidence is recorded in the `.md` half rather than duplicated here.
+
+      One consequence belongs in the spec half rather than the checklist: closing this card to the
+      `branch: none  # merged via …` convention makes it another instance of the very frontmatter
+      spelling task 15 taught the analyzer to read. The fix and the closure are therefore coupled —
+      closing first would have re-introduced a false question about this card itself.
 
 
 ## Revision history

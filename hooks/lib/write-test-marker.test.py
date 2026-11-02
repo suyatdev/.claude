@@ -424,6 +424,210 @@ def check_named_orphans_still_orphans(mod, record):
                "want subject {!r} untracked, but git ls-files tracks it".format(subject_rel))
 
 
+# --- parts (item C of trim-safety-followups) --------------------------------------------------
+# A runner `<stem>.test.sh` may source a folder `<stem>.test.d/NN-*.sh`; the receipt must name
+# those parts or editing one slips past the commit gate. These cases are RED until task 5.
+PARTS_SOURCE = os.path.join(MARKER_ROOT, "hooks", "handoff", "lib", "test-parts.sh")
+
+# The `for` line that actually runs, e.g.:  for part in "$parts_dir"/[0-9][0-9]-*.sh; do
+# Anchored on the line BEGINNING with `for part in`, never on "the first line containing the
+# glob": the same glob also sits in a comment, and a first-match test would stay green while the
+# real loop drifted.
+PARTS_FOR_LINE_RE = re.compile(r'^\s*for part in "\$parts_dir"/(\S+?);\s*do\s*$')
+
+
+def _parts_fixture(runner_rel, part_files):
+    """Subject + runner + the given {name: content} files in the runner's `.test.d/` folder."""
+    stem = runner_rel[: -len(".test.sh")]
+    files = {runner_rel: "test body\n", stem + ".sh": "subject body\n"}
+    for name, content in part_files.items():
+        files[stem + ".test.d/" + name] = content
+    return files
+
+
+def _read_marker(marker):
+    with open(marker) as handle:
+        return json.load(handle)
+
+
+def check_parts_listed(mod, record):
+    """Assertion 1: parts = the folder's [0-9][0-9]-*.sh only, {path, blob}, ordered by path."""
+    runner_rel = "hooks/foo.test.sh"
+    folder = "hooks/foo.test.d/"
+    # written 20 before 10, and with non-matching neighbours: ordering must come from the path
+    # sort and exclusion from the glob, not from creation order or "everything in the folder"
+    part_files = {
+        "20-second.sh": "second part\n",
+        "10-first.sh": "first part\n",
+        "helper.sh": "not a part: no NN- prefix\n",
+        "README.sh": "not a part either\n",
+        "10-notes.txt": "not a part: wrong extension\n",
+        "1-short.sh": "not a part: one digit\n",
+    }
+    with _repo(_parts_fixture(runner_rel, part_files)) as root, _cd(root):
+        marker = mod.write_marker(_self(root, runner_rel))
+        if marker is None:
+            record(False, "parts: a runner with a parts folder", "want a marker, got None")
+            return
+        doc = _read_marker(marker)
+        want = [
+            {"path": folder + name, "blob": _git(root, "hash-object", "--", folder + name)}
+            for name in ("10-first.sh", "20-second.sh")
+        ]
+        got = doc.get("parts", "<key absent>")
+        record(got == want, "parts lists exactly the NN-*.sh files, ordered by path, as {path, blob}",
+               "want {!r}, got {!r}".format(want, got))
+        got_paths = [entry.get("path") for entry in got] if isinstance(got, list) else []
+        for excluded in ("helper.sh", "README.sh", "10-notes.txt", "1-short.sh"):
+            record(folder + excluded not in got_paths and isinstance(got, list),
+                   "parts excludes non-matching {}".format(excluded),
+                   "want {!r} absent from a parts list, got parts={!r}".format(folder + excluded, got))
+
+
+def check_parts_empty_folder(mod, record):
+    """Assertion 2: a folder that exists but holds no matching file writes `"parts": []`."""
+    runner_rel = "hooks/foo.test.sh"
+    # the folder must really exist in the index, so it holds a file -- just not a matching one
+    with _repo(_parts_fixture(runner_rel, {"helper.sh": "not a part\n"})) as root, _cd(root):
+        marker = mod.write_marker(_self(root, runner_rel))
+        if marker is None:
+            record(False, "parts: an empty parts folder", "want a marker, got None")
+            return
+        doc = _read_marker(marker)
+        got = doc.get("parts", "<key absent>")
+        record(got == [], "a folder with no matching file writes an empty parts list",
+               "want [], got {!r}".format(got))
+
+
+def check_parts_absent_without_folder(mod, record):
+    """Assertion 3: no `.test.d/` folder -> no `parts` key at all (absence, not an empty list)."""
+    runner_rel = "hooks/foo.test.sh"
+    with _repo(_parts_fixture(runner_rel, {})) as root, _cd(root):
+        marker = mod.write_marker(_self(root, runner_rel))
+        if marker is None:
+            record(False, "parts: a runner without a folder", "want a marker, got None")
+            return
+        doc = _read_marker(marker)
+        record("parts" not in doc, "a runner with no parts folder writes no parts key",
+               "want the key absent, got parts={!r}".format(doc.get("parts")))
+
+
+def check_parts_never_for_python_runner(mod, record):
+    """Assertion 4: a .test.py runner never gets `parts`, even beside a hand-made .test.d/."""
+    runner_rel = "hooks/foo.test.py"
+    files = {
+        runner_rel: "test body\n",
+        "hooks/foo.py": "subject body\n",
+        "hooks/foo.test.d/10-first.sh": "a part nothing sources\n",
+    }
+    with _repo(files) as root, _cd(root):
+        marker = mod.write_marker(_self(root, runner_rel))
+        if marker is None:
+            record(False, "parts: a .test.py runner", "want a marker, got None")
+            return
+        doc = _read_marker(marker)
+        record("parts" not in doc, "a .test.py runner never gets a parts key",
+               "want the key absent, got parts={!r}".format(doc.get("parts")))
+
+
+def check_parts_glob_matches_runner(mod, record):
+    """Assertion 5: PARTS_GLOB equals the glob in the `for` loop test-parts.sh actually runs.
+
+    PARTS_GLOB is read with getattr so a missing constant fails THIS assertion instead of
+    erroring the whole suite. The `for` line is located by its shape and must be unique.
+    """
+    with open(PARTS_SOURCE) as handle:
+        lines = handle.read().splitlines()
+    loops = [(number, PARTS_FOR_LINE_RE.match(line)) for number, line in enumerate(lines, 1)
+             if line.lstrip().startswith("for part in")]
+    parsed = [(number, match.group(1)) for number, match in loops if match]
+    record(len(loops) == 1 and len(parsed) == 1,
+           "test-parts.sh has exactly one parseable `for part in` loop",
+           "want 1 loop line matching {!r}, found {} loop line(s), {} parseable".format(
+               PARTS_FOR_LINE_RE.pattern, len(loops), len(parsed)))
+    if len(parsed) != 1:
+        return
+    _, runner_glob = parsed[0]
+    got = getattr(mod, "PARTS_GLOB", None)
+    record(got == runner_glob, "PARTS_GLOB equals the glob in test-parts.sh's `for part in` loop",
+           "want {!r} (the loop's glob), got PARTS_GLOB={!r}".format(runner_glob, got))
+
+
+# --- parts: the differential check (task 9b) --------------------------------------------------
+# The writer and the decider derive `<stem>.test.d/` through the same `parts_folder_for`, so a
+# wrong derivation makes them agree on "no parts" and both suites stay green. The oracle neither
+# produces is the literal N each real runner hand-maintains in `source_test_parts "<dir>" N`.
+#
+# This calls build_marker, NEVER write_marker: write_marker persists, and persisting against the
+# live checkout would stamp genuine-looking receipts for suites that never ran. It neither reads
+# nor writes hooks/state/.
+#
+# Not caught, by design: a derivation resolving to a DIFFERENT folder of the same size passes
+# (the counts are 4, 5, 4, 5), and only the writer's derivation is exercised -- the decider's is
+# covered by decide-commit-gate.test.py's fixtures.
+EXPECTED_SPLIT_RUNNERS = 4  # asserted, so a discovery bug finding none cannot pass vacuously
+
+# A runner declares its own parts folder: a line that STARTS with the helper call and a quoted
+# folder ending .test.d. test-parts.test.sh's `source_test_parts "$2" "$3"` is a test of the
+# helper, not a declaration, so its folder argument does not match.
+STP_DECLARATION_RE = re.compile(r'^\s*source_test_parts\s+"[^"]*\.test\.d"(.*)$')
+STP_LITERAL_COUNT_RE = re.compile(r'^\s+([0-9]+)\s*(?:#.*)?$')
+
+
+def _split_runners(root):
+    """Tracked `*.test.sh` runners that have a parts folder or declare one, sorted.
+
+    Two independent signals, unioned, so a runner that stops passing a literal count is still
+    found (by its folder) and fails loudly instead of dropping out of the comparison.
+    """
+    tracked = subprocess.run(
+        ["git", "-C", root, "ls-files", "--", "*.test.sh", "*.test.d/*"],
+        capture_output=True, text=True, check=True,
+    ).stdout.splitlines()
+    runners = set()
+    for rel in tracked:
+        if rel.endswith(".test.sh"):
+            with open(os.path.join(root, rel)) as handle:
+                if any(STP_DECLARATION_RE.match(line) for line in handle):
+                    runners.add(rel)
+        elif ".test.d/" in rel:
+            runners.add(rel.split(".test.d/")[0] + ".test.sh")
+    return sorted(runners)
+
+
+def _declared_count(root, runner_rel):
+    """(count, problem): the literal N the runner passes to source_test_parts, or a problem."""
+    with open(os.path.join(root, runner_rel)) as handle:
+        declared = [STP_DECLARATION_RE.match(line) for line in handle]
+    declared = [match for match in declared if match]
+    if len(declared) != 1:
+        return None, "want exactly 1 source_test_parts declaration of a .test.d folder, found {}".format(
+            len(declared))
+    count = STP_LITERAL_COUNT_RE.match(declared[0].group(1))
+    if not count:
+        return None, "the count is not a literal integer: {!r}".format(declared[0].group(0).strip())
+    return int(count.group(1)), None
+
+
+def check_parts_count_matches_runner_literal(mod, record):
+    """Assertion 6: build_marker's parts count equals the N each real runner passes."""
+    root = _real_repo_root()
+    runners = _split_runners(root)
+    record(len(runners) == EXPECTED_SPLIT_RUNNERS,
+           "found exactly {} split runners to compare".format(EXPECTED_SPLIT_RUNNERS),
+           "want {} runners, found {}: {!r}".format(EXPECTED_SPLIT_RUNNERS, len(runners), runners))
+    for runner_rel in runners:
+        want, problem = _declared_count(root, runner_rel)
+        if problem:
+            record(False, "parts count readable from {}".format(runner_rel),
+                   "{}: {}".format(runner_rel, problem))
+            continue
+        got = len(mod.build_marker(root, runner_rel).get("parts", []))
+        record(got == want, "build_marker parts count matches {}'s source_test_parts N".format(runner_rel),
+               "{}: source_test_parts passes {}, build_marker listed {} part(s)".format(
+                   runner_rel, want, got))
+
+
 CHECKS = [
     check_derivation,
     check_encoding,
@@ -435,6 +639,12 @@ CHECKS = [
     check_failure_exits,
     check_all_pairs_wired,
     check_named_orphans_still_orphans,
+    check_parts_listed,
+    check_parts_empty_folder,
+    check_parts_absent_without_folder,
+    check_parts_never_for_python_runner,
+    check_parts_glob_matches_runner,
+    check_parts_count_matches_runner_literal,
 ]
 
 

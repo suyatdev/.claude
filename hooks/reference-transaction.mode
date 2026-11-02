@@ -1,0 +1,36 @@
+# reference-transaction.mode — layer 2's arming switch.
+#
+# One value: `log` or `deny`. Blank lines and `#` lines are skipped, surrounding
+# whitespace is trimmed, and the first remaining line decides. Anything else is a
+# refusal, not a default: a mistyped switch is a failed attempt to arm the guard,
+# not permission to run unguarded.
+#
+#   log   every refusal is downgraded to an allow and recorded as WOULD-DENY in
+#         hooks/state/reference-transaction.log. This is the ship state.
+#   deny  a refusal exits non-zero at `prepared`, which git reports as rc=128
+#         with the ref unmoved.
+#
+# WHY A FILE AND NOT settings.json's env.WORKTREE_GUARD_MODE, which is where
+# layer 1's switch lives. Layer 2 runs as a child of `git`, not of the hook
+# process. Task 6c measured that an inherited variable does survive the
+# `git` -> hook hop — but whether a settings.json `env:` entry reaches the Bash
+# tool process in the first place is task 8's question and is unmeasured today.
+# A layer 2 that depended on it would arm in `deny` on day one, in every
+# repository on this machine, while layer 1 was still in `log`.
+#
+# The file is TRACKED, like settings.json and for the same reason: arming a
+# machine-wide refusal must be a reviewable diff. Note what is NOT tracked and
+# cannot be — the `git config --global core.hooksPath` write that arms layer 2 at
+# all lives outside the repo. What stands in for it is DETECTION: layer 1's
+# liveness check runs on every relevant tool call and reports an unarmed layer 2.
+#
+# Flipping this to `deny` is task 10, in its own deliberate commit, and only
+# after that task's three criteria are met. Do not flip it as a side effect of
+# anything else.
+#
+# hooks/install-layer2.sh refuses to arm while this says `log` unless it is told
+# otherwise with --arm-in-log-mode: arming replaces .git/hooks in every
+# repository on the machine, and paying that cost for a guard that enforces
+# nothing should be a thing you asked for.
+
+log

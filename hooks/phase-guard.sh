@@ -291,6 +291,20 @@ esac
 # skill file unwritable repo-wide, so maintaining the rule surface was blocked by
 # work it had nothing to do with. Scoped to the directories for the same reason
 # projects/*/memory/* is: a file merely named rules.sh is source, and stays guarded.
+#
+# A markdown file in the repository's top-level directory -- such as CLAUDE.md, README.md,
+# AGENTS.md -- is documentation, never implementation code: the project's front page,
+# agent instructions, a port registry, a brainstorm. It is exempt outright, not judged
+# at all. Scoped to the top level only, not *.md anywhere, for the same reason rules/*
+# and projects/*/memory/* above are scoped to directories rather than an extension:
+# nested markdown such as agents/*.md can be a feature's own deliverable and stays
+# guarded. Two arms rather than one glob, because in a case pattern * also matches /, so
+# a single [!/]*.md would also match a nested path like a/b.md.
+case "$rel" in
+  */*) ;;            # nested: judged by the directory rules below
+  *.md) exit 0 ;;    # top-level markdown: documentation, never implementation code
+esac
+
 case "$rel" in
   CODING_MEMORY.md|coding-memory/*|docs/*|.claude/*|settings.json) exit 0 ;;
   projects/*/memory/*) exit 0 ;;
@@ -392,7 +406,10 @@ for f in "$root"/docs/features/*.md; do
   file_branch=${parsed_fm#*"$TAB"}
   # Collected in THIS loop, from THIS parse, so a claim can only come from a file the contract
   # accepted. Step 9 checks membership rather than re-reading anything off disk.
-  if [ "$file_phase" = "implementation" ] && [ -n "$file_branch" ]; then
+  # `review` claims as well as `implementation`, for step 8's reason read the other way round: a
+  # card at review is still that branch's open gate, so the branch it names stays authorized
+  # while its findings are fixed. Added by docs/features/trim-safety-followups.md (item B).
+  if { [ "$file_phase" = "implementation" ] || [ "$file_phase" = "review" ]; } && [ -n "$file_branch" ]; then
     claimed_branches="$claimed_branches$file_branch
 "
   fi

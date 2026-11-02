@@ -21,6 +21,7 @@ These skills load on demand, not on every turn. Read the one whose trigger match
 - `designing-agentic-architecture` — single-agent-with-skills vs. multi-agent, splitting a monolith, orchestrator routing, DAG workflows.
 - `integrating-mcp` — connecting to or building an MCP server: transports, trust tiers, scoping, debugging.
 - `securing-agentic-systems` — sandboxing, supply chain, agent identity, tool-call policy gating, agent observability.
+- `vetting-dependencies` — before any package install, dependency-file edit, or import of an uninstalled package: running the vetter, relaying its report with a ✅/⚠️/⛔ call, spelling/provenance/scanner-list checks.
 - `designing-agent-interop` — A2A (Agent Cards, registries, monetization) and A2UI (generative UI).
 - `designing-agent-commerce` — UCP ordering and AP2 payment mandates for agents that transact.
 - `evaluating-agents-and-skills` — whether an agent, skill, or AI output is actually good enough to ship.

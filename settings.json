@@ -2,6 +2,10 @@
   "permissions": {
     "defaultMode": "default"
   },
+  "env": {
+    "WORKTREE_GUARD_MODE": "log",
+    "HANDOFF_PANE_MODE": "off"
+  },
   "model": "opus[1m]",
   "hooks": {
     "PreToolUse": [
@@ -31,6 +35,22 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/test-marker-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/worktree-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/secret-command-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/dependency-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/hook-exec-pr-guard.sh"
           }
         ]
       },
@@ -49,6 +69,18 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/phase-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/worktree-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/scan-secrets.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/dependency-guard.sh"
           }
         ]
       },
@@ -59,6 +91,26 @@
             "type": "command",
             "command": "if [ -f \"$HOME/.orca/agent-hooks/claude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/claude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/claude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/claude-hook.sh\"; else cat >/dev/null 2>&1 || :; fi",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/create-worktree.sh"
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/create-worktree.sh"
           }
         ]
       }
@@ -120,6 +172,14 @@
             "command": "$HOME/.claude/hooks/handoff/live-handoff.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/git-quiet-toggle.sh"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -129,6 +189,10 @@
             "type": "command",
             "command": "if [ -f \"$HOME/.orca/agent-hooks/claude-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/claude-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/claude-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/claude-hook.sh\"; else cat >/dev/null 2>&1 || :; fi",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/handoff/handoff-keep-guard.sh"
           }
         ]
       }
