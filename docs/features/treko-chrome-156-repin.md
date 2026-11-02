@@ -228,7 +228,7 @@ with the approved plan's step numbers 6-11.
       attempt). If it did, re-point it at a counted element and re-run, recording both attempts.
       If a correctly targeted fault is still not caught by its named test, **stop and ask the
       user**: that means a check is blind on 156, which is outside a re-pin's scope to fix.
-- [ ] 5 — **Old-card bookkeeping (plan step 10). Docs only.** Change card A `:800` and card D
+- [x] 5 — **Old-card bookkeeping (plan step 10). Docs only.** Change card A `:800` and card D
       `:867` to `156.0.8078.79`. Cite `cdp_harness.PINNED_VERSION` instead of a line number, and
       add a dated pointer to this card. Leave the historical mentions alone: ADR 0037 `:15` and
       `:130`; card A `:803` and `:1841`; card D `:114`, `:721` and `:1028`;
