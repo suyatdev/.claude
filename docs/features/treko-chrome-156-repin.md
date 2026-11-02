@@ -200,7 +200,7 @@ with the approved plan's step numbers 6-11.
 - [ ] 3 — **Comment figures (plan step 8). Only if they moved, and they did not:** 902 / 851 / 368
       on 156 (step 4). Had they moved, this would be a separate, comment-only commit to
       `test_theme.py:324`/`:377`.
-- [ ] 4 — **Prove the suite can fail (plan step 9).** Scratch only, no tracked edits.
+- [x] 4 — **Prove the suite can fail (plan step 9).** Scratch only, no tracked edits.
       - a. Move the pin back to `152.0.7977.65` in-process. Chrome must not start, and
         `pgrep -fl "Google Chrome.*remote-debugging"` must find nothing.
       - b. On one captured walk, call each `tnc` test body with one value changed. The expected
@@ -501,6 +501,58 @@ files reported **64 passed in 29.36s** on `156.0.8078.79`, with the version unch
 run. That includes all 9 `test_drawer.py` tests (risk 4). The same files without the plugin gave
 the step-3 result above, so the override is what turned them green. This forecasts task 1; it is
 not task 1's receipt.
+
+### Task 4: the suite can still fail on 156 (2026-11-01, HEAD `6d0bd2a`)
+
+All scratch, no tracked edits: `git status --short` was empty after each part. Every Chrome run was
+bracketed by `--version` = `Google Chrome 156.0.8078.79`, with `TREKO_CHROME_DENY_BIRD=1`. **Result: no
+miss.** Every case was caught by the test the card names for it; none was caught only by another.
+
+**4a, old pin (run in the main session).** `cdp_harness.PINNED_VERSION` was set to `152.0.7977.65` in
+memory and `Chrome(...)` constructed. It raised `AssertionError` starting `Chrome version mismatch`,
+naming the old pin. `pgrep -fl "Google Chrome.*remote-debugging"` read empty before and after. **1 of 1.**
+
+**4b, single-value perturbations (helper, one captured walk per theme).** The helper's scripts
+changed one stored value at a time in memory and called the `test_nontext_contrast.py` bodies
+directly. A diff of all stored values confirmed each case changed exactly one. The captured walks
+reproduced step 4's hashes (dark `416a6108…`, light `6e73f9b9…`). Control: 16 of 16 bodies pass.
+
+| cases | n | expected catcher | met |
+|---|---|---|---|
+| scored total ±1 (dark, light) | 4 | `test_scored_mark_count_is_exact` | 4 of 4 |
+| exclusion count ±1 (3 constants, each shared by both themes) | 6 | `test_enumerated_exclusions_are_at_their_recorded_counts` | 6 of 6 |
+| per-entry mark count ±1 (all 46 recorded counts) | 92 | `test_every_entry_sits_at_its_recorded_mark_count`; the delta table named the perturbed token, parsed exactly | 92 of 92 |
+| colour string altered (all 47: 37 `rgb()`, 9 `rgba()`, 1 `color(srgb …)`) | 47 | `test_every_scored_key_maps_to_exactly_one_entry` | 47 of 47 |
+| DEBT ratio ±0.0006 (6 ratios) | 12 | `test_debt_tokens_sit_at_their_recorded_ratio` fails | 12 of 12 |
+| DEBT ratio ±0.0004 (6 ratios) | 12 | the same test passes | 12 of 12 |
+| PIN floor 4.63 on `--color-accent` (light is 4.6292) | 1 | `test_pin_tokens_clear_their_floor` | 1 of 1 |
+| PIN floor = each token's lowest minimum + 0.0001 | 6 | the same test | 6 of 6 |
+| **total** | **180** | | **180 of 180** |
+
+Other tests failed alongside the named one in some colour cases (the entry-count test in all 47, the
+PIN test in the 12 PIN colours, the DEBT test in the 6 DEBT colours). Never instead of it. The helper
+also showed its scoring can report a miss: a prefix-collision check (`--color-accent` inside
+`--color-accent-300`) and two deliberately wrong expectations all scored "not caught".
+
+**4c, card D's planted faults (helper, private copy of `treko/`).** Control in the copy: 16 passed.
+Fault values are the helper's choice; card D does not record them.
+
+| fault | change | target counted on 156? | named catcher | tests that failed | met |
+|---|---|---|---|---|---|
+| 3 | dark `--color-surface` `#1c1e2b` to `#222433` (and its allowlist entry) | 14 surface fills; all 35 `--color-neutral-700` and 22 `--color-neutral-800` marks sit over it | `test_debt_tokens_sit_at_their_recorded_ratio` (dark) | only that, dark: 2 debts moved (neutral-700 2.5253 to 2.344, neutral-800 1.6519 to 1.5333). 1 failed, 15 passed | yes (light overrides the surface) |
+| 5 | sticky header's `border-bottom` deleted (`Treko.dc.html:102`) | a `border-bottom` mark on the sticky element, both themes | `test_every_entry_sits_at_its_recorded_mark_count` (`--hair` 42 to 41) | that, plus `test_scored_mark_count_is_exact` (333 / 346). 4 failed, 12 passed | yes, both themes |
+| 9 | dark `--rail` set to a `color(display-p3 …)` value | a `rgb(18, 19, 30)` fill on the 236px expanded sidebar | `test_no_colour_parse_failures` (dark) | that (6 strings), plus coverage (`--rail` matched 0 marks), entry count and total 333, all dark. 4 failed, 12 passed | yes (light overrides `--rail`) |
+| 12 | a 4x4 `#ff00ff` span inside the progress-bar gradient (`:131`) | the gradient element is in the walk's gradient list, both themes | `test_enumerated_exclusions_are_at_their_recorded_counts` (over-image count) | only that, both themes (over-image 1 vs 0). 2 failed, 14 passed | yes, both themes |
+
+**4 of 4 faults caught by the named test; no fault needed re-pointing.** I read each run's tally line
+and failed-test list in the raw pytest output myself, and they match the table.
+
+**Not checked.** (a) A same-colour reformat such as a space-separated `rgb()`, the realistic way a
+future Chrome could break these tests silently; `test_theme.py`'s comma-splitting reader is blind to
+that by design (see §Inventory). (b) A colour change that collides with another entry's colour.
+(c) An exact-boundary DEBT nudge of ±0.0005. (d) 9 of card D's 13 planted faults. (e) Any repeat run;
+each fault ran once. (f) The 4b figures are the helper's, checked by me only against the last line of
+its `summary.txt` (`180 of 180 met`), not re-run.
 
 ### Corrections made while verifying the plan's inventory
 
