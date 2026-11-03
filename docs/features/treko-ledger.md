@@ -152,6 +152,9 @@ Delete keeps the prototype's confirm dialog and wording: the run leaves the Ledg
 **D8 — The Artifacts path box.** (inherited) `treko-store-location.md:84-86` deferred "an `Artifacts
 path · where snapshots are written` field, placeholder `~/.treko/runs` — placeholder text, not the
 default" to this card. It is built as specified there.
+**Decided (user, 2026-11-02):** the box shows the real store directory as read-only text, with no
+Save. A working Save needs its own safety design first (`treko-store-location.md:104-107`) and is
+not in this card.
 
 **D9 — The run page has room for what comes next.** (my call) Card 5's fact 1 records that the board is
 already wired for PR fields and only the producer is missing. This card adds no new board fields; it
@@ -241,6 +244,14 @@ absent until its own design exists). Settled as (my call), not yet played back t
   of re-surveying the repo Treko was launched from (`server.py:601-603`).
 - **After a server restart**, waiting items start on their own, since D4 removed the per-item
   Analyze click. An item that was interrupted mid-run waits for a Retry.
+
+**Played back 2026-11-02:** the user accepted all six as written ("All six are fine"), and answered
+D8 (read-only, above). ⚠️ **Correction, found after his answer (my call, to be told to him):** the
+first bullet says `analyze.py` stays unchanged, but the D6 bullet needs the analyzer to report each
+stage as it finishes, which it cannot do unchanged. Resolution: `analyze.py` gains one small optional
+progress report and nothing else. Its emitted `run` object and its behaviour without that option stay
+exactly as today. Card 5 cites `analyze.py` by line number and is still in planning, so those
+citations must be re-checked when card 5 resumes.
 
 ## Spec
 
