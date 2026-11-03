@@ -17,6 +17,10 @@ versions), the compliance judge, the user's review, and then the task checklist.
 §Spec or §Tasks has been written yet.** They are placeholders, not omissions to infer from.
 **Update 2026-11-02:** the builder check is done (see §Builder check results); D8 is still his to
 answer, and the (my call) items listed there still need playing back to him.
+**Update 2026-11-03:** D8 and the playback are done. The spec is now written, in
+`treko-ledger.spec.md` (the user accepted its going over ADR 0017's 800-line cap), and its
+open questions are answered in that file. **§Tasks is still unwritten.** Next: the compliance judge,
+then his review, then the checklist.
 
 Every decision below is tagged **(user)** when he decided it in the brainstorm, or **(my call)** when
 the planning session settled it and he has not yet seen it written down. A builder must not promote a
