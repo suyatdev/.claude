@@ -2,8 +2,8 @@
 
 `docs/features/treko-degraded-no-cmux.md` §D1 is authoritative; the four reason tokens and the
 exception's shape below are transcribed from that section's yaml block rather than read back out
-of an implementation, because `treko/channel.py` does not exist yet — these tests define what
-"done" means for task 3, not confirm it.
+of an implementation, because they were written before `treko/channel.py` existed (task 3
+implemented it) — these tests defined what "done" meant, rather than confirming it.
 
 Covers checklist task 2: each of the four reason tokens is raised by driving the *real* failure
 path, and the reason set is closed.
@@ -11,10 +11,10 @@ path, and the reason set is closed.
 Task 4 (§D2) adds the other half, below the second banner: each of those four conditions now
 *serves* instead of aborting, the served page's `tracker-channel` meta carries that condition's
 own token, `config["surface"] is None`, and -- the anti-regression half -- criterion 9's fatal
-conditions still exit 2 and still refuse a connection. Those tests are red until task 5 wires
+conditions still exit 2 and still refuse a connection. Those tests were red until task 5 wired
 `main()`'s `except SurfaceUnavailable`, `build_config`'s seventh parameter and the banner
-variant; the criterion-9 five are the exception and pass today, because they lock behaviour
-this card must *not* change.
+variant; the criterion-9 five are the exception and passed even before task 5, because they
+lock behaviour this card must *not* change.
 
 Task 14 (criterion 17) lives at the bottom: the two lifetime clauses `test_server_lifetime.py`
 asserts for a healthy server -- parent death and idle shutdown -- re-run against a degraded one.
@@ -36,10 +36,11 @@ path for *every* test, so no test in this file can reach a real `cmux` on the de
 — including the `surface_unset` cases, which must fail before any subprocess is spawned at all.
 
 **The human messages are asserted verbatim.** D1 pins them as "unchanged from today, verbatim —
-it still goes to stderr", so today's `server.py:214-233` is the authority for the four strings
-below rather than a thing they are merely compared against. D2 writes the exception with
-`"server: %s\n" % exc`, so `str(exc)` carrying the message is part of the contract, not an
-incidental of how `StartupAbort` was constructed.
+it still goes to stderr", so the four `raise SurfaceUnavailable(...)` messages at
+`channel.py:73-94` (moved there from `server.py`'s `bind_surface` at task 3) are the authority
+for the four strings below rather than a thing they are merely compared against. D2 writes the
+exception with `"server: %s\n" % exc`, so `str(exc)` carrying the message is part of the
+contract, not an incidental of how `StartupAbort` was constructed.
 """
 
 import enum
@@ -451,7 +452,7 @@ def test_a_corrupt_legacy_store_aborts_before_serving(launcher, tree, tmp_path):
     default -- `TREKO_STORE_DIR` pointing at the tree itself, where `store_path` and
     `legacy_path` are the same existing file -- short-circuits to "already present" and
     never reads the legacy bytes. So: corrupt the legacy file the server actually names
-    (`SERVE_ROOT / FIRST_RUN_OPTIONAL`, i.e. the tree's own copy -- `server.py:707-708`),
+    (`SERVE_ROOT / FIRST_RUN_OPTIONAL`, i.e. the tree's own copy -- `server.py:725-726`),
     and point the store at a directory where `store_path` does not exist yet.
     """
     (tree / server.FIRST_RUN_OPTIONAL).write_text("window.NOT_TRACKER_DATA = 1;\n")

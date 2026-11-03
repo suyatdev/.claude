@@ -1,12 +1,12 @@
 ---
 phase: review
 model_tier: high
-branch: feat/treko-degraded-no-cmux
+branch: chore/treko-degraded-followups
 ---
 
 # Treko: serve a degraded, no-control-channel board instead of refusing to start
 
-**Status as of 2026-11-02 (supersedes the planning-era notes that follow, which are kept as history):** phase `review`, branch `feat/treko-degraded-no-cmux`, tasks 1-14 done, task 15 (judge + PR) in progress; the ADR landed as **0055**, not the 0038 named below, and the "no branch" / `phase: planning` / checkpoint-2 statements below are no longer true. Planned 2026-08-23 on `main` @ `984e7ac`, after PR #68 (card `treko-store-location`) merged. The
+**Follow-up, 2026-11-02:** PR #126 (branch `feat/treko-degraded-no-cmux`, head `dec3ad4`) merged before task 15's last text-only fixes landed, so the frontmatter `branch:` now names `chore/treko-degraded-followups`, which carries those fixes and the task-15 tick; the original branch is recorded here so the change of value loses nothing. Task 15 is now done (ticked below: judged twice, PR #126 merged, follow-up PR #127), so the next note's "task 15 (judge + PR) in progress" is history. **Status as of 2026-11-02 (supersedes the planning-era notes that follow, which are kept as history):** phase `review`, branch `feat/treko-degraded-no-cmux`, tasks 1-14 done, task 15 (judge + PR) in progress; the ADR landed as **0055**, not the 0038 named below, and the "no branch" / `phase: planning` / checkpoint-2 statements below are no longer true. Planned 2026-08-23 on `main` @ `984e7ac`, after PR #68 (card `treko-store-location`) merged. The
 work was **deferred from card 1** and the deferral is recorded in the tree itself: the test that
 pins today's refusal says in its own docstring that §Deferred proposes changing it.
 
@@ -1687,7 +1687,12 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       inactivity — the same two assertions `test_server_lifetime.py` already makes for a healthy
       server (`:157`, `:195`), run again against a degraded one. Never `nohup`/`setsid`/`&` the
       server under test, for the same reason as task 13.
-- [ ] 15. Observability judge, then the PR.
+- [x] 15. Observability judge, then the PR.
+      Done 2026-11-02: observability judge round 1, then round 2 (round 2: risk low, confidence
+      high, 0 failures); PR **#126** merged at head `dec3ad4` (merge commit `be2ab16`). The
+      text-only items (a)-(d) listed below are made afterwards on branch
+      `chore/treko-degraded-followups`, together with a refresh of `test_degraded.py`'s opening
+      docstring, which still described the red phase.
       Round 1 (2026-11-02, Opus 5.5 xhigh, head `ec7bd26`): risk medium, confidence high, no
       dimension failed. Fixed after it, with the user's OK: the `test_degraded.py` no-subprocess
       assertion could print the full child environment on failure (`69e2139`); two imports D6
@@ -1716,10 +1721,17 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
   wraps only `bind_surface()`, whose own raises are all `SurfaceUnavailable`, so changing the
   handler to `except StartupAbort` alone changes nothing (measured 2026-11-02 by mutation in a
   scratch copy: no test red). The real slip is widening the `try` over the other startup checks.
-  Measured: that alone crashed every degraded launch (13 tests red); widened *and* catching
-  `StartupAbort`, it also served a corrupt legacy store instead of refusing it, caught by one of
-  criterion 9's nine cases. The other eight stayed green under that mutation, and why was not
-  measured, so the degraded-launch tests are as much a part of the guard as criterion 9.
+  Measured: that alone crashed every degraded launch (13 tests red). Widened *and* catching
+  `StartupAbort` with the handler body unchanged, it crashes too: `exc.reason.value` raises
+  `AttributeError`, the server exits 1 and serves nothing, and all nine of criterion 9's cases
+  stay green. It served a corrupt legacy store only when the handler was *also* changed to
+  tolerate an abort with no `.reason` (a `getattr` fallback); with both edits one of the nine
+  cases went red (the server never exited) and the other eight stayed green. Re-measured
+  2026-11-02 in a scratch copy: six of the nine abort outside the widened `try` and exit 2 —
+  five before it, and the second-server case at the port bind after it; the
+  store-directory-is-a-file, unwritable-store and corrupt-legacy cases exit 1, which
+  `assert_aborted` accepts because it checks `code != 0`, not `== 2`. So the degraded-launch
+  tests are as much a part of the guard as criterion 9.
   Criterion 9's nine cases are the guard, and they must be seen failing before D2 is written.
   (Not recorded at task 4, whose commits say they pass by design; the 2026-11-02 mutation above
   is the first recorded evidence that one of them can fail.)

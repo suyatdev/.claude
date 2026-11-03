@@ -98,9 +98,18 @@ so `.value` is required at every boundary rather than correct by accident.
   call, `bind_surface()`, whose own raises are all `SurfaceUnavailable` (`treko/channel.py`) — not
   on the handler's type. Measured 2026-11-02 in scratch copies: changing the handler to
   `except StartupAbort` turned no test red; widening the `try` over the other startup checks
-  crashed every degraded launch (13 tests red); widening it *and* catching `StartupAbort` also
-  served a corrupt legacy store instead of refusing it, which one of the card's nine criterion-9
-  cases caught. Those nine cases and the degraded-launch tests together are the guard.
+  crashed every degraded launch (13 tests red). Widening it *and* catching `StartupAbort`, with
+  the handler body unchanged, crashes too: the handler's own `exc.reason.value` raises
+  `AttributeError` (a plain `StartupAbort` has no `.reason`), the server exits 1 with a
+  traceback and serves nothing, and all nine of the card's criterion-9 cases stay green
+  (re-measured 2026-11-02 in a scratch copy: six of the nine abort outside the widened `try` and
+  exit 2 — five before it, and the second-server case at the port bind after it; the
+  store-directory-is-a-file, unwritable-store and corrupt-legacy cases exit 1, which
+  `assert_aborted` accepts because it checks `code != 0`, not `== 2`). A corrupt legacy store was
+  served instead of refused only when the handler was *also* changed to tolerate an abort with no
+  `.reason` (a `getattr` fallback); with both edits, the corrupt-legacy case went red (the server
+  never exited) and the other eight stayed green. Those nine cases and the degraded-launch tests
+  together are the guard.
 - **Risk — server guard skipped:** if the `503` guard were removed or moved after
   `confirm_surface`, every page-level test would still pass; only the "no subprocess was invoked"
   assertion can tell. Tests: `treko/test_degraded.py`.
