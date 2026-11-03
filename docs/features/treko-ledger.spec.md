@@ -26,6 +26,8 @@ settled it and told him.
 
 **Ground truth.** Written 2026-11-03 against `feat/treko-ledger` @ `5f194df`. Every `file:line`
 was opened at that commit. Lines move, so each citation also names the symbol to `grep -n` for.
+Revised the same day for compliance round 1 at `6331b5d`. The code files had not changed, so the
+citations still hold, and the sizes in §1.1 were measured there.
 
 **Size (user, 2026-11-03).** He accepted this half running over ADR 0017's 800-line cap.
 
@@ -65,18 +67,98 @@ flowchart LR
 | `treko/ledger_merge.py` | new | one run from several per-repo runs (§7) |
 | `treko/ledger_state.py` | new | `ledger.json`, run ids, run rows, the hide list (§5, §8) |
 | `treko/ledger_jobs.py` | new | the job runner and its subprocesses (§5, §6) |
-| `treko/server.py` | changed | routes, validation, idle rule, startup (§3) |
-| `treko/analyze.py` | changed | two optional inputs and nothing else: the progress report (§6) and `--card` (§4.3; OQ-1, (my call)) |
-| `treko/Treko.dc.html` | changed | two icon links, Re-analyze, graph svg size (§9.4) |
+| `treko/ledger_routes.py` | new | the `/ledger` and `/ledger/status` handlers: field validation, op dispatch, the status payload (§3) |
+| `treko/cards.py` | new | split 1: the analyzer's card-reading layer, moved unchanged (§1.1) |
+| `treko/board-commands.js` | new, one manifest row | split 3: the board's node-loadable command slice, moved unchanged, then the Re-analyze change (§1.1, §9.4) |
+| `treko/server.py` | changed | routes, validation, idle rule, startup (§3); split 2 moves its send path out (§1.1) |
+| `treko/channel.py` | changed | split 2: receives `confirm_surface`, `send_keys` and `CONFIRM_REFUSAL_REASONS` unchanged (§1.1) |
+| `treko/analyze.py` | changed | two optional inputs and nothing else: the progress report (§6) and `--card` (§4.3; OQ-1, (my call)). Split 1 also moves its card layer out, with no change in behaviour (§1.1) |
+| `treko/Treko.dc.html` | changed | two icon links, Re-analyze, graph svg size, the Re-analyze pop-up (§9.4); split 3 moves its command slice out (§1.1) |
+| `treko/server_harness.py` | changed | an `interpreter` parameter for criterion Z1 (§11) |
 | `skills/treko/SKILL.md` | changed | routes, the Ledger, the new files in the store directory |
 
-**(spec call)** The work lands in four new modules rather than in `server.py`, which is 793 lines
+**(spec call)** The work lands in new modules rather than in `server.py`, which is 793 lines
 today (`wc -l treko/server.py`) against the house limit of 800 (`rules/core-conduct.md`). The
 server stays the HTTP boundary and imports the others.
 
 **(spec call)** No row is added to `STATIC_MANIFEST` (`server.py:83-101`, 17 rows, pinned by
-`test_guards.py:560` `EXPECTED_MANIFEST_ROWS`). The Ledger page is served by a route, like the
-board today, and every asset it loads is already on the manifest.
+`test_guards.py:560` `EXPECTED_MANIFEST_ROWS`) for the Ledger page. The Ledger page is served by a
+route, like the board today, and every asset it loads is already on the manifest. **Split 3
+(§1.1) adds exactly one row, `board-commands.js`, for the board**, so the manifest goes from 17
+rows to 18.
+
+### 1.1 Line budgets and the three planned splits
+
+The house limit is 800 lines a file (`rules/core-conduct.md`: "<400 lines, 800 max"). Three files
+this card changes start within 17 lines of it, so each gets a budget and, where the card's growth
+would cross 800, a split decided now. Sizes are `wc -l` at `6331b5d`:
+
+| File | At `6331b5d` | Budget after this card | How |
+|---|---|---|---|
+| `treko/analyze.py` | 797 | ≤ 740 | split 1 |
+| `treko/cards.py` (new) | — | ≤ 200 | receives split 1 |
+| `treko/server.py` | 793 | ≤ 780 | split 2; all Ledger logic in the new modules, server.py only routes and delegates |
+| `treko/channel.py` | 95 | ≤ 200 | receives split 2 |
+| `treko/Treko.dc.html` | 783 | ≤ 720 | split 3 |
+| `treko/board-commands.js` (new) | — | ≤ 250 | receives split 3 |
+| `treko/Ledger.dc.html` (new) | — | ≤ 600 | its logic stays in an in-page slice (§9.1) |
+| `treko/ledger_*.py` (five new) | — | ≤ 400 each | the house target |
+| `treko/server_harness.py` | 339 | ≤ 400 | |
+| `treko/test_server.py` | 789 | ≤ 800 | no new tests here: new behaviour is tested in new modules |
+| `treko/test_analyze.py` | 599 | unchanged | E1, E2 and E5 go in a new `test_analyze_options.py` |
+| every other existing test module the card edits | its size at `6331b5d` | ≤ 800 | |
+| every new test module | — | ≤ 800, target 400 | |
+| `skills/treko/SKILL.md` | 235 | ≤ 400 | |
+
+**The three splits (spec call each).** Each is a move with no change in behaviour. Each lands as
+its own commit **before** any behavioural change to the file it leaves, so the existing suite
+proves the move by itself:
+
+1. **`analyze.py` → `cards.py`.** The card-reading layer moves verbatim: `_card_paths`,
+   `_parse_frontmatter`, `_checklist`, `_depends_on`, `_normalize_target` and `Card`
+   (`analyze.py:189-291`), with the constants they use from `:36-47` and `:70-73`, and the
+   `feature_tasks` import they need. `MINUS` (`:44`) stays, because only `_diffstat` uses it
+   (`:170`). `NO_VALUE`, `SPEC_SUFFIX` and `UNPARSEABLE_META` are used on both sides
+   (`grep -n -w` each in `analyze.py`): they move to `cards.py` and `analyze.py` imports them
+   back, so each is still defined once. `analyze.py` imports back what else it uses. That is one
+   unit, "what a card is", and it is also the unit that `--card` and the scan's D11 choice
+   depend on: the scan imports `cards`, not the whole analyzer. **Proof:** `test_analyze.py`
+   passes unchanged (it reaches the module only through `analyzer.analyze`, measured with
+   `grep -o 'analyzer\.[a-z_]*' treko/test_analyze.py | sort -u`), and criterion E2's
+   byte-for-byte differential against blob `8b805d1…` passes.
+2. **`server.py` → `channel.py`.** `CONFIRM_REFUSAL_REASONS`, `confirm_surface` and `send_keys`
+   (`server.py:263-311`) move verbatim into `channel.py`, whose job is already "the cmux control
+   channel and its closed reason set" (`server.py:38`) and which already owns `CMUX_BIN` and
+   `CMUX_TIMEOUT_SECS`, so the move adds no dependency. This one goes into an existing module,
+   not a new one, because a new module would split the cmux channel across two files.
+   `server.py` imports the three names back, so `server.CONFIRM_REFUSAL_REASONS` (used by the
+   tests) still resolves. **Proof:** `test_server.py`, `test_degraded.py` and
+   `test_server_lifetime.py` pass unchanged. If `server.py` would still pass its 780 budget after
+   split 2, the next extraction is the startup checks (`read_timeout` through `probe_listener`,
+   `server.py:150-257`) into a new `server_startup.py`. No other split is planned.
+3. **`Treko.dc.html` → `board-commands.js`.** The node-loadable slice, from the "slice begins"
+   marker to the "slice ends" marker (`Treko.dc.html:402-525`), moves verbatim, markers included,
+   into a served file loaded by `<script src="./board-commands.js"></script>` right after
+   `support.js`. The slice was written to need no React, no DOM and no `window`
+   (`Treko.dc.html:403-409`), so as a classic script its names become the globals the page's
+   component already uses. **This needs one new `STATIC_MANIFEST` row**: `board-commands.js`,
+   `text/javascript`, an extension already in `EXTENSION_TYPES`. `EXPECTED_MANIFEST_ROWS`
+   (`test_guards.py:560`) becomes 18. **Proof:** at the move commit, `test_guards.py`'s fence
+   check, pointed at the new file, still matches its pinned sha256 (`bfe17645…`, 6692 bytes,
+   `test_guards.py:29`), because the marker-inclusive bytes are unchanged. `test_ui_commands.py`
+   passes with only its loader's path changed. The Re-analyze change then re-pins the fence
+   deliberately (§12). The slice's own comment says it "cannot live in its own .js file",
+   because a new row is a spec change (`Treko.dc.html:405-407`). This card is that spec change.
+   The comment sits inside the hashed region, so it stays verbatim in the move commit, keeping
+   the proof byte-exact, and is corrected in the Re-analyze commit.
+
+**Card 5's line citations move too.** Card 5 cites `analyze.py` at seven distinct places and
+`Treko.dc.html` at six (`grep -o -E '(analyze\.py|Treko\.dc\.html):[0-9-]+'
+docs/features/treko-branch-graph-traversal.md | sort -u`). Split 1 moves `analyze.py:36-41` into
+`cards.py` and shifts every later line. Split 3 shifts every `Treko.dc.html` line after the head
+scripts. All are re-checked when card 5 resumes, as the card already records for `analyze.py`.
+
+Criterion Z2 checks every budget above, and Z3 checks the splits' proofs.
 
 ## 2. Task 1 gate: the wire-contract amendment (D10)
 
@@ -102,15 +184,21 @@ deliberately narrow:
 - Old criterion 15 (`tracking-feature-state.spec.md:1079-1096`) loses its `500` row for
   `reanalyze` and the board's reload after a successful Re-analyze. `reanalyze` leaves `/command`,
   and after a `200` the board goes to the Ledger instead (§9.4; OQ-5, (user)).
+- `STATIC_MANIFEST` gains one row, `board-commands.js` (split 3, §1.1). Old criterion 13's
+  expected request sets (`tracking-feature-state.spec.md:933-1064`) describe the board at `/`.
+  They now describe it at `/board`, with `/board-commands.js` in both runs.
+- ADR 0024's "one audit line per request" gains one exception: an accepted status poll (default
+  4 below).
 
 **Task 1 writes an ADR** recording the routes, ops, argument shapes and validation of §3, the
-amendments above, and D10's three defaults below. Take its number from `origin/main` at write time,
+amendments above, and D10's defaults below. Take its number from `origin/main` at write time,
 not from a local listing. It is judged the way a spec is: the compliance judge, with the
 observability judge's architecting read alongside (`running-the-compliance-judge`). **No Ledger
 screen task starts until that verdict passes.** The card's order (Ledger, then card 5, then the
 relations card) is unchanged.
 
-D10's three defaults, as requirements:
+D10's defaults, as requirements: the card's three, and a fourth from the observability judge's
+round-1 read (O3):
 
 1. **Existing directories only.** `directory` must name an existing directory once expanded
    (§3.4). Nothing is created.
@@ -135,6 +223,16 @@ D10's three defaults, as requirements:
    task 1 finds they cannot be switched off without breaking the scan, the scan still runs and the
    ADR records them as an accepted risk. Repositories that use Git LFS are never skipped
    **(user)**.
+   **One builder, and no runtime off-switch (spec call, O5).** The child environment is built by
+   one function in `ledger_jobs.py`, and every scan and analyzer launch goes through it. The only
+   way to run without the protection is to pass a different builder **as a parameter in code**,
+   which is what criterion C8's falsifier does in-process. No environment variable, command-line
+   flag, config key or request field can switch it off.
+4. **An accepted status poll writes no audit line (spec call, O3).** ADR 0024's one line per
+   request would let a Ledger tab's 2-second poll add up to 1,800 lines an hour to the only record
+   of what the server did. The other requests are still audited exactly as today, including every
+   refused poll: "a run of refusals is the only evidence a hostile page ever probed the endpoint"
+   (`tracking-feature-state.spec.md:503-504`).
 
 ## 3. Wire contract
 
@@ -180,7 +278,9 @@ Checks, in order: `Host`; `Origin` and `Sec-Fetch-Site`, each only when present 
      "queuedAt": "2026-11-03T09:12:44Z", "run": "r3fa9c2d17b40e815",
      "stage": {"done": 3, "total": 11, "label": "memsearch (1 of 2): reading cards"}},
     {"item": "0a7e1c55d2b94f31", "state": "failed", "label": "~/work", "queuedAt": "…",
-     "run": "r…", "error": "analysis_failed"}
+     "run": "r…", "error": "analysis_failed",
+     "detail": {"stage": "branches", "repo": "memsearch", "exit": 1, "timedOut": false,
+                "errno": null}}
   ],
   "runs": [
     {"id": "r3fa9c2d17b40e815", "name": "dev · repo memsearch", "dir": "~/dev",
@@ -192,7 +292,8 @@ Checks, in order: `Host`; `Origin` and `Sec-Fetch-Site`, each only when present 
 ```
 
 `stage` appears only on the running item, and `stage.total` is `null` until the scan has finished
-(§6.2). `error` appears only on a failed item. `runs` is `null` and `runsError` is
+(§6.2). `error` appears only on a failed item, and `detail` (§5.1, O2) on a failed or an
+interrupted one. `runs` is `null` and `runsError` is
 `"store_unreadable"` when the store cannot be parsed. **(spec call)** The queue is still returned
 then, so a running job stays visible. `storeDir` is the server's store directory, home-collapsed
 the way `analyze._home_collapse` does it (`analyze.py:116-119`), for D8.
@@ -243,6 +344,19 @@ Success bodies: `analyze` and `reanalyze` return
 other item was running or waiting. `remove`, `retry` and `delete` return
 `{"ok": true, "op": "<op>"}`.
 
+**`reanalyze` re-runs the submit-time path (spec call: codes and wording).** It takes the request
+recorded for the run (§8.2) and puts it through exactly what `analyze` does at submit: the field
+rules above, so the recorded directory must still be an existing directory, then the scan (§4).
+A run whose directory has been deleted gets `422 no_such_directory`. A run narrowed to a worktree
+that has since been removed, which is routine here because worktrees go after a merge, gets
+`422 no_such_worktree` (§4.2). Either way nothing is queued, and the board shows the pop-up of
+§9.4. The other scan outcomes (`no_repository`, `no_matching_repository`, `nothing_matched`)
+refuse the same way.
+
+Every op that queues an item also records `requests[run] = request` in the same ledger write
+(§5.6). Because the id is a hash of the request (§8.1), that mapping is already true before the
+run exists.
+
 ### 3.5 Every failure, with its audit reason
 
 The body is always `{"ok": false, "error": "<error>"}` and echoes nothing from the request.
@@ -257,20 +371,21 @@ The body is always `{"ok": false, "error": "<error>"}` and echoes nothing from t
 | 405 | `method_not_allowed` | §3.1 | `method_not_allowed` |
 | 409 | `item_running` | `remove` of the running item | `item_running` |
 | 409 | `not_retryable` | `retry` of a waiting or running item | `not_retryable` |
-| 409 | `already_queued` | an item with the same run id is already **waiting** **(spec call)** | `already_queued` |
+| 409 | `already_queued` | an item with the same run id is already **waiting or running**, checked under the ledger lock (§5.6). **(spec call)**, revised at round 1 from "waiting" only, so that two identical submits racing always leave exactly one item | `already_queued` |
 | 409 | `queue_full` | the queue already holds `MAX_QUEUE_ITEMS = 20` items, any state **(spec call)** | `queue_full` |
 | 409 | `last_run` | `delete` of the only visible run (§8.4) | `last_run` |
 | 413 | `too_large` | body over 4096 bytes | `too_large` |
 | 415 | `unsupported_media_type` | not `application/json` | `unsupported_media_type` |
 | 422 | `invalid_input` | a field length or character rule | `invalid_input` |
 | 422 | `relative_path` | `directory` not absolute after expansion | `relative_path` |
-| 422 | `no_such_directory` | not an existing directory | `no_such_directory` |
+| 422 | `no_such_directory` | not an existing directory; for `reanalyze`, the run's recorded directory no longer exists | `no_such_directory` |
 | 422 | `no_repository` | the scan found no repository (D2) | `no_repository` |
 | 422 | `no_matching_repository` | repositories found, none with that `repo` folder name | `no_matching_repository` |
+| 422 | `no_such_worktree` | `worktree` names no worktree of any repository the scan found; for `reanalyze`, the run's narrowing worktree has been removed (§4.2). A pop-up, nothing queued | `no_such_worktree` |
 | 422 | `nothing_matched` | no card matches `branch`/`worktree`: a pop-up at submit, nothing queued (OQ-4, (user)) | `nothing_matched` |
 | 500 | `scan_timeout` | the scan passed `TREKO_SCAN_SECS` | `scan_timeout` |
 | 500 | `scan_failed` | the scan exited non-zero or printed something that is not its contract | `scan_failed` |
-| 500 | `ledger_write_failed` | `ledger.json` could not be written | `ledger_write_failed` |
+| 500 | `ledger_write_failed` | the request's own write of `ledger.json` failed, so nothing changed (§5.6) | `ledger_write_failed` |
 | 500 | `store_unreadable` | `delete`/`reanalyze`: the store does not parse | `store_unreadable` |
 
 `GET /` and `GET /board` keep today's `500 asset_unreadable` for an unreadable page. `/command` is
@@ -278,7 +393,8 @@ unchanged apart from its allowlist: `{"id": "reanalyze"}` is now `403`, reason `
 
 ### 3.6 Audit lines and diagnostics
 
-The audit format (`server.py:134-147`) is unchanged: one line per request, polls included.
+The audit format (`server.py:134-147`) is unchanged: one line per request, except an accepted
+status poll, which writes none (§2, default 4; O3). A refused poll is audited.
 **(spec call)** `id=` carries the op for `/ledger`, `status` for the poll, and `-` for the pages
 and for an op that failed before it was read. **Field values are never logged.** The directory is
 request content, and the old spec bans logging request bodies "in whole or in part"
@@ -287,9 +403,11 @@ Job events go to stderr as `server: job <item> <event>` and name item and run id
 analyzer's or scan's own last stderr line may follow, as `_reanalyze_failed` does today
 (`server.py:348-351`).
 
-The volume is the cost of keeping "one line per request": at the 2-second poll, a Ledger tab
-writes up to 1,800 lines an hour while open. That is bounded, because polling alone cannot keep
-the server alive (§2, default 2).
+The volume is why. At the 2-second poll, auditing every accepted poll would write up to 1,800
+lines an hour while a Ledger tab is open. Until round 1 this spec accepted that as the cost of
+keeping "one line per request", on the ground that polling alone cannot keep the server alive
+(§2, default 2). The observability judge's O3 replaced that with the exception above, because
+those lines would bury the state-changing ones in the only record.
 
 ### 3.7 `GET /tracker-data.js` and the hide list (D12)
 
@@ -306,8 +424,9 @@ file over file:// no longer shows your survey"), and nothing hidden exists to le
 
 ## 4. Directory scan (D2, D3 as confirmed, D11)
 
-`ledger_scan.py` runs as a subprocess with the request on stdin and prints one JSON object on
-stdout. It runs under `TREKO_SCAN_SECS = (30, 5)` (default, floor), with the same no-"never" rule
+`ledger_scan.py` runs as a subprocess, launched with the server's own `sys.executable` like the
+analyzer (§5.4), with the request on stdin, and prints one JSON object on stdout. It runs under
+`TREKO_SCAN_SECS = (30, 5)` (default, floor), with the same no-"never" rule
 as the other timeouts (`read_timeout`, `server.py:153-168`), in its own process group, which is
 killed when the bound passes. Each git call inside it has `GIT_TIMEOUT_SECS = 5` (`server.py:61`).
 **(spec call)** Out of process for the reason `run_reanalyze` gives (`server.py:317-321`): a
@@ -328,6 +447,11 @@ and again as the job's first stage, because the tree may have changed in between
   for the hidden flag. Measured 2026-11-03: `~/Library` carries it and `~/Documents` and
   `~/Desktop` do not, so typing `~` skips `~/Library`, which Finder also hides. A folder that cannot
   be listed is skipped and counted.
+  **(spec call, O1)** Two more counts: every depth-5 folder that is not a repository (cut off at
+  the depth limit, so whatever it holds was never looked at), and every symlinked folder skipped.
+  All three counts feed the "Were repositories missed?" question (§7.2), so a repository at depth
+  6 is never silently absent. Hidden folders and `node_modules` are not counted: skipping them is
+  D2's decision, and counting them would raise the question on every scan of `~`.
 - **Up (D2, accepted reading).** `git -C <dir> rev-parse --show-toplevel`. The result counts only
   if it is the directory itself or one of its 5 nearest ancestors.
 - **Confirm.** Each candidate runs `git rev-parse --path-format=absolute --git-common-dir
@@ -351,10 +475,14 @@ and again as the job's first stage, because the tree may have changed in between
 - **Worktree** names a worktree of a family: either its resolved path equals the expanded,
   resolved `worktree`, or its folder name equals `worktree` **(spec call: both forms; the
   prototype's placeholder is a path)**. It keeps the cards whose chosen copy names that worktree's
-  checked-out branch. Branch and Worktree together must both hold.
+  checked-out branch. Branch and Worktree together must both hold. **(spec call, round 1)** If no
+  family the scan found has a worktree matching `worktree` either way: `no_such_worktree`, a
+  pop-up, with nothing queued. That is distinct from `nothing_matched`, where the worktree exists
+  but no card names its branch. It is also what a `reanalyze` gets when the run's narrowing
+  worktree has been removed since (§3.4).
 - **Closure.** Every card a kept card names in `## Depends on`, transitively, within its family, is
-  kept too ("so the merge order stays true"). Edges come from `analyze.Card(...).depends_on`, the
-  analyzer's own parser, imported rather than rewritten.
+  kept too ("so the merge order stays true"). Edges come from `cards.Card(...).depends_on` (the
+  analyzer's own parser, in `cards.py` after split 1), imported rather than rewritten.
 - Under Branch or Worktree, a family with no kept card is dropped from the run **(spec call)**. If
   every family is dropped: `nothing_matched`. At submit that is a pop-up and nothing is queued
   (OQ-4, (user)).
@@ -375,8 +503,8 @@ checked out in the worktree it sits in. The chosen copy is:
 **(spec call, also raised in OQ-1; its 2026-11-03 answer did not cover this reading)** "When a card
 names a `branch:`" is read per copy, because copies can disagree about `branch:`. A planning card
 on `main` may still say `branch: none` while its worktree copy names the branch, and D11's purpose
-is the live copy. Copies are parsed with `analyze.Card`; a copy that cannot be read is never on
-its branch.
+is the live copy. Copies are parsed with `cards.Card` (`analyze.Card` before split 1); a copy
+that cannot be read is never on its branch.
 
 **Mechanism: OQ-1, answered (my call).** D11 needs the analyzer to read the chosen copies, which
 sit in several folders, while `_card_paths` reads exactly one (`analyze.py:192-198`). The answer,
@@ -395,17 +523,21 @@ waves, graph and constraints from them itself.
  "families": [{"root": "/Users/x/dev/memsearch", "label": "memsearch",
                "cards": ["/Users/x/wt/digest-reindex/docs/features/digest-reindex.md", "…"],
                "questions": [{"q": "…", "ctx": "…"}]}],
- "questions": [{"q": "…", "ctx": "…"}]}
+ "questions": [{"q": "…", "ctx": "…"}],
+ "missed": {"unreadable": 0, "depthLimit": 3, "symlinks": 1}}
 ```
 
-`outcome` is `ok`, `no_repository`, `no_matching_repository` or `nothing_matched`. Each of these is
-a result, printed with exit 0. A crash is a non-zero exit and becomes `scan_failed`.
+`outcome` is `ok`, `no_such_directory`, `no_repository`, `no_matching_repository`,
+`no_such_worktree` or `nothing_matched`. Each of these is a result, printed with exit 0.
+`no_such_directory` happens only at job time, when the directory went away while the item waited;
+at submit, §3.4's field rules catch it first. A crash is a non-zero exit and becomes
+`scan_failed`. `missed` holds §4.1's three counts.
 
 ### 4.5 Nothing found (D2)
 
 When `outcome` is not `ok` at submit time, nothing is queued and the page shows a **pop-up**, not
 inline text. The `no_repository` wording is the card's: "No git repository found in or around that
-directory." The other two wordings are in §9.2.
+directory." The other wordings are in §9.2.
 
 ## 5. The queue and the job runner (D4, D5, builder check)
 
@@ -414,14 +546,15 @@ directory." The other two wordings are in §9.2.
 Lives at `<store dir>/ledger.json`, beside the runs (D5). It is written atomically (temp file in
 the same directory, `fsync`, `os.replace`, the `store.write_store` pattern at `store.py:160-186`)
 at mode `0o600` **(spec call)**, on every change of queue, hide list or requests. Stage progress is
-never written; it lives in memory.
+never written; it lives in memory. §5.6 says who writes the file, under which lock, and what each
+write does when it fails.
 
 ```json
 {"version": 1,
  "queue": [{"item": "9f2c4a1b7d3e5f60", "state": "waiting", "queuedAt": "2026-11-03T09:12:44Z",
             "request": {"directory": "/Users/x/dev", "repo": "memsearch", "branch": "",
                         "worktree": ""},
-            "run": "r3fa9c2d17b40e815", "error": null}],
+            "run": "r3fa9c2d17b40e815", "error": null, "detail": null}],
  "hidden": ["r0c4d…"],
  "requests": {"r3fa9c2d17b40e815": {"directory": "/Users/x/dev", "repo": "memsearch",
                                     "branch": "", "worktree": ""}}}
@@ -430,6 +563,15 @@ never written; it lives in memory.
 `state` is one of `waiting`, `running`, `interrupted`, `failed`. `error` is a §5.4 code when
 `failed`, and `null` otherwise. `request.directory` is the canonical directory. `run` is the D12 id
 (§8.1). `queuedAt` uses `store.TIMESTAMP_FORMAT` (`store.py:41`).
+
+**`detail` (spec call, O2)** is `null` unless the item is failed or interrupted. Then it holds:
+`stage`, one of `start`, `scan`, `worktrees`, `branches`, `cards`, `order`, `merge`, `write`, or
+`null` when unknown; `repo`, the label of the repository being analyzed, or `null`; `exit`, the
+subprocess's exit status, or `null`; `timedOut`, a boolean; and `errno`, a symbolic name such as
+`ENOSPC`, or `null`. It never holds a request field value, since the request is stored once,
+under `request`. It never holds text a subprocess printed, since that goes to stderr and into the
+run's questions (§7.2). The Ledger builds each message from it (§9.2), because the server's log
+is gone after a restart and this is not.
 
 **On load,** an absent file is an empty ledger. A file that does not parse, carries a `version`
 other than 1, or breaks any rule above **aborts startup** with exit 2, naming the file
@@ -449,6 +591,7 @@ store's read-modify-write could drop a run.
 stateDiagram-v2
   [*] --> waiting: Analyze accepted
   waiting --> running: oldest waiting item, nothing running
+  waiting --> failed: start could not be recorded (ledger_write_failed, §5.6)
   waiting --> [*]: remove
   running --> [*]: run written
   running --> failed: job failure
@@ -472,7 +615,9 @@ stateDiagram-v2
 
 - **At startup,** after the lock: every `running` item becomes `interrupted`, the file is
   persisted, and the runner starts. Waiting items then start on their own (builder check, "After a
-  server restart"). Interrupted items wait for Retry and are never restarted silently (D5).
+  server restart"). Interrupted items wait for Retry and are never restarted silently (D5). After
+  a hard kill the stage and repo are unknown, so `detail.stage` and `detail.repo` are `null`. If
+  this write fails, startup aborts (§5.6, write 4).
 - **First launch with an empty store (OQ-6, (user)).** Today `--open` runs the analyzer on the
   launch repo before it opens the browser (`server.py:756-763`). Instead, once the runner has
   started, the server submits `{"directory": <launch repo root>}` exactly as an `analyze` op
@@ -484,13 +629,16 @@ stateDiagram-v2
   server still serves. `run_reanalyze` (`server.py:314-345`) is then left with no caller and goes,
   and the `--repo` help text (`server.py:694-696`) stops naming `reanalyze`.
 - **On shutdown** (idle, parent death, `Ctrl-C`): the runner kills the current subprocess's
-  process group, marks the item `interrupted`, and persists. This must fit inside the existing
+  process group, marks the item `interrupted` with the stage and repo it had reached in `detail`,
+  and persists. If that write fails, stderr says so and the server exits anyway (§5.6, write 5).
+  This must fit inside the existing
   bound, exit within `TREKO_POLL_SECS` + 1 s of parent death (old criterion 14). A hard kill skips
   this, and the next startup's recovery reaches the same state.
 
 ### 5.4 One job
 
-1. Mark the item `running` and persist. Stage label: "scanning <dir>".
+1. Mark the item `running` and persist. Stage label: "scanning <dir>". If that write fails, the
+   job does not start (§5.6, write 1).
 2. **Scan** (§4). An outcome other than `ok` fails the job with that code.
 3. **Per family, in order:** `analyze.py <primary checkout> --progress`, plus one `--card` per
    chosen copy (§4.3; OQ-1, (my call)), run with `sys.executable` like `run_reanalyze`
@@ -504,12 +652,16 @@ stateDiagram-v2
 4. **Merge** (§7).
 5. **Write**: `store.emit_run(store_path, run)` (`store.py:189-211`), which upserts by id, keeps
    position and stamps `analyzedAt`. Failure: `store_write_failed`.
-6. **Success:** remove the item, set `requests[run] = request`, take `run` off the hide list
-   (D12), persist, and record the end time for the idle rule (§5.5).
+6. **Success:** remove the item, take `run` off the hide list (D12), persist (§5.6, write 2), and
+   record the end time for the idle rule (§5.5). Until round 1 this step also set
+   `requests[run] = request`. That is now recorded when the item is queued (§3.4), so a failed
+   write here cannot leave a run whose request is unknown.
 
-Job failure codes, as `error` on a failed item: `no_repository`, `no_matching_repository`,
-`nothing_matched`, `scan_timeout`, `scan_failed`, `analysis_failed`, `store_write_failed`. A failed
-job writes nothing to the store, so the previous run stays intact.
+Job failure codes, as `error` on a failed item: `no_such_directory`, `no_repository`,
+`no_matching_repository`, `no_such_worktree`, `nothing_matched`, `scan_timeout`, `scan_failed`,
+`analysis_failed`, `store_write_failed`, and `ledger_write_failed` when the start could not be
+recorded (§5.6, write 1). A failed job writes nothing to the store, so the previous run stays
+intact, and its item carries `detail` (§5.1).
 
 ### 5.5 The idle exit
 
@@ -518,13 +670,54 @@ injected clock:
 
 ```
 idle  ⇔  not busy  and  now − max(last_request, last_job_end) ≥ idle_secs
-busy  ⇔  an item is running or waiting
+busy  ⇔  an item is running, or an item is waiting and the runner is not paused (§5.6)
 ```
+
+A paused runner's waiting items do not count, or a broken disk would keep the server alive for
+ever **(spec call, round 1)**.
 
 A running job counts as activity (D5's ⚠️), and so does its end **(spec call)**: without that, a
 job that outlasts the idle period ends with the server exiting at once, under the user who just
 watched it finish. `last_request` follows §2 default 2, so polls never move it. The parent-death
 check is unchanged and still ends the server mid-job; the job becomes `interrupted` (§5.3).
+
+### 5.6 `ledger.json`: one lock, and what each write does when it fails
+
+**One lock (spec call, from the observability judge's round-1 read).** `ledger_state.py` holds
+the ledger in memory and guards it with one `threading.Lock`. Every read-modify-write runs under
+that lock, from a request thread or from the job thread alike: read the state, decide, change it,
+write the file. Status reads take the same lock to copy a consistent snapshot. The submit-time
+scan is slow, so it runs **before** the lock is taken. The checks that depend on the queue
+(`already_queued`, `queue_full`) and the enqueue itself run under the lock, after the scan. The
+runner takes the same lock to pick the next item and mark it running.
+
+So two identical requests that race both scan, then queue one after the other under the lock. The
+first is queued; the second finds it waiting or running and gets `409 already_queued`. Across
+processes, the `flock` of §5.1 keeps a second server away from the file.
+
+**Every write** goes to a temp file in the store directory, is `fsync`ed, and is moved into place
+with `os.replace` (`store.write_store`'s pattern). A failed write therefore leaves the previous
+file whole and removes its temp file. The file always holds the whole in-memory state, so the next
+successful write also carries any change an earlier failed write missed. Each failure writes
+`server: ledger write failed: <errno name>` to stderr, never a field value.
+
+**Request-side writes** (`analyze`, `reanalyze`, `remove`, `retry`, `delete`) are all-or-nothing.
+The change is made on a copy, the copy is written, and it replaces the in-memory state only once
+`os.replace` has succeeded. A failed write answers `500 ledger_write_failed` and changes nothing,
+in memory or on disk.
+
+**Runner-side writes record what has already happened, so each has its own rule (spec call):**
+
+| # | Write | If it fails |
+|---|---|---|
+| 1 | job start: `waiting` → `running` | The job does not start: no subprocess runs. In memory the item becomes `failed`, with `ledger_write_failed` and `detail.stage = "start"`; the file still says `waiting`. The runner **pauses**: it starts nothing more until a later write succeeds (any request-side op, such as Retry), then resumes. After a restart the file's `waiting` item starts normally, because it never ran |
+| 2 | success: item removed, run taken off the hide list | The run is already in the store, so memory records the success. The file keeps `running` and the old hide list until the next successful write. If the server stops first, the item comes back `interrupted`. Retry then re-runs it and replaces the run in place (D12). A run that was hidden before this re-analysis stays hidden until then |
+| 3 | job failure: `running` → `failed` with its code and `detail` | Memory records the failure. If the server stops before a later write succeeds, the item comes back `interrupted`, and the failure's code and detail are lost |
+| 4 | startup recovery: `running` → `interrupted` | Startup aborts with exit 2, naming the file and the errno, as for a corrupt `ledger.json` (§5.1). The server cannot keep D5's restart rule without recording it |
+| 5 | shutdown: `running` → `interrupted` with `detail` | stderr says so, and the server exits anyway, inside its exit bound. At the next startup the file's `running` becomes `interrupted` (write 4), without the detail |
+
+`ledger_write_failed` is therefore two things, worded consistently in §3.5, §5.1, §5.4 and §9.2:
+the inline answer to a request whose own write failed, and a failed item's `error` after write 1.
 
 ## 6. Real progress (D6 and the correction)
 
@@ -548,7 +741,9 @@ byte-identical to today's analyzer. With `--progress`, stdout is byte-identical 
 adds exactly the four lines on success. `--card` has its own check (E5). Card 5 cites
 `analyze.py` by line at seven distinct places
 (`grep -o -E 'analyze\.py:[0-9-]+' docs/features/treko-branch-graph-traversal.md | sort -u`). As
-the card records, those citations are re-checked when card 5 resumes.
+the card records, those citations are re-checked when card 5 resumes. Split 1 (§1.1) moves
+`:36-41` into `cards.py` and shifts every later line, and split 3 shifts card 5's six
+`Treko.dc.html` citations, so the recheck covers those as well.
 
 ### 6.2 The job's stage list and the bar
 
@@ -599,7 +794,10 @@ would fuse them.
 
 - Unreadable folders, when the count is above zero: "Were repositories missed under `<dir>`?",
   context "N folders could not be listed during the scan, so any repository inside them is missing
-  from this run."
+  from this run." **(spec call, O1)** The question also reports §4.1's other two counts, and is
+  asked when any of the three is above zero. Its context names each count that is not zero: "N
+  folders could not be listed, M folders at depth 5 were not looked inside, and K symlinked
+  folders were not followed, so any repository inside them is missing from this run."
 - Candidates git refused: "Why could git not read `<path>`?", one per path, with git's message.
 - Failed families (OQ-2, (user): visible, naming the repo and why): "Why could `<label>` not be
   analyzed?", with the exit status or timeout and the analyzer's last stderr line.
@@ -645,10 +843,13 @@ data field is added.
 
 Re-analysis writes the same id, and `store.upsert_run` (`store.py:127-143`) replaces it in place.
 `requests[id]` records the request each run was last written from, and the board's Re-analyze
-re-queues exactly that request (builder check). Runs written before this card have a folder-name
-id and no recorded request. For those, Re-analyze queues `{"directory": <the run's dir, with ~
-expanded>}` with no narrowing. It lands as a new run under a D12 id, and the old run stays,
-untouched, until the user deletes it (OQ-7, (my call)).
+re-queues exactly that request (builder check). Since round 1 it is written when the item is
+first queued, because the id already determines the request (§3.4, §5.6). Re-analyze puts that
+request through the submit-time path again, so a recorded directory or narrowing worktree that
+has since gone is refused, with nothing queued (§3.4). Runs written before this card have a
+folder-name id and no recorded request. For those, Re-analyze queues
+`{"directory": <the run's dir, with ~ expanded>}` with no narrowing. It lands as a new run under a
+D12 id, and the old run stays, untouched, until the user deletes it (OQ-7, (my call)).
 
 ### 8.3 The row (D7: computed from the run's own data only)
 
@@ -692,7 +893,9 @@ structure and wording; take the board's conventions for everything else:
   block; the prototype's hex values become the board's tokens.
 - **Logic:** pure functions in a node-loadable slice between start and end markers, cut out and
   tested in node the way `test_ui_commands.py` tests the board's slice (`Treko.dc.html:402-525`).
-  **(spec call)** This keeps the manifest closed.
+  **(spec call)** This keeps the manifest closed. The board's own slice moves out to
+  `board-commands.js` (split 3) only because the board would cross 800 lines. The Ledger keeps
+  its slice in the page because it sits well under its 600-line budget (§1.1).
 - **Header:** icon, "Run ledger", "Every analysis this Treko instance has on disk.", and **Open
   the board**, which opens the most recent run (D1): the first row, by §8.3's order. It is
   disabled while there are no rows **(spec call)**, so the Ledger never leads to the board's
@@ -726,22 +929,37 @@ or a URL. Wording is **(spec call)** except where a source is named.
 |---|---|---|
 | `no_repository` | pop-up | "No git repository found in or around that directory." (D2) |
 | `no_matching_repository` | pop-up | "No repository with that folder name was found in or around that directory." |
+| `no_such_worktree` | pop-up | "No worktree with that path or folder name was found in those repositories." |
 | `nothing_matched` | pop-up (OQ-4, (user)) | "No card matches that branch or worktree." |
 | `relative_path` | inline | "Use a full path, or one starting with ~." |
 | `no_such_directory` | inline | "No directory exists at that path." |
 | `invalid_input` | inline | "Treko cannot use one of those values: check for stray characters." |
-| `already_queued` | inline | "That analysis is already waiting in the queue." |
+| `already_queued` | inline | "That analysis is already queued or running." (since round 1 the code covers a running item too, §3.5) |
 | `queue_full` | inline | "The queue is full. Remove an item first." |
 | `scan_timeout` | inline / item | "The directory scan took too long. Try a smaller directory." |
-| `scan_failed`, `analysis_failed`, `store_write_failed`, `ledger_write_failed` | inline / item | "That did not work. The server's log says why." |
+| `scan_failed` | inline / item | "The directory scan stopped with an error." On an item, plus " (exit status <exit>)" |
+| `analysis_failed` | item | "No repository could be analyzed. The first to fail was <repo>, while <stage>, with exit status <exit>." Or "…, while <stage>, after the time limit." when `timedOut` |
+| `store_write_failed` | item | "The run could not be saved to the store folder (<errno>)." |
+| `ledger_write_failed` | inline | "The queue file could not be written, so nothing changed." |
+| `ledger_write_failed` | item | "The queue file could not be written (<errno>), so this analysis did not start. Retry it once the disk can be written again." |
 | `200` analyze, `started` true / false | inline | "Started." / "Queued — it starts when the running analysis finishes." |
-| interrupted item | item | "Interrupted when the server stopped. Retry to run it again." |
+| interrupted item | item | "Interrupted when the server stopped. Retry to run it again." With `detail.stage` known: "Interrupted while <stage> <repo> when the server stopped. Retry to run it again." |
 | `403` on any request | banner, terminal | "This page's token is stale — reload to reconnect." (the board's string) |
 | fetch rejected | banner, terminal | "The control server is no longer running." (the board's string) |
 | `runsError` | runs list | "The runs file cannot be read. The server's log says why." |
 | `400`, `413`, `415` | inline | "Unexpected error." These are page bugs; the page cannot produce them by following this contract |
 
 The pop-up uses the delete dialog's frame, with one **OK** button and the title "Nothing found".
+
+**Each code has its own message, built from the item's `detail` (spec call, O2).** Until round
+1, four codes shared "That did not work. The server's log says why." That log is gone after a
+restart, and `detail` (§5.1) is not. `<repo>` and `<exit>` are data, rendered as text. `<errno>`
+is the symbolic name. `<stage>` maps the closed set of stage keys to fixed words (`start` →
+"starting", `scan` → "scanning the directory", `worktrees` → "reading worktrees", `branches` →
+"reading branches", `cards` → "reading cards", `order` → "deriving merge order", `merge` →
+"merging the runs", `write` → "writing the store"). A part whose value is `null` or unknown is
+left out, never guessed. A job-time failure with one of the pop-up codes, or with
+`no_such_directory`, shows that code's string on its item, not in a pop-up.
 
 ### 9.3 `file://`
 
@@ -770,6 +988,19 @@ bundled sample is never listed (builder check). The board's own copy-only `file:
    and `queue_full` to the §9.2 strings, and every other code to "Re-analysis could not be queued.
    Open the Ledger to see why." **(spec call)** That small set avoids a second full copy of the
    Ledger's table. In copy mode (no token) the `python3 treko/analyze.py .` chip stays as it is.
+   The transport and the mapping live in `board-commands.js` after split 3 (§1.1).
+   **When the run can no longer be analyzed (spec call, round 1).** For `no_such_directory`,
+   `no_such_worktree`, `no_repository`, `no_matching_repository` and `nothing_matched`, nothing
+   was queued (§3.4). The board stays on the board and shows a pop-up with one **OK** button and
+   the title "Cannot re-analyze":
+   - `no_such_directory`: "This run's directory no longer exists, so it cannot be analyzed again.
+     Nothing was queued."
+   - `no_such_worktree`: "The worktree this run was narrowed to no longer exists (worktrees are
+     removed after a merge), so it cannot be analyzed again. Nothing was queued."
+   - the other three: "This run's directory no longer holds what it was analyzed from. Nothing
+     was queued."
+
+   These five are taken out of "every other code" above.
 3. **Graph svg size** (§7.4).
 
 ## 10. Scenarios
@@ -919,6 +1150,47 @@ Scenario: Re-analyze of a run from before the Ledger
   When  the user clicks Re-analyze on the board
   Then  its directory is queued with no narrowing, and the result lands under a new D12 id
   And   the old run's bytes in the store are unchanged
+
+Scenario: Re-analyze a run whose directory has been deleted
+  Given /board shows run R, recorded with directory ~/dev/gone, which no longer exists
+  When  the user clicks Re-analyze
+  Then  the response is 422 no_such_directory and the queue is unchanged
+  And   the board stays on /board and shows the no_such_directory pop-up of §9.4, word for word
+
+Scenario: Re-analyze a run whose narrowing worktree was removed after its merge
+  Given /board shows run R, narrowed to the worktree ~/wt/feat-x, which has been removed
+  When  the user clicks Re-analyze
+  Then  the response is 422 no_such_worktree and the queue is unchanged
+  And   the board stays on /board and shows the no_such_worktree pop-up of §9.4, word for word
+
+Scenario: two identical submits race
+  Given nothing is queued or running
+  When  two tabs send the same analyze request at the same moment
+  Then  exactly one item exists for that run id
+  And   one request gets 200 and the other gets 409 already_queued
+
+Scenario: the queue file cannot be written when a job would start
+  Given an item is waiting and ledger.json cannot be written
+  When  the runner would start it
+  Then  no analyzer or scan process starts, and the item shows ledger_write_failed
+  And   nothing else starts until a later ledger write succeeds
+
+Scenario: a repository below the depth limit is reported, not silently absent
+  Given ~/deep holds one repository 2 levels down and another 6 levels down
+  When  the user analyzes ~/deep
+  Then  the run holds the first repository only
+  And   it asks "Were repositories missed under ~/deep?", counting 1 folder at depth 5
+
+Scenario: a failed job's reason survives a restart
+  Given an item failed with analysis_failed: beta, at branches, exit status 1
+  When  the server is stopped and started again
+  Then  the item's message still names beta, "reading branches" and exit status 1 (§9.2)
+
+Scenario: an accepted status poll writes no audit line
+  Given a Ledger tab polls every 2 s for a minute
+  Then  stderr holds no audit line for an accepted poll
+  When  a poll arrives with a wrong token
+  Then  stderr holds one refused audit line for it
 ```
 
 ## 11. Acceptance criteria
@@ -940,6 +1212,9 @@ assertions that tell the two apart.
 - A6. The token appears in no file under the store directory (`ledger.json` and the lock
   included), in no child's environment or argv, and nowhere on stderr. This extends old
   criterion 10 (`tracking-feature-state.spec.md:889-899`).
+- A7. O3: an accepted `GET /ledger/status` writes no audit line. A refused one (bad token, foreign
+  `Host`, wrong `Origin`) writes one, with its reason. Every other accepted request still writes
+  one.
 
 **B. Lifetime** (`test_ledger_lifetime.py`)
 - B1. The idle predicate (§5.5), as a table over injected clocks: busy is never idle, and the idle
@@ -951,19 +1226,28 @@ assertions that tell the two apart.
 - C1. Depth: a repo at depth 5 is found and one at 6 is not. Descent stops at a repo, including at
   depth 0: when the typed directory is itself a repo, a repo nested inside it is not found (OQ-6
   relies on this). Dot folders, `chflags hidden` folders (macOS only, skipped elsewhere),
-  `node_modules` and symlinked folders are skipped.
+  `node_modules` and symlinked folders are skipped. O1: every depth-5 folder that is not a
+  repository, and every skipped symlinked folder, is counted. A tree holding one repository 2
+  levels down and another 6 levels down gives a run with the first, plus a "Were repositories
+  missed?" question counting the folder at depth 5.
 - C2. Up: a directory 5 levels under a repo root finds it; 6 levels does not.
 - C3. Families: a repo reached directly and through a worktree is one family. The family lists
   worktrees outside the scanned tree. Prunable entries are left out.
 - C4. Narrowing: Repo by folder name; Branch; Worktree by path and by name; both together; the
-  transitive closure; the three non-`ok` outcomes.
+  transitive closure; every non-`ok` outcome of §4.4, including `no_such_worktree` for a worktree
+  no found repository has.
 - C5. D11: each branch of §4.3's three-step rule, including disagreeing copies and their question.
-- C6. Unreadable folders are counted, and refused candidates are named.
+- C6. Unreadable folders are counted, and refused candidates are named. The question's context
+  carries the three counts of §4.1 as §7.2 words it, leaving out any count that is zero.
 - C7. A scan that hangs is killed at `TREKO_SCAN_SECS` with its process group, and the result is
   `scan_timeout`.
 - C8. D10 default 3, in two halves that must disagree: a job over a repo whose fsmonitor writes a
   marker leaves no marker, and the same run with the environment override removed (a test-only
-  hook) writes one.
+  hook) writes one. O5: that hook is a different environment builder **passed as a parameter in
+  code**, in-process. An AST check of `ledger_jobs.py`, `ledger_scan.py` and `ledger_routes.py`
+  (which starts the submit-time scan) finds no `os.environ[...]`, `os.environ.get(...)` or
+  `os.getenv(...)`: every value they use is passed in, so no environment variable, flag or request
+  field can switch the protection off.
 - C9. OQ-8, conditional on what task 1's ADR finds. If it confirms the hook route, a job over a
   fixture repo whose hook (the one task 1 shows `git status` can trigger) writes a marker leaves
   no marker, and the same run without the override writes one. If it confirms the index-write
@@ -992,8 +1276,23 @@ way `HANGING_ANALYZER` is, `server_harness.py:77`)
   (`test_autolaunch.py:284`) keeps. With `--repo` naming a folder that is not a repository,
   stderr says so, nothing is queued and the server still serves. With an item for that request
   already waiting or running, no second one is queued.
+- D9. The ledger lock (§5.6). Two threads send the same `analyze` through `ledger_routes`,
+  released together by one barrier, 50 times. Every round leaves exactly one item for that run
+  id, and the other request gets `409 already_queued`. In the same way, a `remove` racing the
+  runner's start of the same item ends with the item either running (the remove refused with
+  `item_running`) or removed and never started, never both.
+- D10. Each of §5.6's five runner-side writes, and one request-side write, is made to fail by a
+  writer passed in code. Each ends in the state §5.6's table gives. stderr carries one
+  `server: ledger write failed` line naming the errno and no field value. The file on disk is
+  the previous one, byte for byte. After write 1 fails, no subprocess starts until a later write
+  succeeds, and the server can still go idle (§5.5). After write 4 fails, the server exits 2.
+- D11. O2: a failed item and an interrupted item each carry the `detail` their failure had
+  (stage, repo, exit status or timeout, errno). `ledger.json` holds no other text: none of the
+  fixture's stderr lines appears in it, and no request field value appears outside `request`.
+  The detail, and so the message, survives a restart.
 
-**E. Progress** (`test_analyze.py` and `test_ledger_jobs.py`)
+**E. Progress** (`test_analyze_options.py` and `test_ledger_jobs.py`; `test_analyze.py` stays
+unchanged, §1.1)
 - E1. `--progress` prints exactly the four lines, in order, and stdout is byte-identical without
   it. Each line arrives as its stage ends: with a `git` wrapper first on `PATH` that delays
   `for-each-ref` by 2 s, the `worktrees` line is read at least 1.5 s before exit.
@@ -1006,7 +1305,9 @@ way `HANGING_ANALYZER` is, `server_harness.py:77`)
   (the exit-1 path); and a card with an id-less task. Fixtures commit
   with fixed dates, so git's relative times match. stdout, stderr and exit status must be equal
   byte for byte, both plain and with `--pretty`. A falsifier runs the same comparison on a copy
-  with one default-path byte changed and must see it fail.
+  with one default-path byte changed and must see it fail. Both analyzers run under the pinned
+  runtime interpreter, `/usr/bin/python3` (3.9.6), not the test runner's (§15). That makes E2
+  also split 1's proof (§1.1).
 - E3. Between two progress reports, repeated polls return the same `stage`. The node slice's bar
   width is a pure function of `stage` alone.
 - E4. `total` is `null` until the scan ends, then `4N + 3`. A failed family's remaining stages
@@ -1038,11 +1339,17 @@ way `HANGING_ANALYZER` is, `server_harness.py:77`)
 - G6. OQ-7 (my call): Re-analyze of a run with no recorded request queues its directory, `~`
   expanded, with no narrowing. The result lands under the D12 id, and the old run's bytes in the
   store are unchanged.
+- G7. Re-analyze re-runs the submit-time path (§3.4). A run whose recorded directory has been
+  deleted gets `422 no_such_directory`. A run whose narrowing worktree has been removed with
+  `git worktree remove` gets `422 no_such_worktree`. In both, `ledger.json` is byte-identical
+  before and after. `analyze` with a `worktree` that no found repository has also gets
+  `422 no_such_worktree`.
 
 **H. Pages** (`test_ledger_page.py`: node slice plus CDP on the pinned Chrome; set
 `TREKO_CHROME_DENY_BIRD=1` on this machine, as `treko-degraded-no-cmux.md` records)
 - H1. Slice: every §9.2 row, an unknown code, and a hostile `error` string such as `"constructor"`
-  or markup all reach fixed strings only.
+  or markup all reach fixed strings only. O2: each code's message is built from a `detail` with
+  every part present, and again with each part `null`, and an unknown stage key is left out.
 - H2. Served: form, queue and rows render from a seeded store. Analyze on an empty folder shows the
   pop-up with the exact D2 wording and queues nothing. Analyze with a Branch that no card names
   shows the "No card matches that branch or worktree." pop-up and queues nothing (OQ-4).
@@ -1050,10 +1357,31 @@ way `HANGING_ANALYZER` is, `server_harness.py:77`)
 - H4. Board icons: `/` when served, `Ledger.dc.html` over `file://`.
 - H5. Open and Open the board land on `/board` showing that run.
 - H6. Re-analyze posts to `/ledger` and never to `/command`. After a `200` the browser is at `/`
-  (OQ-5).
+  (OQ-5). The transport lives in `board-commands.js` after split 3.
 - H7. On a merged two-family run, the board's svg box contains every node box.
 - H8. D8: the store directory is text, and the DOM has no input or Save for it.
 - H9. The Ledger's token block equals the board's byte for byte.
+- H10. On `/board`, a Re-analyze answered `no_such_directory` or `no_such_worktree` shows the §9.4
+  pop-up word for word, keeps the browser on `/board`, and sends nothing to `/command`. The slice
+  test stubs the fetch; the CDP test uses a really deleted directory.
+
+**Z. Whole-card checks**
+- Z1. **The pinned runtime interpreter.** One test in `test_ledger_jobs.py` launches `server.py`
+  with `/usr/bin/python3`, through a new `interpreter` parameter of `server_harness.launch`. It
+  is passed in code, and its default stays `sys.executable` (`server_harness.py:296`). The test
+  first asserts that `/usr/bin/python3 -V` prints `Python 3.9.6`. It then runs one two-family
+  `analyze` job end to end and checks the run in the store against §7.3's schema property. The
+  server starts the scan and every analyzer with its own `sys.executable` (§4, §5.4), so this one
+  test runs the server, all five `ledger_*` modules, `cards.py` and `analyze.py` on 3.9.6,
+  whatever interpreter pytest itself runs on.
+- Z2. **File sizes.** A new `test_file_budgets.py` holds §1.1's table and fails when any listed
+  file exceeds its budget, or when any file this card creates or changes exceeds 800 lines by
+  `wc -l`. The card's own two documents are left out: ADR 0017 governs them, and the user
+  accepted this half's overrun on 2026-11-03.
+- Z3. **The splits change nothing.** At each split's own commit (§1.1), the existing suite passes
+  unchanged. The only exceptions are split 3's loader path, and `test_guards.py` pointing its
+  fence check at `board-commands.js`, where the pinned sha256 still matches. For split 1, E2
+  passes too.
 
 **I. Docs.** `skills/treko/SKILL.md` describes the Ledger, the routes, `ledger.json` and the lock
 file in "Where the survey is stored", the new startup aborts, and drops "`reanalyze` … is the only
@@ -1066,16 +1394,26 @@ queues the launch repo on the Ledger rather than analyzing it before the browser
   `reanalyze` as the cmux-free command (18 matching lines, `grep -c reanalyze treko/test_server.py`)
   move to a Ledger job or to `clear` with the fake cmux. The criterion-10 test's `reanalyze`
   precondition (`:297-301`) becomes "a Ledger job completed". Its comment that the server passes no
-  `env=` to any child becomes false and is rewritten.
+  `env=` to any child becomes false and is rewritten. It stays within 800 lines (§1.1), so new
+  tests go in the new modules. `server.CONFIRM_REFUSAL_REASONS` still resolves after split 2,
+  through the import back.
+- `test_analyze.py`: unchanged. The analyzer's new tests (E1, E2, E5) go in a new
+  `test_analyze_options.py` (§1.1).
+- `server_harness.py`: `launch` gains an `interpreter` parameter, defaulting to `sys.executable`
+  (Z1).
 - `test_store_writer.py`: the writer is now the job runner.
 - `test_degraded.py`: Re-analyze under no channel goes through `/ledger`.
 - `test_ui_commands.py`: the page's ids posted to `/command` equal `SEND_COMMANDS`, and
   Re-analyze's outcome table is §9.4. After a `200`, Re-analyze now goes to `/` instead of
-  reloading (OQ-5), so old criterion 15's `500` row for `reanalyze` retires with it.
+  reloading (OQ-5), so old criterion 15's `500` row for `reanalyze` retires with it. Its loader
+  reads `board-commands.js` instead of cutting the slice out of `Treko.dc.html` (split 3).
 - `test_guards.py`: the board's slice changes, so the fence pin (`:29`, sha256 `bfe17645…`,
-  6692 bytes) is re-pinned deliberately in the same task, with the new figures recorded.
-  `EXPECTED_COMMAND_IDS` (`:318`) stays valid if the button list is unchanged.
-  `EXPECTED_MANIFEST_ROWS` (`:560`) stays 17.
+  6692 bytes) is re-pinned deliberately in the same task, with the new figures recorded. Before
+  that, at split 3's own commit, the fence check and `EXPECTED_COMMAND_IDS`'s extraction are
+  pointed at `board-commands.js`, where the pin still matches (Z3). `EXPECTED_COMMAND_IDS`
+  (`:318`) stays valid if the button list is unchanged. `EXPECTED_MANIFEST_ROWS` (`:560`): the
+  first draft said it stays 17, which holds for the Ledger page alone, since that page adds no
+  row. Split 3 adds `board-commands.js`, so the constant becomes 18.
 - `test_theme.py:523` navigates to `/` expecting the board: it moves to `/board`.
 - `test_autolaunch.py`: the first-run behaviour, as OQ-6 is answered. Answered (user): first
   launch with an empty store queues a Ledger job instead of writing a run before the browser opens
@@ -1097,7 +1435,8 @@ queues the launch repo on the Ledger rather than analyzing it before the browser
 - **Nothing new reaches the session.** `/command` shrinks. `/ledger` never invokes cmux (A5).
 - **Unchanged:** the token's lifetime and handling, the collapsed `403`, no CORS headers, the CSP,
   `frame-ancestors 'none'`, the `Host` guard, failure bodies that echo nothing, one audit line per
-  request, and the parent-death check.
+  request (apart from an accepted status poll since round 1: §2, default 4), and the parent-death
+  check.
 - **Rendering:** status data and run data come partly from scanned repositories, which may be
   hostile, and both pages render them as text only (§9.2, H1).
 
@@ -1117,7 +1456,9 @@ Measured on this host 2026-11-03.
 | Tool | Version | Re-read with |
 |---|---|---|
 | Python | 3.9.6 | `python3 -V`. Stdlib only: no `match`, no `X \| Y` annotations |
-| pytest | 9.1.1 | `uv run --with pytest==9.1.1 --no-project pytest --version` |
+| Python, runtime (round 1) | 3.9.6 at `/usr/bin/python3` (the Command Line Tools interpreter) | `/usr/bin/python3 -V`. The skill launches `server.py` with it, so the server, the scan and every analyzer run on it. Z1 and E2 run on it |
+| Python, test runner | **3.11.15**, uv's own managed CPython, pinned with `--python 3.11.15` **(user, 2026-11-03)**; unpinned at round 1 | `uv run --python 3.11.15 --no-project python -V`; see "The test runner's interpreter" below |
+| pytest | 9.1.1 | `uv run --python 3.11.15 --with pytest==9.1.1 --no-project pytest --version` |
 | uv | 0.11.28 | `uv --version` |
 | node | v26.5.0 | `node --version` (the slice tests) |
 | git | 2.50.1 (Apple Git-155) | `git --version`. Needs 2.31 or later for `GIT_CONFIG_COUNT` and `--path-format` |
@@ -1126,8 +1467,49 @@ Measured on this host 2026-11-03.
 | Phosphor | 2.1.1, vendored | `treko/vendor/phosphor/` |
 
 No new dependency. Run the card's suite with
-`TREKO_CHROME_DENY_BIRD=1 uv run --with pytest==9.1.1 --no-project pytest treko/test_ledger_*.py
+`TREKO_CHROME_DENY_BIRD=1 uv run --python 3.11.15 --with pytest==9.1.1 --no-project pytest treko/test_ledger_*.py
 treko/test_analyze.py treko/test_server.py treko/test_ui_commands.py treko/test_guards.py -q`.
+Since round 1 the list also takes the new `treko/test_analyze_options.py` and
+`treko/test_file_budgets.py`, and the changed `treko/test_autolaunch.py`, `treko/test_degraded.py`,
+`treko/test_store_writer.py` and `treko/test_theme.py`.
+
+**The test runner's interpreter (measured 2026-11-03, round 1).** The command above does not run
+on the pinned 3.9.6. Output follows, with the home directory shown as `~`:
+
+```
+$ uv run --with pytest==9.1.1 --no-project python -c "import sys, pytest; print(sys.executable); print(sys.version.split()[0]); print('pytest', pytest.__version__)"
+~/.cache/uv/builds-v0/.tmpOflwHJ/bin/python
+3.11.15
+pytest 9.1.1
+
+$ uv run --with pytest==9.1.1 --no-project --python /usr/bin/python3 --no-python-downloads pytest --version
+  × No solution found when resolving `--with` dependencies:
+  ╰─▶ Because the current Python version (3.9.6) does not satisfy Python>=3.10
+      and pytest==9.1.1 depends on Python>=3.10, we can conclude that
+      pytest==9.1.1 cannot be used.
+      And because you require pytest==9.1.1, we can conclude that your
+      requirements are unsatisfiable.
+exit=1
+```
+
+`--python 3.9.6 --no-python-downloads` gives the same refusal. `uv python find` names
+`~/.local/share/uv/python/cpython-3.11-macos-aarch64-none/bin/python3.11`. So the suite runs on
+whatever uv's default is, and pytest 9.1.1 cannot run on 3.9.6 at all. **No dependency version was
+changed.**
+
+**Answered (user, 2026-11-03): option (a).** The runner is pinned to `--python 3.11.15` in the table
+and the suite command above; pytest stays 9.1.1 and the runtime stays 3.9.6, proven by Z1 and E2.
+No dependency changed. The options as they were put to him:
+
+- (a) Pin the runner explicitly to that 3.11.15 with `--python 3.11.15`, keeping pytest 9.1.1
+  and the runtime at 3.9.6.
+- (b) Move pytest to a release that still supports 3.9 and run everything on 3.9.6. That is a
+  dependency change and needs the vetting gate.
+- (c) Move the runtime to 3.11, which changes the skill's launch command.
+
+**Recommended: (a).** It changes nothing that runs today, it makes the runner reproducible, and Z1
+and E2 already prove the code on 3.9.6. Until a choice is made, Z1 and E2 are what tie this suite
+to the runtime pin.
 
 ## 16. Risks
 
@@ -1135,13 +1517,17 @@ treko/test_analyze.py treko/test_server.py treko/test_ui_commands.py treko/test_
   `~/Downloads`. macOS may ask the terminal app for folder access the first time. Not measured:
   probing it would raise the prompt. A large home folder may hit `TREKO_SCAN_SECS`, which then
   gives a clear failure rather than a hang.
-- **Card 5's line citations into `analyze.py`** shift (§6.1).
+- **Card 5's line citations into `analyze.py`** shift (§6.1), and so do its `Treko.dc.html` ones
+  after split 3 (§1.1).
 - **Two pages share strings.** The board copies only five of the Ledger's messages (§9.4) to keep
   the drift surface small.
 - **The Ledger's contrast is unguarded.** `test_theme.py` and `test_nontext_contrast.py` score the
   board only.
-- **The card's `.md` half is 266 lines** against ADR 0017's 200-line cap. That is pre-existing,
-  and for the reviewer.
+- **The card's `.md` half is over ADR 0017's 200-line cap** (`wc -l docs/features/treko-ledger.md`).
+  That is pre-existing, and for the reviewer.
+- **O1 covers runs, not the nothing-found pop-up.** A refusal body carries only its code (§3.5),
+  and D2 fixed the pop-up's wording. So when the scan finds nothing at all, a repository below
+  the depth limit is not reported. Once anything is found, the run's question reports it (§7.2).
 - **File filters (OQ-8, user).** If task 1 cannot switch them off without breaking the scan, a
   scanned repository's own config can still name a filter program that `git status` runs. The
   user accepted that risk; task 1's ADR records it.

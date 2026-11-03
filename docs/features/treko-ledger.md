@@ -256,6 +256,10 @@ stage as it finishes, which it cannot do unchanged. Resolution: `analyze.py` gai
 progress report and nothing else. Its emitted `run` object and its behaviour without that option stay
 exactly as today. Card 5 cites `analyze.py` by line number and is still in planning, so those
 citations must be re-checked when card 5 resumes.
+**Update 2026-11-03 (after compliance round 1):** "nothing else" no longer holds. `analyze.py` also
+gains `--card PATH` (OQ-1), and its card layer moves to a new `cards.py` to keep the file under 800
+lines (a pure move). Both are covered by the byte-for-byte test. The spec also adds a fourth D10
+default: status polls write no audit line. Details are in the spec, §1.1 and §2.
 
 ## Spec
 
