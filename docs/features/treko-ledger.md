@@ -255,7 +255,7 @@ citations must be re-checked when card 5 resumes.
 
 ## Spec
 
-Not yet written. See the "State of this file" note at the top.
+Split into [`treko-ledger.spec.md`](treko-ledger.spec.md): design, wire contract, scenarios, acceptance criteria and open questions.
 
 ## Tasks
 
