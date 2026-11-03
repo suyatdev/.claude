@@ -21,6 +21,8 @@ answer, and the (my call) items listed there still need playing back to him.
 `treko-ledger.spec.md` (the user accepted its going over ADR 0017's 800-line cap), and its
 open questions are answered in that file. **§Tasks is still unwritten.** Next: the compliance judge,
 then his review, then the checklist.
+**Update 2026-11-03 (compliance round 2: fail, 3):** two ids repeated and went to him. His answers
+are D13-D15. The spec is being revised for round 3.
 
 Every decision below is tagged **(user)** when he decided it in the brainstorm, or **(my call)** when
 the planning session settled it and he has not yet seen it written down. A builder must not promote a
@@ -189,6 +191,25 @@ and `~/work/foo` would overwrite each other. (my call) The id is built from the 
 any narrowing. Delete puts the run on a hide list the server keeps; analyzing it again takes it off.
 Nothing on disk is erased, so the prototype's dialog wording ("the analysis files on disk are not
 touched") stays true.
+
+**D13 — The board keeps its address; the Ledger gets its own, and launch opens it.** (user,
+compliance round 2, 2026-11-03) The first spec draft served the Ledger at `/` and moved the board to
+`/board`. That was a (spec call), not his. Compliance round 2 cited `core-conduct/file-size` for the
+second time, because the move forces edits to tests that load the board at `/`, one of them
+`treko/test_nontext_contrast.py` (1,054 lines). He chose to keep the board at `/` unchanged, serve
+the Ledger at its own address, and have launch open the Ledger. D1 still holds.
+
+**D14 — A job can never stay "running" for ever.** (user, compliance round 2, 2026-11-03)
+`core-conduct/explicit-error-handling` was cited twice in a row: a crash while combining per-repo
+results, or an analyzer that cannot start (`server.py:330-331`), had no defined outcome. He chose
+two specific failure messages, plus a catch-all that marks any crashed job failed and frees the
+queue and the idle exit.
+
+**D15 — Task 1 tests switching file filters off on a real LFS repo, then he decides.** (user,
+compliance round 2, 2026-11-03) His earlier acceptance of the file-filter risk stands for now. The
+observability read found that blanking a filter driver stopped it in a toy repo. Task 1 tries that on
+a real Git LFS repo and shows him the result. If LFS-backed scanning still works, filters go off;
+otherwise the accepted risk stays.
 
 ## Decisions carried to the relations card (user, 2026-11-02)
 
