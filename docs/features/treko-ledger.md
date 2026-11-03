@@ -15,6 +15,8 @@ because the standing worktree rule needs a branch for the worktree to hold.
 builder check (a fresh reader looking for gaps), the `writing-specs` pass (Gherkin, contracts, pinned
 versions), the compliance judge, the user's review, and then the task checklist. **Nothing under
 §Spec or §Tasks has been written yet.** They are placeholders, not omissions to infer from.
+**Update 2026-11-02:** the builder check is done (see §Builder check results); D8 is still his to
+answer, and the (my call) items listed there still need playing back to him.
 
 Every decision below is tagged **(user)** when he decided it in the brainstorm, or **(my call)** when
 the planning session settled it and he has not yet seen it written down. A builder must not promote a
@@ -118,6 +120,9 @@ is for and answered by redefining D2 instead) **Repo** picks one of the discover
 name. **Branch** and **Worktree** narrow within it, matching the prototype's subtitle "directory is
 required — repo, branch and worktree narrow the scan". The builder check should confirm this reading
 with him.
+**Confirmed (user, builder check 2026-11-02):** Repo picks which found repos to analyze, by folder
+name. Branch and Worktree show only the matching cards **plus every card those depend on**, so the
+merge order stays true.
 
 **D4 — Analyze starts now or queues.** (user) Clicking Analyze starts the analysis if nothing is
 running, or adds it to the queue if something is. There is no per-item Analyze button. (my call) The
@@ -153,6 +158,31 @@ already wired for PR fields and only the producer is missing. This card adds no 
 makes sure a run that spans several repos (D2) renders correctly, since `branches[].repo` already
 exists in the schema.
 
+**D10 — Loosening the server's safety rule is this card's first task.** (user, builder check
+2026-11-02) Today the page may send only one of three fixed command names and never any text
+(`tracking-feature-state.spec.md:406-411` and `:689-693`; enforced at `server.py:592-598`). The
+Ledger must send a directory plus the optional narrowing boxes, and ids to remove, delete or retry.
+That rule says loosening it is a spec change plus a judge round, so task 1 writes an ADR for the new
+commands and their arguments and gets it judged **before any Ledger screen is built**. The agreed
+card order is unchanged. (my call) Defaults the ADR starts from: accept only a directory that
+exists; status polling must not reset the idle timer (`server.py:650-652` resets it on every request
+today, so a polling tab would keep the server alive indefinitely); git runs in scanned repos with
+`core.fsmonitor` switched off, since a scanned repo's own config can name a program for git to run.
+
+**D11 — Which copy of a card counts.** (user, builder check 2026-11-02) Each worktree holds its own
+copy of every card, with its own phase and ticks, and today cards are read only from the folder the
+analyzer was pointed at (`analyze.py:192-198`). Instead, cards are read from every worktree of the
+repo. When a card names a `branch:` and that branch has a worktree, that worktree's copy wins;
+otherwise the primary checkout's copy wins. Each card appears once.
+
+**D12 — A run is refreshed in place; Delete hides it.** (user, builder check 2026-11-02) One run per
+directory plus narrowing; analyzing it again replaces it. Today the store already replaces by id
+(`store.py:127-143`), but the id is only the repo's folder name (`analyze.py:504`), so `~/dev/foo`
+and `~/work/foo` would overwrite each other. (my call) The id is built from the full directory plus
+any narrowing. Delete puts the run on a hide list the server keeps; analyzing it again takes it off.
+Nothing on disk is erased, so the prototype's dialog wording ("the analysis files on disk are not
+touched") stays true.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
@@ -185,6 +215,32 @@ Recorded here so the relations card inherits them. **Not in this card's scope.**
   fit the existing `run` object.
 - What the Ledger shows when opened as `file://` (no server, so it cannot queue).
 - The exact stage list for D6, read off the analyzer.
+
+## Builder check results (2026-11-02)
+
+A fresh Opus reader with no access to the brainstorm read this card and the code and returned seven
+ranked questions. The planning session re-opened the citations below before writing them here. The
+user answered four (D10, D11, D12, and D3's confirmation). **Still his: D8**, the Artifacts path box
+(the builder found that its source, `treko-store-location.md:104-107`, keeps it display-only or
+absent until its own design exists). Settled as (my call), not yet played back to him:
+
+- **Several repos in one run.** Run `analyze.py` once per repo, unchanged, and merge in a new module
+  that renumbers ids so they cannot collide: node ids (`analyze.py:333-338`), question ids
+  (`:306-310`) and constraint ids (`:697-705`) all restart for each analysis. Leaving `analyze.py`
+  untouched also keeps card 5's line citations valid.
+- **`file://`.** The Ledger says there is no server and shows the launch command. It never lists the
+  bundled sample as runs on disk. The board already treats `file://` as a supported copy-only mode
+  (`Treko.dc.html:543-545`).
+- **D6 stages.** The analyzer's real steps (`analyze()` at `analyze.py:463`), plus the Ledger's own
+  directory scan, the per-repo loop and the store write. The analyzer prints nothing until it
+  finishes and the server captures its output whole (`server.py:322-327`), so it has to learn to
+  report each stage as it completes.
+- **D2-up.** Finding the repo a directory sits inside is `git rev-parse --show-toplevel`, which the
+  server already uses (`server.py:212-235`). The card's reading stands unless he says otherwise.
+- **The board's Re-analyze button** re-queues the run on screen with its original request, instead
+  of re-surveying the repo Treko was launched from (`server.py:601-603`).
+- **After a server restart**, waiting items start on their own, since D4 removed the per-item
+  Analyze click. An item that was interrupted mid-run waits for a Retry.
 
 ## Spec
 
