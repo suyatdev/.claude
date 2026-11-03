@@ -1,7 +1,7 @@
 ---
 phase: review
 model_tier: high
-branch: chore/treko-degraded-followups
+branch: none  # merged via PR #126 (be2ab16) and follow-up PR #127 (a268f21), 2026-11-02; feat/treko-degraded-no-cmux and chore/treko-degraded-followups deleted local+remote 2026-11-02
 ---
 
 # Treko: serve a degraded, no-control-channel board instead of refusing to start
