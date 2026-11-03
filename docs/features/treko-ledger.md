@@ -211,6 +211,22 @@ observability read found that blanking a filter driver stopped it in a toy repo.
 a real Git LFS repo and shows him the result. If LFS-backed scanning still works, filters go off;
 otherwise the accepted risk stays.
 
+**D16 — Close the two measured program routes; say plainly what is untested.** (user, compliance
+round 3, 2026-11-03) Both judges measured a scanned repo's own config running a program with every
+§2 protection on: `gpg.program` under `log.showSignature`, and a promisor lazy fetch. He chose to
+close both (one setting each, each with a test) and to have the spec state that git's other config
+keys have not been checked one by one.
+
+**D17 — Git LFS is vetted and pinned as a test-only tool.** (user, compliance round 3, 2026-11-03)
+Task 1's D15 test needs a real Git LFS repo, and `git-lfs` is not installed here. Vetted 2026-11-03:
+Homebrew `git-lfs` 3.8.1, 0 stop / 0 caution, every check `not_run` for Homebrew (report:
+`~/.claude/hooks/state/vetting/homebrew/git-lfs/3.8.1.md`). It is installed only in task 1, only
+with his approval at the prompt.
+
+**D18 — A repo whose `git status` fails shows "unknown", not "no changes".** (user, compliance round
+3, 2026-11-03) Today the analyzer reports such a repo as clean. He chose "unknown" with a short note,
+with the rest of that repo still shown.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
