@@ -98,7 +98,7 @@ flowchart LR
 | `treko/ledger_jobs.py` | new | the job runner and its subprocesses (§5, §6) |
 | `treko/ledger_routes.py` | new | the `/ledger` and `/ledger/status` handlers: field validation, op dispatch, the status payload (§3) |
 | `treko/cards.py` | new | split 1: the analyzer's card-reading layer, moved unchanged (§1.1) |
-| `treko/board-commands.js` | new, one manifest row | split 3: the board's node-loadable command slice, moved unchanged, then the Re-analyze change (§1.1, §9.4) |
+| `treko/board-commands.js` | new, one manifest row | split 3: the board's node-loadable command slice, moved unchanged, then the Re-analyze change, which also corrects two of the slice's comments (§1.1, §9.4, §12; the second since round 6) |
 | `treko/server.py` | changed | routes, validation, idle rule, startup, the launch address (§3, §3.2); split 2 moves its send path out (§1.1); since round 5, the token check and body reader `/ledger` and `/command` share, and the request catch-all every route runs inside, `/command` included (§3.8; U10) |
 | `treko/channel.py` | changed | split 2: receives `confirm_surface`, `send_keys` and `CONFIRM_REFUSAL_REASONS` unchanged (§1.1) |
 | `treko/analyze.py` | changed | two optional inputs: the progress report (§6) and `--card` (§4.3; OQ-1, (my call)); since round 3 one behaviour change, a worktree whose `git status` fails shows "changes unknown" instead of "clean" (§6.3; U6); and since round 4 two more of the same kind, a branch whose `git diff --shortstat` fails shows "diff unknown" instead of an empty diff, and a branch whose worktree folder is gone shows "folder missing" instead of "clean" (§6.4; U9). Nothing else. Split 1 also moves its card layer out, with no change in behaviour (§1.1) |
@@ -264,6 +264,14 @@ deliberately narrow:
   failure table gains one row, `500 internal_error`, and two inputs that today drop its
   connection with no answer get `403 bad_token` (a token header that is not ASCII) and
   `400 malformed` (a body nested too deeply to parse). Its arguments rule is unchanged.
+  **On `/command` that row's audit line says `sent=unknown` (user, D27, round 6; §3.8),** because
+  the catch-all cannot tell whether `cmux send` ran: an exception it catches may come after the
+  send, when the keystrokes are already typed. This widens `unknown`, which the old spec defines
+  as "`cmux send` was invoked and did not exit 0" (`tracking-feature-state.spec.md:541-544`): the
+  catch-all is a third case beside a timeout kill and a non-zero exit, and it fits the reason that
+  definition gives, a case "where the server genuinely cannot say whether anything was typed".
+  `no` keeps its meaning, a refusal before invocation. Until round 6 the catch-all's line said
+  `sent=no` on every route.
 
 **Task 1 writes an ADR** recording the routes, ops, argument shapes and validation of §3, the
 amendments above, and D10's defaults below. Take its number from `origin/main` at write time,
@@ -669,8 +677,14 @@ The body is always `{"ok": false, "error": "<error>"}` and echoes nothing from t
 | 500 | `store_unreadable` | `delete`/`reanalyze`: the store does not parse | `store_unreadable` |
 | 500 | `internal_error` | any unexpected exception while a request is handled, caught by the request catch-all (§3.8; U10, round 5) | `internal_error` |
 
-`GET /` and `GET /ledger` keep today's `500 asset_unreadable` for an unreadable page. `/command` is
-unchanged apart from its allowlist: `{"id": "reanalyze"}` is now `403`, reason `unknown_id`.
+`GET /` and `GET /ledger` keep today's `500 asset_unreadable` for an unreadable page. `/command`
+changes in two ways only. Its allowlist shrinks: `{"id": "reanalyze"}` is now `403`, reason
+`unknown_id`. And since round 5 it gets U10's changes (§2, §3.8): the request catch-all's
+`500 internal_error` row, whose audit line there says `sent=unknown` (round 6), and two named
+refusals, `403 bad_token` for a token header that is not all ASCII and `400 malformed` for a body
+nested too deeply to parse. Its arguments rule is unchanged. Until round 6 this sentence said
+`/command` was "unchanged apart from its allowlist", which U10 had made untrue (the round-6
+compliance judge's finding).
 
 **Codes only a failed item carries (U2, round 2).** These never answer a request, apart from the
 two the table marks as also a request answer: `launch_failed`, and since round 5 `internal_error`
@@ -788,15 +802,41 @@ job thread (§5.4). When it catches one, it:
 
 1. answers `500` with `{"ok": false, "error": "internal_error"}`, the same fixed body shape as
    every failure, when no response has started. If one has (its status line has gone out), it
-   cannot answer again and sends nothing more;
+   cannot answer again and sends nothing more. **A status line that `send_response` has only
+   buffered has not gone out (my call, round 6):** `http.server` writes that buffer at
+   `end_headers`, so the catch-all drops it before answering, and one reply never holds two
+   status lines. Measured on 3.9.6 in a stand-alone `http.server` handler (`buffer_probe.py`; the
+   round-6 compliance judge saw the same): a route that raises between `send_response` and
+   `end_headers`, under a catch-all that keeps the buffer, sends `HTTP/1.1 200 OK` and
+   `HTTP/1.1 500` in one reply. **When the answer cannot be written (my call, round 6),** because
+   the client has gone, the catch-all sends nothing more and goes on to step 2. After a client
+   resets the connection, the route's own answer raises `BrokenPipeError`, and so does the
+   catch-all's `500` on the same connection (measured on 3.9.6 in a stand-alone `http.server`
+   handler, `hangup_probe.py`, three runs of three). Until round 6 that failure fell under the
+   "own writes" rule below and went to `socketserver`'s default, so a client that hung up would
+   have left no audit line at all;
 2. writes exactly one audit line:
-   `failed id=- surface=- sent=no status=500 reason=internal_error path=- errno=<name>`, where
+   `failed id=- surface=- sent=<sent> status=500 reason=internal_error path=- errno=<name>`, where
    `<name>` is the symbolic errno when the exception is an `OSError` carrying one (a client that
    hung up gives `EPIPE` or `ECONNRESET`), and `-` otherwise. `id=-` because it cannot know how far
    the request got (§3.6). `status=500` even when a response had started, because the line records
    the server's verdict and the audit format requires a number there (`AUDIT_RE`,
    `server_harness.py:238-241`). Every route writes its own audit line as its last step, as each
-   does today, so a request that reaches the catch-all has written none (read, not run);
+   does today, so a request that reaches the catch-all has written none (read, not run).
+   **`<sent>` is `unknown` on `/command` (user, D27, round 6; §2), meaning a request `do_POST` has
+   handed to `_handle_command` (my call, round 6), and `no` for every other.** `/command` is the
+   one route that reaches `cmux send`, and the catch-all cannot tell whether the exception came
+   before the send or after it: every route answers first and audits last (`_respond`, then
+   `audit`, in `_run_send`, `server.py:630-639`), so a client that hangs up while the answer is
+   written raises after the keystrokes have gone. The round-6 compliance judge measured exactly
+   that over the real `ControlHandler`, with a stub `send_keys`: `/clear\n` sent, and a catch-all
+   written to the round-5 text logging `sent=no … errno=EPIPE`. No other route invokes `cmux`
+   (A5 for `/ledger`; the pages, the assets and the `404`, `405` and `OPTIONS` answers never
+   have), so `no` is true there. "Handed to `_handle_command`" follows `do_POST`'s own decoded
+   path (`server.py:445`), so `/%63ommand` and an absolute-form `http://127.0.0.1/command` count,
+   while a raw comparison of `self.path` would miss both (measured on 3.9.6: each decodes to
+   `/command`). Until round 6 this line said `sent=no` on every route, which asserted that nothing
+   was typed when the catch-all could not know;
 3. writes one diagnostic line to stderr, `server: request internal_error <ExceptionClass>`, naming
    the class only and never the message, which can carry request content (the round-4 compliance
    judge's traceback printed the offending character);
@@ -804,13 +844,28 @@ job thread (§5.4). When it catches one, it:
 
 It never echoes request content: not in the body, the audit line or the diagnostic line. It
 replaces no named refusal: every input this spec names keeps its own code, and A2, A3 and the §10
-outline drive them; the catch-all is for what nobody has named yet. If its own writes fail
-(stderr closed, say), the exception goes to `socketserver`'s default, as today.
+outline drive them; the catch-all is for what nobody has named yet. If its audit line or its
+diagnostic line cannot be written (stderr closed, say), the exception goes to `socketserver`'s
+default, as today; an answer that cannot be written is step 1's case. Until round 6 this sentence
+said "its own writes", which took in the answer too.
+
+**Around the dispatch, not around `handle_one_request` (my call, round 6).** The handler wraps
+the call to the `do_` method and nothing else. `handle_one_request` also reads the next request
+line of a kept-alive connection, and catches only `socket.timeout` there (3.9.6's source, read),
+so a handler wrapped around it turns a client that closes between requests into a request that
+failed: the round-6 compliance judge's first stub, wrapped there, wrote a second line,
+`failed … errno=ECONNRESET`, after a request already audited `accepted`, when the client closed
+with data unread. A reset during that read stays with `socketserver`'s default, as today: no
+request is in progress, so there is nothing to audit. A8 checks the wrap point.
 
 **What the pages show.** The Ledger has a row for `internal_error` as a request answer (§9.2). The
 board's Re-analyze maps it on its own (§9.4), because a catch-all cannot promise that nothing
-changed. On `/command`, the board needs no change: a code with no entry in its table resolves to
-"Unexpected error." (`Treko.dc.html:429-436`).
+changed. On `/command`, the board's behaviour needs no change: a code with no entry in its table
+resolves to "Unexpected error." (`Treko.dc.html:429-436`). Only the comment above that table
+changes, because it says the table holds "Every row of §Design 3's failure table"
+(`Treko.dc.html:433-435`), which `internal_error` makes untrue; it is corrected in the Re-analyze
+commit, with the re-pin (§12; my call, round 6, from the round-6 compliance judge's note). Until
+round 6 this sentence said the board "needs no change".
 
 ## 4. Directory scan (D2, D3 as confirmed, D11)
 
@@ -1396,10 +1451,17 @@ today.
   at `:93-96`) under `~/.local/state/treko` by default (`:29-30`, `:60-62`). From there it reaches
   only `GET /tracker-data.js` on `127.0.0.1` and the board, as text. It is not in `ledger.json`
   (D11), not in the status rows (§8.3), and not in any log: the analyzer turns the `GitError` into
-  a question on stdout instead of printing it, the job's stderr lines carry ids and fixed words
-  (§3.6), and neither `server.py` nor `store.py` reads `questions`. So it stays on this machine and
-  is shown only on the local page, and the path is kept: it is git's own message, and rewriting
-  it would make the evidence less exact.
+  a question on stdout instead of printing it, the job's own stderr lines carry ids, fixed words
+  and, in a reap-timeout line, a process id (§3.6), and neither `server.py` nor `store.py` reads
+  `questions`. **One stderr line can carry other text (my call, round 6):** a failed analyzer's or
+  scan's own last stderr line, which §3.6 lets follow a job line, as `_reanalyze_failed` does
+  today. It is never a question's context, since a `GitError` the analyzer turns into a question
+  is not printed, but it can hold the same kind of text: an analyzer that exits on a `GitError` it
+  does not catch prints `analyze: git … failed in <absolute path>: …` (`analyze.py:101`,
+  `:788-790`), and `run_reanalyze` passes that line on today (`server.py:332-336`). Until round 6
+  this bullet said the job's lines "carry ids and fixed words", leaving out both. So the context
+  stays on this machine and is shown only on the local page, and the path is kept: it is git's own
+  message, and rewriting it would make the evidence less exact.
 - **The test is the exit status, not the clone type, so it reaches further than partial
   clones.** Any failure of that one call reads the same way. Measured at round 4 (`probe_r4.py`
   case 3): in an ordinary repository, a branch with no history in common with the base (an
@@ -1599,7 +1661,8 @@ structure and wording; take the board's conventions for everything else:
 - **Runs on disk:** count and rows (§8.3), each with Open and the ✕ when `canDelete`.
 - **Polling:** `GET /ledger/status` on load, then every `LEDGER_POLL_MS = 2000` **(spec call)**.
   Polling stops on `403` and on a rejected fetch, both terminal (§9.2). A poll answered
-  `500 internal_error` (§3.8) is not terminal: polling continues (my call, round 5).
+  `500 internal_error` (§3.8) is not terminal: polling continues (my call, round 5), and its
+  banner clears at the next poll answered `200` (my call, round 6; §9.2).
 - **Open / Open the board:** write `taskTracker.run` to the run's id, then go to `/`, where the
   board stays (U1). That is the prototype's handoff (`Ledger.dc.html:198`) and the key the board
   already reads at mount (`Treko.dc.html:540`).
@@ -1632,7 +1695,7 @@ or a URL. Wording is **(spec call)** except where a source is named.
 | `merge_failed` | item | "The results for each repository could not be combined into one run, so nothing was saved. Retry runs it again." (U2) |
 | `store_write_failed` | item | "The run could not be saved to the store folder (<errno>)." |
 | `internal_error` | item | "Treko hit an unexpected error while <stage>, so this analysis stopped. Retry runs it again." With `detail.stage` `null`: "Treko hit an unexpected error, so this analysis stopped. Retry runs it again." (U2) |
-| `internal_error` | inline; on a status poll, the banner, not terminal | "Treko hit an unexpected error with that request. The queue and runs below show what actually happened." (U10; my call, round 5: the request catch-all cannot say whether the change was made, §3.8, and the list below is read fresh by the next poll) |
+| `internal_error` | inline; on a status poll, the banner, not terminal: it clears at the next poll answered `200`, and a later `403` or rejected fetch shows its terminal banner in its place | "Treko hit an unexpected error with that request. The queue and runs below show what actually happened." (U10; my call, round 5: the request catch-all cannot say whether the change was made, §3.8, and the list below is read fresh by the next poll. My call, round 6: the clearing rule, since the failure was transient and a `200` has read the list fresh; until round 6 nothing said when this banner, the one that is not terminal, cleared) |
 | `ledger_write_failed` | inline | "The queue file could not be written, so nothing changed." |
 | `ledger_write_failed` | item | "The queue file could not be written (<errno>), so this analysis did not start. Retry it once the disk can be written again." |
 | `no_such_item` | inline | "That item is no longer in the queue." (round 2, F6) |
@@ -1836,6 +1899,12 @@ Scenario: a request that crashes is answered and audited
   And   neither the answer nor stderr holds the exception's message or any request content
   And   the server answers the next request normally
 
+Scenario: a client that hangs up while /clear is sent leaves an honest audit line
+  Given a valid POST /command {"id": "clear"} whose cmux send takes 0.4 s and exits 0
+  When  the client resets the connection while the send runs
+  Then  the keystrokes have been sent, and the answer cannot be delivered
+  And   one audit line reads failed with reason internal_error and sent=unknown, never sent=no
+
 Scenario: file:// shows no runs
   Given treko/Ledger.dc.html is opened as a file, with the sample data beside it
   Then  the no-server notice and the launch command show, with zero run rows
@@ -1991,9 +2060,10 @@ Scenario: a partial clone is never fetched from
   And   that card's tasks show the diff "diff unknown", never empty, and one question names that branch
 
 Scenario: a branch no card names asks no question about its diff
-  Given a partial clone with two branches whose blobs are missing, and a card naming only the first
+  Given a partial clone with two branches whose blobs are missing
+  And   a card with at least one task whose branch: names the first, and no card naming the second
   When  the repo is analyzed
-  Then  the first branch's card shows "diff unknown" and one question names the first branch
+  Then  that card's tasks show "diff unknown", and one question names the first branch
   And   no question names the second branch, whose diff appears nowhere in the run
 
 Scenario: a worktree whose git status fails shows changes unknown
@@ -2039,10 +2109,14 @@ assertions that tell the two apart.
   raises (A8). The second table, codes only an item carries, is D7's and D12–D14's. **Since round
   5, `id=` (my call, round 5; §3.6):** every refusal before step 5 accepts the op, and every
   unknown op, writes `id=-`; an accepted op writes its name. An unknown op whose value is
-  `"x\n<a well-formed accepted audit line>"` writes exactly one audit line, with `id=-`, and
+  `"x\n<a well-formed accepted audit line>\n"` writes exactly one audit line, with `id=-`, and
   `server_harness.parse_audit` finds no accepted entry in it. Falsifier: a handler that writes the
   raw op into `id=` writes three lines for that request, the middle one parsed as accepted (the
-  round-5 compliance judge's stub result).
+  round-5 compliance judge's stub result). **The trailing `\n` is what lets that falsifier fire
+  (round 6):** without it the same handler writes two lines and neither parses, so the "exactly
+  one audit line" half still fails on the bug but "finds no accepted entry" cannot. Measured with
+  the real `server.audit` and `server_harness.parse_audit`, by the round-6 compliance judge and
+  again here (`a2_probe.py`). Until round 6 the value had no trailing `\n`.
 - A3. For each op, one unknown key gives 400. A 4097-byte body gives 413, and `/command` still gives
   413 at 1025. **Since round 4 (U7):** for each of §3.4's six fields in turn, a value holding a
   lone surrogate, sent as the JSON escape `\ud800`, gives that field's code (`422 invalid_input`
@@ -2076,14 +2150,47 @@ assertions that tell the two apart.
   /Users/x/path")`. Sent to `GET /ledger/status`, `POST /ledger` and `POST /command` in turn,
   each answers `500` with exactly `{"ok": false, "error": "internal_error"}` and closes the
   connection; each writes exactly one audit line,
-  `failed id=- surface=- sent=no status=500 reason=internal_error path=- errno=-`, and one
-  `server: request internal_error RuntimeError` line; neither the body nor stderr contains
-  `secret`, the path or any request content; and a next request, on a new connection, is answered
-  normally. A second case raises after the route has sent its status line: nothing more is sent,
-  the connection closes, and there is still exactly one audit line. Falsifier: the same handler
-  without the catch-all gives no response, no audit line and a traceback on stderr that contains
-  the message (`socketserver`'s default, the state both round-5 judges measured). The `/command`
-  case lives in `test_server.py`, where reason coverage requires it (§12).
+  `failed id=- surface=- sent=<sent> status=500 reason=internal_error path=- errno=-`, with
+  `sent=no` for the two `/ledger` routes and `sent=unknown` for `/command` (user, D27, round 6;
+  §3.8), and one `server: request internal_error RuntimeError` line; neither the body nor stderr
+  contains `secret`, the path or any request content; and a next request, on a new connection,
+  is answered normally. Falsifier: the same handler without the catch-all gives no response, no
+  audit line and a traceback on stderr that contains the message (`socketserver`'s default, the
+  state both round-5 judges measured). The `/command` case lives in `test_server.py`, where reason
+  coverage requires it (§12). Until round 6 the line read `sent=no` for all three. Further cases
+  follow, each with its own falsifier. All but the second are new at round 6 and live in
+  `test_ledger_routes.py`, so `test_server.py` gains only the one test §12 counts:
+  - **`/command` by its decoded path (my call, round 6).** `POST /%63ommand` reaches the
+    replaced `/command` route, as `do_POST` decodes it, and logs `sent=unknown`. Falsifier: a
+    catch-all that compares the raw `self.path` with `/command` logs `sent=no` for it.
+  - **A raise after the status line has gone out.** The replaced route raises after its own
+    `end_headers`: the client receives that status line and nothing more, the connection closes,
+    and there is still exactly one audit line. Falsifier: the same handler without the catch-all
+    writes no audit line. **Until round 6 this case raised "after the route has sent its status
+    line"**, which a fixture could build as a raise after `send_response`, which only buffers the
+    line (`http.server` writes it at `end_headers`), and so test the next case's branch instead
+    (the round-6 compliance judge's note).
+  - **A raise while the status line is only buffered (my call, round 6).** The replaced route
+    raises after `send_response` and before `end_headers`: the reply holds one status line, the
+    `500`, and the fixed body. Falsifier: a catch-all that keeps the buffer sends
+    `HTTP/1.1 200 OK` and `HTTP/1.1 500` in one reply (§3.8 step 1; `buffer_probe.py`).
+  - **A client that hangs up mid-send (user, D27, round 6).** The real `/command` route, with the
+    fake cmux (`server_harness.py:53-74`) launched with `FAKE_SEND=hang` and `FAKE_HANG_SECS`
+    lowered to 0.4 s, well inside `CMUX_TIMEOUT_SECS`, so the send exits 0. A client sends a valid
+    `POST /command {"id": "clear"}` and resets the connection while the send runs. The fake's log
+    holds that `send`, so the keystrokes went out, and the server writes exactly one audit line,
+    `failed id=- surface=- sent=unknown status=500 reason=internal_error path=- errno=EPIPE`, and
+    one `server: request internal_error BrokenPipeError` line. `ECONNRESET` with
+    `ConnectionResetError` is the other pair a hang-up can give, and the test accepts either
+    pair, never `errno=-`. This is the case that drives `errno=<name>` (§3.8 step 2). Falsifiers:
+    a catch-all that logs `sent=no` on `/command`, as the round-5 text said, logs it beside a send
+    the fake recorded (the round-6 compliance judge measured that line, with `errno=EPIPE`); and
+    one whose failed `500` answer escapes it, as the round-5 "own writes" rule allowed, writes no
+    audit line, because that answer raises too (§3.8 step 1; `hangup_probe.py`).
+  - **The wrap point (my call, round 6).** On a kept-alive connection, after an accepted
+    `GET /ledger`, a client that closes with data unread leaves exactly one audit line, the
+    accepted one. Falsifier: a catch-all around `handle_one_request` writes a second,
+    `failed … errno=ECONNRESET` (the round-6 compliance judge's first stub; §3.8).
 
 **B. Lifetime** (`test_ledger_lifetime.py`)
 - B1. The idle predicate (§5.5), as a table over injected clocks: busy is never idle, and the idle
@@ -2318,6 +2425,21 @@ way `HANGING_ANALYZER` is, `server_harness.py:77`)
   `server: job <item> reap timeout <pid>` line, the process is still in the child registry, and
   the next waiting item starts. Falsifier: a catch-all that passes that wait no limit never marks
   the item failed, so the test's own time limit fails it.
+- D15. **The reap waits after a time-limit kill (my call, round 6; §4, §5.4 step 3).** Each case
+  passes in code a reap wait like D14's, which never sees the process end, and each reap-timeout
+  line must name the killed process's pid. A submit-time scan that sleeps past
+  `TREKO_SCAN_SECS`: the request still answers `500 scan_timeout`, nothing is queued, stderr
+  carries exactly one `server: scan reap timeout <pid>` line, and the process is still in the
+  child registry. A job-time scan that sleeps past the same bound: the item ends `failed` with
+  `scan_timeout`, stderr carries exactly one `server: job <item> reap timeout <pid>` line, the
+  process is still in the registry, and the next waiting item starts. A one-family job whose
+  analyzer is `HANGING_ANALYZER`, killed at `ANALYZE_SECS`: the family fails with `timedOut`, so
+  the item fails `analysis_failed` as in the test §12 moves here, with exactly one
+  `server: job <item> reap timeout <pid>` line and the process still in the registry. Falsifier,
+  in each case: a kill path that passes that wait no limit never answers the request or never
+  ends the item, so the test's own time limit fails it. Until round 6 only the catch-all's wait
+  (D14) was driven, though round 5 gave these two waits the same bound and outcome (the round-6
+  compliance judge's note).
 
 **E. Progress** (`test_analyze_options.py` and `test_ledger_jobs.py`; `test_analyze.py` stays
 unchanged, §1.1)
@@ -2363,14 +2485,18 @@ unchanged, §1.1)
 - E7. **A diff git cannot compute shows "diff unknown" (U9, round 4), in
   `test_analyze_options.py`.** The fixture is a `--filter=blob:none` clone of a fixture origin
   (whose config sets `uploadpack.allowFilter=true`, served over `file://`), with a local branch
-  whose changed blob is missing and a card naming that branch, and both analyzers run with
+  whose changed blob is missing and a card with at least one task whose `branch:` names that
+  branch, and both analyzers run with
   `GIT_NO_LAZY_FETCH=1` in their environment, the setting under which a partial clone cannot
   fetch (§2 default 3). The fixture asserts its own precondition first: `git diff --shortstat
   <base>...<branch>` there exits non-zero under that setting, and `git rev-list --objects
-  --missing=print --all` reports at least one missing object. The new analyzer: that card's tasks
-  carry `d.diff == "diff unknown"`; the run has exactly one more question than the baseline's,
-  naming that branch, with git's message in its context; every other field equals the baseline's
-  output byte for byte, the branch's `ahead` included. **Falsifier:** the same assertions against
+  --missing=print --all` reports at least one missing object. The new analyzer: that card's tasks,
+  at least one, each carry `d.diff == "diff unknown"`; the run has exactly one more question than
+  the baseline's, naming that branch, with git's message in its context; every other field equals
+  the baseline's output byte for byte, the branch's `ahead` included. The card has a task because
+  `branches[]` has no `diff` key, so with none the value shows nowhere and the `d.diff` check
+  would pass on no task, as C11 already says (since round 6; the round-6 compliance judge's
+  note). **Falsifier:** the same assertions against
   the baseline analyzer (blob `8b805d1…`, as in E2) must fail, because it gives `""` and no
   question (measured: `probe_r4.py` case 2). And once the missing object has been fetched (one
   plain `git diff` without the setting), the new and baseline analyzers agree byte for byte.
@@ -2429,7 +2555,10 @@ unchanged, §1.1)
   every part present, and again with each part `null`, and an unknown stage key is left out.
   Round 2: the `runsError` message contains the response's `storeDir` as text and does not
   contain the word "log" (F5, §9.2). Round 5 (U10): a status poll answered `500 internal_error`
-  shows §9.2's string in the banner and polling continues, while a `403` still stops it.
+  shows §9.2's string in the banner and polling continues, while a `403` still stops it. Round 6
+  (my call; §9.1, §9.2): the next poll answered `200` clears that banner, and a `403` after it
+  shows the stale-token banner in its place; falsifier: a page that keeps the banner until reload
+  still shows it after that `200`.
 - H2. Served: form, queue and rows render from a seeded store. Analyze on an empty folder shows the
   pop-up with the exact D2 wording and queues nothing. Analyze with a Branch that no card names
   shows the "No card matches that branch or worktree." pop-up and queues nothing (OQ-4).
@@ -2594,7 +2723,13 @@ and the board stays at `/`. Until round 2 every one of them had to move to `/boa
   `BASE_FENCE_NODE_BRIDGE_SHA256` (`:136-137`; 6569 bytes, `4f1f1179…`), the marker-exclusive
   span `test_ui_commands.py`'s loader actually loads. The slice's own comment about living in the
   page is corrected, and so (round 3) is `test_ui_commands.py`'s module docstring (`:9-16`), which
-  gives the same reason: "It cannot live in a `.js` file of its own". **(spec call)** In the same task, criterion 17's external-fetch scan
+  gives the same reason: "It cannot live in a `.js` file of its own". **So, since round 6, is the
+  comment above the board's error table** (`Treko.dc.html:433-435`, in `board-commands.js` after
+  split 3), which says the table holds "Every row of §Design 3's failure table": `/command`'s
+  table gains `internal_error` (§2, §3.8), which the board leaves out on purpose so that it
+  resolves to `unexpected`, and the comment is corrected to say so. It lies inside both hashed
+  spans, so it is corrected before the new figures are taken (my call, round 6; the round-6
+  compliance judge's note). **(spec call)** In the same task, criterion 17's external-fetch scan
   (`:496-498`) also reads `board-commands.js`: after split 3 it reads only the page and would no
   longer see the slice. The manifest falsifier's two messages (`:598-599`, "18-row" and "16-row")
   are corrected to 19 and 17 rows; their assertions already pass at 18. `EXPECTED_COMMAND_IDS`
@@ -3182,3 +3317,68 @@ appear.
 or SIGHUP handler; no check that git is at least 2.45; git's other config keys not enumerated
 (the observability judge's round-4 sweep of 166 keys, 0 hits on one fixture, is evidence, not a
 list); the probe scripts, now also `u10_inputs.py`, live in session scratch folders.
+
+## Revised after compliance round 6 (2026-11-04)
+
+Round 6 checked only the round-5 fixes (D26). It found the three round-5 violations fixed and
+re-cited none, and failed with five new ones, all inside those fixes: the request catch-all
+logged `sent=no` on `/command` even when the keystrokes had gone out
+(`core-conduct/audit-sent-unsourced`); §3.5 still called `/command` unchanged apart from its
+allowlist (`writing-specs/two-way-command-unchanged`); A2's sample value had lost its trailing
+newline, so half of its falsifier could not fire (`writing-specs/a2-falsifier-outcome`); the new
+status-poll banner had no clearing rule (`writing-specs/two-way-poll-banner`); and the new
+scenario and E7 could name a card with no tasks (`writing-specs/card-needs-a-task`).
+
+**The user's decision (user, 2026-11-03).** D27: all five fixed, then his own review of the
+spec, with any further compliance or observability pass on it waived; the card records the
+waiver, as the spec-compliance gate requires. For `audit-sent-unsourced` the card records the
+fix itself, `sent=unknown` on `/command` and a hang-up test, tagged "(user, D27, round 6)" where
+it appears. The other fixes follow the judge's recommendations and are the planning session's
+calls, tagged "(my call, round 6)" where they are more than a wording repair.
+
+**The five findings.**
+
+1. **`core-conduct/audit-sent-unsourced`.** The catch-all's audit line says `sent=unknown` for a
+   request `do_POST` has handed to `_handle_command` and `sent=no` for every other, and §2
+   records that this widens the old spec's `unknown`. A8 gives `/command` `sent=unknown` and gains
+   four cases: `/%63ommand`, a raise while the status line is only buffered, a client that hangs
+   up mid-send (driven with the fake cmux, and the first case to drive `errno=<name>`), and the
+   wrap point; its round-5 second case now raises after `end_headers`. Writing those cases showed
+   two gaps in §3.8 step 1, each measured here on 3.9.6 and closed: a status line `send_response`
+   has only buffered is dropped before the catch-all answers (`buffer_probe.py`), and an answer
+   that cannot be written no longer stops the audit line (`hangup_probe.py`); the round-5 text
+   sent that failure to `socketserver`'s default, which would have left the hang-up with no line
+   at all. §3.8 also says why the handler wraps the dispatch and not `handle_one_request`. A new
+   scenario covers the hang-up, and a new D15 drives the two reap waits round 5 added, which had
+   no criterion (the judge's note). Places changed: §2's `/command` bullet, §3.5's closing
+   sentence (with finding 2), §3.8 (steps 1 and 2, the "own writes" sentence and a new
+   wrap-point paragraph), §10 (a new scenario), criteria A8 and D15.
+2. **`writing-specs/two-way-command-unchanged`.** §3.5's sentence now names both of `/command`'s
+   changes, the smaller allowlist and U10's, and keeps "its arguments rule is unchanged" (§3.5).
+3. **`writing-specs/a2-falsifier-outcome`.** A2's value ends in `\n` again, so the raw-op handler
+   writes three lines and the middle one parses as accepted, as A2 says; re-measured here with
+   the real `server.audit` and `server_harness.parse_audit` (`a2_probe.py`; A2).
+4. **`writing-specs/two-way-poll-banner`.** The `internal_error` banner on a status poll clears
+   at the next poll answered `200`, the judge's recommendation, and a later `403` or rejected
+   fetch shows its terminal banner in its place (§9.1, §9.2, H1).
+5. **`writing-specs/card-needs-a-task`.** The new scenario and E7 name a card with at least one
+   task, as C11 does; the scenario's `Then` says the value shows on that card's tasks, and E7
+   requires at least one task to carry it (§10, E7).
+
+**Two notes outside the judge's scope, fixed too (my call, round 6).**
+
+1. §6.4's account of where a question's context goes now names the pid in a reap-timeout line
+   and the one stderr line §3.6 lets carry other text, a failed subprocess's own last stderr
+   line, with what it can hold: an analyzer that exits on a `GitError` it does not catch prints
+   that error's text, absolute path included (§6.4).
+2. The comment above the board's error table (`Treko.dc.html:433-435`), which says the table
+   holds every row of the old failure table, is corrected in the Re-analyze commit with the
+   re-pin, since `internal_error` makes it untrue (§1's file table, §3.8, §12).
+
+**Not changed at round 6**, outside the user's picks: a request target of `http://[` makes the
+path decode `do_POST` uses (`server.py:445`) raise `ValueError` (measured on 3.9.6 in a
+stand-alone handler, `path_probe.py`; not run on the real server), so it reaches the request
+catch-all and gets `500 internal_error` with `sent=no`; whether it should have a code of its
+own, such as `400 malformed`, is left to the user's review. The probe scripts, now also
+`hangup_probe.py`, `buffer_probe.py`, `path_probe.py` and `a2_probe.py`, live in session scratch
+folders, not in the repository.
