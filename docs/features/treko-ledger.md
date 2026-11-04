@@ -293,6 +293,27 @@ have all five fixed and to **waive any further compliance or observability pass 
 reviews it himself next, and the spec's own criteria catch what is left at build time. This waiver is
 his explicit decision, recorded here as the spec-compliance gate requires.
 
+**D28 — His spec review.** (user, 2026-11-04, sixteen questions, each with a recommendation; all
+answered as recommended except the one in D29) Confirmed: `sent=unknown` for `/command`'s request
+catch-all, widening the old spec's `unknown`; a request target such as `http://[` stays with the
+catch-all's generic `500 internal_error`, with no code of its own; a status line `send_response` has
+only buffered is dropped before the catch-all answers; the status-poll `internal_error` banner clears
+at the next poll answered `200`; one `internal_error` code for a failed job and a failed request; the
+catch-all logs `status=500` even after a client hang-up, with the hang-up in `errno`; the two new
+`internal_error` messages as worded; the four (my call) answers OQ-1, OQ-3, OQ-7 and OQ-8's
+tightening half; the spec's "Until round N" notes stay. Changed: the board's leftover
+`reanalyze_failed` error entry, which `/command` can no longer return, is deleted with the Re-analyze
+change; the "diff unknown" question is asked only when a card **with at least one task** names the
+branch (refines D25); §15's two Python 3.9.6 rows become one; §8.3's row cache is dropped and rows
+are computed on every request, added back only if measured slow (YAGNI); task 1 gains a bounded
+check of git's config keys that can name a program, against the commands the scan and analyzer run.
+
+**D29 — A tidy shutdown on SIGTERM and SIGHUP, in this card.** (user, 2026-11-04) Against my
+recommendation to park it. A plain stop request (`kill`, logout) or a closed terminal runs the same
+shutdown path as `Ctrl-C` (§5.3): registry closed, subprocess groups killed, the running item marked
+`interrupted`. Until now both were a hard kill, which can leave a running analyzer behind as an
+orphan in its own process group. He chose both signals over SIGTERM alone.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
