@@ -23,6 +23,9 @@ open questions are answered in that file. **§Tasks is still unwritten.** Next: 
 then his review, then the checklist.
 **Update 2026-11-03 (compliance round 2: fail, 3):** two ids repeated and went to him. His answers
 are D13-D15. The spec is being revised for round 3.
+**Update 2026-11-03 (compliance rounds 3 and 4):** round 3 failed with 2 new ids, answered by D16-D18;
+round 4 failed with 1 new id, answered by D19, alongside D20-D21 from the observability read. Per D22,
+round 5 is the last automatic round: its findings go to him as one list. §Tasks is still unwritten.
 
 Every decision below is tagged **(user)** when he decided it in the brainstorm, or **(my call)** when
 the planning session settled it and he has not yet seen it written down. A builder must not promote a
@@ -210,6 +213,7 @@ compliance round 2, 2026-11-03) His earlier acceptance of the file-filter risk s
 observability read found that blanking a filter driver stopped it in a toy repo. Task 1 tries that on
 a real Git LFS repo and shows him the result. If LFS-backed scanning still works, filters go off;
 otherwise the accepted risk stays.
+*Superseded by D20 (2026-11-03): filters stay on, decided without the test.*
 
 **D16 — Close the two measured program routes; say plainly what is untested.** (user, compliance
 round 3, 2026-11-03) Both judges measured a scanned repo's own config running a program with every
@@ -222,10 +226,35 @@ Task 1's D15 test needs a real Git LFS repo, and `git-lfs` is not installed here
 Homebrew `git-lfs` 3.8.1, 0 stop / 0 caution, every check `not_run` for Homebrew (report:
 `~/.claude/hooks/state/vetting/homebrew/git-lfs/3.8.1.md`). It is installed only in task 1, only
 with his approval at the prompt.
+*Superseded by D20 (2026-11-03): no LFS test, so git-lfs is not installed.*
 
 **D18 — A repo whose `git status` fails shows "unknown", not "no changes".** (user, compliance round
 3, 2026-11-03) Today the analyzer reports such a repo as clean. He chose "unknown" with a short note,
 with the rest of that repo still shown.
+
+**D19 — A box value that cannot be written as UTF-8 is refused like any other bad value.** (user,
+compliance round 4, 2026-11-03) The round-4 compliance judge found that a request holding a lone
+surrogate (for example `"/tmp/\ud800x"`) passes every field check and then crashes the byte-length
+check, so the server hangs up with no code and no audit line. Re-measured here on `/usr/bin/python3`
+3.9.6: `json.loads` accepts it and `.encode("utf-8")` raises `UnicodeEncodeError`. He chose the fix:
+such a value answers `422 invalid_input` (`400 malformed` for `run`), with a §10 row and a criterion.
+
+**D20 — File filters stay on, decided now; no Git LFS test, no git-lfs install.** (user, compliance
+round 4, 2026-11-03) **Supersedes D15 and D17.** The round-4 observability read measured, with a
+fake LFS-shaped driver, that switching filters off makes a stat-dirty LFS file read as modified, so
+D15's test had a predictable answer ("keep them on"), and its falsifier wrapped `.clean`, which git
+ignores when `.process` is set. He chose to decide now: filters stay on and remain the accepted risk
+(his own `git status` in a terminal runs the same filters), and task 1 drops the LFS test and the
+git-lfs install, so no tool whose vetting checks did not run gets installed.
+
+**D21 — Two more "cannot check" cases get honest labels.** (user, compliance round 4, 2026-11-03)
+Extends D18. A partial clone whose diff cannot be computed shows "unknown" with a short note instead
+of an empty diff, and a worktree whose folder was deleted by hand shows "folder missing" instead of
+"clean".
+
+**D22 — One more judge round, then he picks.** (user, compliance round 4, 2026-11-03) After the
+round-4 fixes, both judges run once more (round 5). Whatever they find goes to him as one list, and
+only what he chooses gets fixed, with no further automatic rounds.
 
 ## Decisions carried to the relations card (user, 2026-11-02)
 

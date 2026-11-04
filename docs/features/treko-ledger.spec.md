@@ -14,9 +14,12 @@ finds every git repository in and around it, analyzes them on the server one job
 progress bar that moves only when real work finishes, and lists every finished run with Open and
 Delete. The card is `docs/features/treko-ledger.md`. Its decisions are cited here by number (D1–D12,
 "Builder check results", and the correction about `analyze.py` at the end of that section; D13–D15,
-the user's decisions after compliance round 2, are cited as U1–U3, and D16–D18, his decisions after
-round 3, as U4–U6: U1 = D13, U2 = D14, U3 = D15, U4 = D16, U5 = D17, U6 = D18; see the last two
-sections). This file turns them into contracts and tests. It does not reopen them.
+the user's decisions after compliance round 2, are cited as U1–U3, D16–D18, his decisions after
+round 3, as U4–U6, and D19–D21, his decisions after round 4, as U7–U9: U1 = D13, U2 = D14, U3 =
+D15, U4 = D16, U5 = D17, U6 = D18, U7 = D19, U8 = D20, U9 = D21. U8 supersedes U3 and U5. D22, one
+more judge round after which he picks what gets fixed, is a process decision and has no U-number;
+see the last three sections). This file turns them into contracts and tests. It does not reopen
+them.
 
 **Tags.** **(spec call)** marks a detail the card left open that this spec settles with the
 simplest safe option; the reviewer can overturn any of them. **OQ-n** marks a choice that changes
@@ -41,6 +44,13 @@ nothing. Round 3's probes are `probe_r3.sh` and `probe_partial_clone.sh` in the 
 folder, run against a `git archive HEAD treko hooks/lib` export of the real `analyze.py` on
 `/usr/bin/python3`. Their fixtures make git commits inside those scripts, in scratch repositories
 only; no guard refused them.
+Revised a fourth time the same day for compliance round 4 and the user's decisions after it
+(U7–U9) at `dfa4149`. `git diff --stat 5f194df..HEAD -- treko skills/treko` still prints nothing,
+and so does `git diff --stat origin/main HEAD -- treko skills/treko` (`origin/main` at `fc08216`,
+not fetched). Round 4's probes are `surrogate.py` and `probe_r4.py` in the round-4 scratch folder,
+run on `/usr/bin/python3` against the real `treko/analyze.py` at that commit, on git 2.50.1, in
+scratch repositories whose commits were made with git plumbing (`write-tree`, `commit-tree`,
+`update-ref`), under an explicit minimal environment with global and system git config cut off.
 
 **Size (user, 2026-11-03).** He accepted this half running over ADR 0017's 800-line cap.
 
@@ -85,7 +95,7 @@ flowchart LR
 | `treko/board-commands.js` | new, one manifest row | split 3: the board's node-loadable command slice, moved unchanged, then the Re-analyze change (§1.1, §9.4) |
 | `treko/server.py` | changed | routes, validation, idle rule, startup, the launch address (§3, §3.2); split 2 moves its send path out (§1.1) |
 | `treko/channel.py` | changed | split 2: receives `confirm_surface`, `send_keys` and `CONFIRM_REFUSAL_REASONS` unchanged (§1.1) |
-| `treko/analyze.py` | changed | two optional inputs: the progress report (§6) and `--card` (§4.3; OQ-1, (my call)); and since round 3 one behaviour change, a worktree whose `git status` fails shows "changes unknown" instead of "clean" (§6.3; U6). Nothing else. Split 1 also moves its card layer out, with no change in behaviour (§1.1) |
+| `treko/analyze.py` | changed | two optional inputs: the progress report (§6) and `--card` (§4.3; OQ-1, (my call)); since round 3 one behaviour change, a worktree whose `git status` fails shows "changes unknown" instead of "clean" (§6.3; U6); and since round 4 two more of the same kind, a branch whose `git diff --shortstat` fails shows "diff unknown" instead of an empty diff, and a branch whose worktree folder is gone shows "folder missing" instead of "clean" (§6.4; U9). Nothing else. Split 1 also moves its card layer out, with no change in behaviour (§1.1) |
 | `treko/Treko.dc.html` | changed | two icon links, Re-analyze, graph svg size, the Re-analyze pop-up (§9.4); split 3 moves its command slice out (§1.1) |
 | `treko/server_harness.py` | changed | an `interpreter` parameter for criterion Z1 (§11) |
 | `skills/treko/SKILL.md` | changed | routes, the Ledger, the new files in the store directory, the auto-opened address (§3.2) |
@@ -119,7 +129,7 @@ would cross 800, a split decided now. Sizes are `wc -l` at `6331b5d`:
 | `treko/ledger_*.py` (five new) | — | ≤ 400 each | the house target |
 | `treko/server_harness.py` | 339 | ≤ 400 | |
 | `treko/test_server.py` | 789 | ≤ 800 | no new tests here: new behaviour is tested in new modules |
-| `treko/test_analyze.py` | 599 | unchanged | E1, E2 and E5 go in a new `test_analyze_options.py` |
+| `treko/test_analyze.py` | 599 | unchanged | E1, E2, E5, E6 (round 3) and E7–E8 (round 4) go in a new `test_analyze_options.py` |
 | `treko/test_guards.py` | 599 | ≤ 800 | split 3's edits, then the re-pin (§12) |
 | `treko/test_ui_commands.py` | 468 | ≤ 800 | §12 |
 | `treko/test_degraded.py` | 620 | ≤ 800 | §12 |
@@ -138,13 +148,16 @@ board now stays at `/` (U1, §3.2), so no line of it changes, and Z2 can pass. M
 inferred: §12 records a scratch run of that module, with split 3 and the two icon links applied,
 passing unchanged.
 
-**`analyze.py`'s 740 still holds with U6 (round 3; spans measured, additions estimated).** Split 1
+**`analyze.py`'s 740 still holds with U6 and U9 (rounds 3 and 4; spans measured, additions
+estimated).** Split 1
 removes the card layer, `analyze.py:189-291` (103 lines, `sed -n 189,291p treko/analyze.py | wc
 -l`), and 15 constant lines (`:36-47` less `MINUS` at `:44`, and `:70-73`), and adds an import
-back of a few lines: about 682 of today's 797, before blank-line adjustments. Three additions
+back of a few lines: about 682 of today's 797, before blank-line adjustments. Four additions
 share the remaining ~58 lines: `--progress` (four report calls and an argument), `--card` (an
-argument and a path list), and U6's failure branch (§6.3: a `try`/`except` around one call, one
-`note` branch and one question, about ten lines). Criterion Z2 enforces the figure.
+argument and a path list), U6's failure branch (§6.3: a `try`/`except` around one call, one
+`note` branch and one question, about ten lines), and since round 4 U9's two (§6.4: a second
+`try`/`except` with its question, and one `note` branch for a missing folder, about ten lines
+more). Criterion Z2 enforces the figure.
 
 **The three splits (spec call each).** Each is a move with no change in behaviour. Each lands as
 its own commit **before** any behavioural change to the file it leaves, so the existing suite
@@ -271,8 +284,8 @@ round-1 read (O3):
    the rest of this spec, "the protective settings" means exactly the table's rows, and nothing
    counts them. The fsmonitor and `core.hooksPath` rows and `GIT_OPTIONAL_LOCKS` date from round
    2; the `log.showSignature` row and `GIT_NO_LAZY_FETCH` were added at round 3 (U4), which raised
-   `GIT_CONFIG_COUNT` from `2` to `3`. If task 1's filter outcome adds pairs (below), the count
-   rises with them and the table gains their rows.
+   `GIT_CONFIG_COUNT` from `2` to `3`. Until round 4 task 1's filter test could add pairs here;
+   U8 removed that test and keeps file filters on (below), so no pairs are pending.
 
    | Variable | Value | Stops |
    |---|---|---|
@@ -335,10 +348,12 @@ round-1 read (O3):
    | 32 | the same, with `filter.x.clean`, `.smudge` and `.process` set empty and `.required=false` | did not run |
    | 33 | an ordinary repo with a worktree: the real analyzer, round-2 settings versus all settings | stdout byte-identical (2182 bytes) |
 
-   **What a partial clone shows (U4, measured, probes 25 and 26).** With `GIT_NO_LAZY_FETCH=1` the
-   analyzer never fetches. A branch whose changed blobs are not local gets an empty diffstat,
-   `""`, which the board already shows for a branch with no diff; every other field of the run is
-   unchanged. In the two-run comparison the only other difference was the relative commit age, a
+   **What a partial clone shows (U4, measured, probes 25 and 26; U9 since round 4).** With
+   `GIT_NO_LAZY_FETCH=1` the analyzer never fetches. A branch whose changed blobs are not local
+   makes its `git diff --shortstat` exit 128 (measured at round 4, §6.4), which today's analyzer
+   turns into an empty diffstat, `""`, the value the board shows for a branch with no diff
+   (probe 25); every other field of the run was unchanged. **Since round 4 (U9) that branch shows
+   "diff unknown" with one question instead (§6.4).** In the two-run comparison the only other difference was the relative commit age, a
    clock artefact of fixtures made seconds apart. Under the round-2 settings the same run fetched
    over the network and wrote the downloaded objects into the scanned repository's `.git`, which
    §13's "git writes nothing in a scanned repository" did not allow for, so the setting closes a
@@ -356,7 +371,7 @@ round-1 read (O3):
    `core.hooksPath` (8–14), `gpg.program` through `log.showSignature` (17–20), a promisor lazy
    fetch through `remote.<name>.uploadpack` (21–26), `diff.external` and `diff.<driver>.textconv`
    (27–30, neither runs on the analyzer's `--shortstat`), and file filters (31–32, which the table
-   does not stop; task 1, below). **Not enumerated:** git's other config keys that can name a
+   does not stop; they stay on, U8, below). **Not enumerated:** git's other config keys that can name a
    program have not been checked one by one, against the analyzer's git commands or the scan's.
    The routes closed here are therefore a lower bound on what exists, not a list of it, and each
    review round so far has found more (fsmonitor first, hooks at round 2, these two at round 3).
@@ -388,66 +403,47 @@ round-1 read (O3):
    override (probe 6). **Not measured:** other git environment variables that change what git runs
    or where it looks, such as `GIT_EXEC_PATH` or `GIT_DIR`. They pass through from the server's
    launch environment, which only the person launching the server sets.
-   **File filters (user; task-1 obligation revised by U3, 2026-11-03, and made able to fail at
-   round 3).** A scanned repository's own config can name a filter program that `git status`
-   runs; none of the protective settings stops it (probe 31; the observability judge's round-2
-   read first). The user's accepted risk stands, but task 1 must now test switching filter
-   drivers off by name **on a real Git LFS repository**, and show the user the result before any
-   Ledger screen task starts. The observability judge's round-2 read found that blanking a driver
-   by name stopped it in a toy repository; probe 32 measured the same here, with `.clean`,
-   `.smudge` and `.process` emptied and `.required=false`. Its round-3 read found that blanking
-   `.process` stopped a fake `.process` driver. LFS itself has not been measured anywhere. **The test must be able to fail (round 3):**
-   - **Blank every key of each driver:** `filter.<driver>.clean`, `.smudge` and `.process` set to
-     empty, and `.required` set to `false`. The observability judge's round-3 read, with a fake
-     LFS-shaped driver, found that blanking only the first three made `git status` exit 128 on a
-     `required=true` driver with a stat-dirty file, which today's analyzer then reported as clean
-     (now "changes unknown", §6.3; U6). Not re-measured here.
-   - **Read driver names per worktree, from every config file git reads:** in each worktree of
-     the family, `git -C <worktree> config --includes --get-regexp
-     '^filter\..*\.(clean|smudge|process|required)$'`, with no `--local` or other file option,
-     so that system and global config, `include.path` targets and the worktree's own
-     `config.worktree` are all read; the names are the union over the family's worktrees.
-     Reading runs no program (the observability judge's round-2 read; the round-3 probe's driver
-     values name no real program, so it does not show this). Measured (`probe_r3.sh`, rows R1–R4), with one driver in an
-     included file, one in a `GIT_CONFIG_GLOBAL` file and one in a worktree's `config.worktree`:
+   **File filters stay on (user; U8 = D20, 2026-11-03, which supersedes U3 and U5).** A scanned
+   repository's own config can name a filter program, and file filters run when `git status`
+   checks a repository: the analyzer runs `git status --porcelain` in each worktree
+   (`analyze.py:437`), and none of the protective settings stops a filter (probe 31; the
+   observability judge's round-2 read first). Git runs a clean filter when it has to re-hash a
+   tracked file whose stat data differs from the index; a fresh clone is stat-clean and runs none
+   (the observability judge's round-3 read), and `GIT_OPTIONAL_LOCKS=0` means the analyzer never
+   refreshes that state itself. Filters stay on, decided now, and remain **the user's accepted
+   risk**, as OQ-8 recorded it: his own `git status` in a terminal runs the same filters on the
+   same repositories. The ADR task 1 writes records it. Repositories that use Git LFS are never
+   skipped **(user)**.
 
-     | Read | Drivers found |
-     |---|---|
-     | primary checkout, `--local` | none |
-     | primary checkout, no file option | the global and the included one |
-     | primary checkout, `--includes`, no file option | the same two |
-     | the worktree, `--includes`, no file option | all three |
+   **Why it was decided without a test (round 4).** Until round 4, task 1 was to test switching
+   filter drivers off by name on a real Git LFS repository, with Homebrew `git-lfs` 3.8.1 installed
+   for it, and the result was to decide (U3, U5). The observability judge's round-4 read showed the
+   answer in advance, with a fake LFS-shaped driver through the real analyzer; `git-lfs` is not on
+   this host, so real LFS has not been measured anywhere:
 
-   - **A fixture where a filter really would run:** the LFS repository has an LFS-tracked file
-     that is stat-dirty (mtime changed, content not) in a worktree the job analyzes, because a
-     fresh clone is stat-clean and `git status` then runs no clean filter at all (the
-     observability judge's round-3 read), and `GIT_OPTIONAL_LOCKS=0` means the analyzer never
-     refreshes that state itself. The same worktree also holds one really modified file, so the
-     comparison below can see a change that a failing `git status` would hide.
-   - **A falsifier:** `filter.lfs.clean` is pointed at a wrapper that writes a marker and then
-     runs git-lfs's own clean command. With the drivers not blanked, the job must write the
-     marker; with them blanked, it must not.
+   - **With filters off, a stat-dirty LFS file reads as modified.** Git then hashes the real file
+     and compares it with the stored pointer, and they differ. A stat-dirty LFS-shaped file read
+     `clean` with the filter on and `1 uncommitted`, `dirty: true`, with it blanked; the test's own
+     fixture, which also held one really modified file, went from `1 uncommitted` to
+     `2 uncommitted`. So its rule that a blanked run must match an unblanked one could not pass,
+     and the answer was always going to be "keep them on".
+   - **Blanking `.clean` does nothing while `.process` is set.** Git ignores
+     `filter.<driver>.clean` when `.process` is set: with a working `.process` driver, a `.clean`
+     wrapper ran 0 times and the `.process` driver once. The test's falsifier wrapped `.clean`, so
+     it could not fire wherever `.process` is set, which the judge expects `git lfs install` to do
+     (from memory, not measured).
 
-   "Works" means: with the drivers blanked, the run's cards, branches and worktrees match a run
-   without blanking, the really modified file still shows as uncommitted, and no branch shows
-   "changes unknown". Three outcomes are defined, and this spec claims none:
-   - **LFS-backed scanning still works with the drivers off:** each family's analyzer
-     environment also blanks every driver read as above, as further `GIT_CONFIG_KEY_<n>` pairs
-     after the table's, with a C9 row that a filter's marker never appears.
-   - **It does not:** the drivers stay on, and the ADR records filters as the accepted risk, as
-     the user accepted it. §16 keeps the risk.
-   - **`git-lfs` cannot be installed** (the user refuses the install at the permission prompt, or
-     it fails): the test does not run, file filters stay the accepted risk exactly as in the
-     second outcome (D15's fallback), and the ADR records that the test did not run and why
-     (U5, round 3).
-
-   **`git-lfs` is a test-only tool, pinned (U5, 2026-11-03).** Measured 2026-11-03: `command -v
-   git-lfs` finds nothing on this host. Task 1 installs Homebrew `git-lfs` 3.8.1 (§15), only with
-   the user's approval at the permission prompt. It was vetted 2026-11-03 with 0 stop and 0
-   caution, but the report also says the vetting was incomplete: all eight of its checks are
-   `not_run` for Homebrew (`~/.claude/hooks/state/vetting/homebrew/git-lfs/3.8.1.md`, read
-   2026-11-03). Nothing the server, the scan or the analyzer runs depends on it.
-   Repositories that use Git LFS are never skipped **(user)**.
+   So the user decided now (D20): filters stay on, task 1 drops the LFS test and the `git-lfs`
+   install, and no tool whose vetting checks did not run is installed. Probe 32 above, where
+   emptying `.clean`, `.smudge` and `.process` and setting `.required=false` stopped a toy filter,
+   stays as a measurement; it is no longer a plan. The judges' reads also found what blanking
+   would have needed beyond it: `.required` set to `false`, without which a `required=true` driver
+   made `git status` exit 128 (round 3), and a driver in a submodule's own config, whose name the
+   per-worktree read did not find, so it still ran (round 4); blanking `.process` did stop a fake
+   `.process` driver (round 3). The test's text (its blanking rule, the
+   per-worktree driver-name reads measured as `probe_r3.sh` rows R1–R4, its stat-dirty fixture, its
+   falsifier, its "works" rule, its three outcomes and the `git-lfs` 3.8.1 pin with its vetting
+   result) was removed at round 4 with his approval; it stands in this file at commit `dfa4149`.
 4. **An accepted status poll writes no audit line (spec call, O3).** ADR 0024's one line per
    request would let a Ledger tab's 2-second poll add up to 1,800 lines an hour to the only record
    of what the server did. The other requests are still audited exactly as today, including every
@@ -563,7 +559,8 @@ Checks, in order. Each failure answers once and writes one audit line:
    unknown op is indistinguishable from a bad token.
 6. The key set is exactly the op's own keys, every value a string (`400 malformed`). Unknown keys
    are refused, never ignored.
-7. The field rules below (`422`).
+7. The field rules below (`422`), starting with the UTF-8 rule after the table, which every field
+   passes before any length rule (U7, round 4).
 8. The op itself.
 
 | `op` | Keys: required, optional | Effect |
@@ -574,7 +571,7 @@ Checks, in order. Each failure answers once and writes one audit line:
 | `retry` | `item` | puts a failed or interrupted item back to waiting, unless another item for the same run is waiting or running (§3.5 `already_queued`, round 2) |
 | `delete` | `run` | adds the run to the hide list (D12) |
 
-| Field | Rule, checked before anything touches the filesystem or git |
+| Field | Rule, checked before anything touches the filesystem or git, after the UTF-8 rule below (U7) |
 |---|---|
 | `directory` | at most 1024 UTF-8 bytes. No U+0000–U+001F or U+007F (`422 invalid_input`). After `os.path.expanduser` (a leading `~` only, the `store_location` rule) it is absolute (`422 relative_path`). Its `os.path.realpath` is an existing directory (`422 no_such_directory`). That real path is the canonical directory |
 | `repo` | `""` means absent. At most 255 bytes, no control characters, no `/` (`422 invalid_input`). Only ever compared with folder names |
@@ -582,6 +579,23 @@ Checks, in order. Each failure answers once and writes one audit line:
 | `worktree` | `""` means absent. At most 1024 bytes, no control characters (`422 invalid_input`). Only ever compared with worktree paths and folder names |
 | `item` | matches `^[0-9a-f]{16}$` (`400 malformed`: the page only ever sends ids the server gave it) |
 | `run` | 1–255 bytes, no control characters (`400 malformed`), and equal to the `id` of a run in the store (`404 no_such_run`) |
+
+**Every field must be encodable as UTF-8 (user, U7 = D19, round 4).** Before any rule in the
+table, each of its six string fields is encoded with `.encode("utf-8")`. A value that cannot be,
+because it holds a lone surrogate such as `"/tmp/\ud800x"`, is refused with that field's own
+code: `422 invalid_input` for `directory`, `repo`, `branch` and `worktree`, and `400 malformed`
+for `run` and `item`, whose rows already answer `400`. It answers once and writes one audit line,
+like every failure above, and the byte-length rules run only on a value that has passed it,
+since they count UTF-8 bytes. Why: a JSON `\ud800` escape is plain ASCII on the wire, so the
+strict UTF-8 decode `_read_body` applies to a body today (`server.py:588`), whose mechanics
+`/ledger` reuses (step 3), accepts it, and on
+`/usr/bin/python3` 3.9.6 `json.loads` then returns a `str` holding the lone surrogate, whose
+`.encode("utf-8")` raises `UnicodeEncodeError` (measured by the round-4 compliance judge, and
+again here with `surrogate.py`). Until round 4 that error escaped the length rule with no code and
+no audit line: on a stub handler applying that rule on the real `server.ControlServer`, the
+client saw the connection closed with no response (the compliance judge's round-4 run). For
+`item` the rule changes no answer, only the order: its pattern already refuses such a value
+without raising, since `re.fullmatch` returns no match (measured, `surrogate.py`).
 
 No value reaches a shell. `repo`, `branch`, `worktree`, `item` and `run` never reach git at all.
 The canonical directory reaches git only as `git -C <absolute path>`, which cannot begin with
@@ -936,7 +950,8 @@ stateDiagram-v2
   and the `--repo` help text (`server.py:694-696`) stops naming `reanalyze`.
 - **On shutdown** (idle, parent death, `Ctrl-C`): the server **closes** the child registry first
   (§4; round 3), so nothing can start after this point: no new family of the running job and no
-  new job. It then kills the process group of every subprocess in the registry: the job's
+  new job (since round 4 the runner checks the flag before it picks up an item, §5.4 step 1, so a
+  waiting item stays `waiting`). It then kills the process group of every subprocess in the registry: the job's
   current one, and since round 2 any submit-time scan still running on a request thread (F7).
   The runner marks the item `interrupted` with the stage and repo it had reached in `detail`, and
   persists. An analyzer that ends because shutdown killed it is never read as a failed family
@@ -950,6 +965,21 @@ stateDiagram-v2
 
 1. Mark the item `running` and persist. Stage label: "scanning <dir>". If that write fails, the
    job does not start (§5.6, write 1).
+   **Before this step the runner checks the registry's `closed` flag (my call, round 4).** Once
+   the registry is closed (§4, §5.3), the runner picks up no new item and marks nothing running,
+   so a waiting item stays `waiting` in memory and on disk, and after a restart it starts by
+   itself (§5.3; the "stops mid-job, then restarts" scenario of §10). Until round 4 nothing
+   checked here: at a mid-job shutdown with an item waiting, the runner could mark it `running`,
+   have its scan refused by the closed registry, and leave it `interrupted`, which that scenario
+   does not allow (the observability judge's round-4 read; reasoned, not measured). **One window
+   remains, and it is closed by the next rule (reasoned, not measured):** the check and the
+   shutdown take different locks (§4 keeps the registry's lock apart from the ledger's), so a
+   shutdown that closes the registry after the check and before this step's write still leaves
+   that item marked `running`. **So a job whose first launch, step 2's scan, is refused by the
+   closed registry puts its item back to `waiting`, never `interrupted` (my call, round 4):**
+   nothing of it ran, so it starts by itself after a restart, like any other waiting item. A
+   refusal of any later launch (a family's analyzer, step 3) still ends the item `interrupted`,
+   because by then the job has run.
 2. **Scan** (§4). An outcome other than `ok` fails the job with that code. A scan subprocess that
    cannot be started at all fails the job with `launch_failed`, `detail.stage = "scan"` and the
    errno (U2).
@@ -998,7 +1028,17 @@ catches **any** other exception (`except Exception`). It:
 
 1. **kills the process group of every subprocess this job has in the child registry** and waits
    for each to be reaped, so no analyzer or scan keeps running beside the next job (round 3; the
-   compliance judge's round-3 note);
+   compliance judge's round-3 note). **The wait is bounded (my call, round 4):** at most
+   `REAP_WAIT_SECS = 5` for each process, a constant in `ledger_jobs.py`. When it expires, the
+   catch-all stops waiting, writes `server: job <item> reap timeout <pid>` to stderr, and carries
+   on with steps 2 to 6, so the item is still marked failed and the queue still frees. The process
+   stays in the child registry, unreaped, so shutdown's sweep (§5.3) kills its group again, and
+   once the server exits the system reaps it. In that case alone a killed process can outlive the
+   job and still exist beside the next one; one that survives `SIGKILL` for that long is stuck in
+   the kernel, for example on a hung disk, rather than running its own code (reasoned, not
+   measured). Until round 4 the wait had
+   no bound, so "never stuck" rested on every kill landing (the observability judge's round-4
+   read);
 2. marks the item `failed` with `internal_error` and `detail.stage` set to the stage the job had
    reached (`null` if it had not reached one), the rest of `detail` as far as known;
 3. persists that under the §5.6 lock, as runner-side write 3, whose failure rule applies
@@ -1099,11 +1139,13 @@ this order:
 | `cards` | the `Card(...)` list and `_ask_about_cards` (`:483-486`) | reading cards |
 | `order` | everything from `_declared_edges` to `_build_kanban` (`:487-516`) | deriving merge order |
 
-Nothing else in `analyze.py` changes, beyond `--card` (§4.3; OQ-1, (my call)) and, since round 3,
-the one behaviour change of §6.3 for a worktree whose `git status` fails (U6). **The correction's
-promise is a test (E2):** without `--progress` and `--card`, stdout, stderr and exit status are
-byte-identical to today's analyzer for every repository whose `git status` succeeds in each of
-its worktrees, which is every E2 fixture. With `--progress`, stdout is byte-identical too, and stderr
+Nothing else in `analyze.py` changes, beyond `--card` (§4.3; OQ-1, (my call)), since round 3
+the one behaviour change of §6.3 for a worktree whose `git status` fails (U6), and since round 4
+the two of §6.4, for a diff git cannot compute and a worktree folder that is gone (U9). **The
+correction's promise is a test (E2):** without `--progress` and `--card`, stdout, stderr and exit
+status are byte-identical to today's analyzer for every repository whose `git status` succeeds in
+each of its worktrees, whose every `git diff --shortstat` succeeds, and whose every listed
+worktree folder exists, which is every E2 fixture. With `--progress`, stdout is byte-identical too, and stderr
 adds exactly the four lines on success. `--card` has its own check (E5). Card 5 cites
 `analyze.py` by line at seven distinct places
 (`grep -o -E 'analyze\.py:[0-9-]+' docs/features/treko-branch-graph-traversal.md | sort -u`). As
@@ -1165,7 +1207,79 @@ as it reports the intact fixture: `dirty: false`, note `"clean"`, tone `"ok"`, e
   board's questions list like any other.
 - **Byte-for-byte guarantee kept.** Only the failure branch changes: for a repository whose
   `git status` succeeds in every worktree, stdout, stderr and exit status are byte-identical to
-  today's (E2's fixtures all succeed). Criterion E6 checks the failure branch and its falsifier.
+  today's (E2's fixtures all succeed), provided §6.4's two conditions also hold, which since
+  round 4 are part of the same guarantee. Criterion E6 checks the failure branch and its
+  falsifier.
+
+### 6.4 A diff git cannot compute, and a worktree folder that is gone (U9, round 4)
+
+U9 (D21) extends U6 to two more cases where today's analyzer turns "git could not tell" into
+"nothing here". Both keep §6.3's rules: no key is added and no value type changes (ADR 0023), the
+word sits in a text field the board already shows, and the rest of the repository is computed as
+today.
+
+**A diff git cannot compute shows "diff unknown" (spec call for the words, as in U6).**
+
+- **Today.** `_collect_branch_facts` stores `_diffstat(root, base, branch)` as the branch's `diff`
+  (`analyze.py:449`). `_diffstat` runs `git diff --shortstat <base>...<branch>` with
+  `allow_failure=True` (`analyze.py:160-172`, the call at `:163`), so a failure returns `""`.
+  Each task of a card on that branch carries it as `d.diff` (`analyze.py:389`), and the board's
+  drawer prints it as plain text after the branch name (`Treko.dc.html:173`; `:677` maps a missing
+  value to `""`). `""` is also what a branch with no diff gets, so the two read the same.
+- **The partial clone.** Under `GIT_NO_LAZY_FETCH=1` (U4) a branch whose changed blobs are not
+  local makes that call fail. Measured at round 4 (`probe_r4.py` case 2: a `--filter=blob:none`
+  clone of a `file://` origin, with a card on the branch, every protective setting on):
+  `git diff --shortstat main...feat` exits 128 with "could not fetch <sha> from promisor remote",
+  and today's analyzer exits 0 with the card's task showing `diff: ""` while the branch reads
+  `ahead 1`.
+- **The change: U6's mechanism, applied to this one call.** `_diffstat` calls `_git` without
+  `allow_failure` and catches the `GitError` it raises on a non-zero exit (`analyze.py:92-103`).
+  The branch's `diff` becomes `"diff unknown"`, and the run gains one question per such branch,
+  "Why could git not compute the diff of `<branch>`?", with the `GitError`'s text as its context,
+  placed with §6.3's, after the analyzer's existing questions. There is no second mechanism: the
+  test is the call's exit status, exactly as for `git status`. A diff that succeeds and is empty
+  still reads `""`. `ahead`, `behind`, `last`, the commits and every other field are computed as
+  today.
+- **The test is the exit status, not the clone type, so it reaches further than partial
+  clones.** Any failure of that one call reads the same way. Measured at round 4 (`probe_r4.py`
+  case 3): in an ordinary repository, a branch with no history in common with the base (an
+  orphan branch, such as a `gh-pages` branch) makes `git diff --shortstat main...orphan` exit 128
+  with "no merge base". Such a branch reads `""` today and will read "diff unknown", with a
+  question carrying git's "no merge base" message. That follows from reusing U6's mechanism;
+  whether it is wanted is for the user's review (the exit status is measured; the new analyzer's
+  output for it is reasoned, since it is not built).
+- **Board rendering: no code change.** `d.diff` is already printed as text, so the drawer reads
+  "`<branch>` diff unknown".
+
+**A worktree whose folder is gone shows "folder missing" (spec call for the words and the tone).**
+
+- **Where worktrees are listed: in two places.** The scan lists each family's worktrees from
+  `git worktree list --porcelain` and leaves out entries marked `prunable` or whose path no longer
+  exists (§4.1), so no card copy is looked for in a deleted folder (D11). The analyzer lists them
+  itself: `_worktrees` (`analyze.py:122-131`) reads the same `git worktree list --porcelain` and
+  maps each `branch` line to its `worktree` path, with no such filter. Measured at round 4
+  (`probe_r4.py` case 1): after `rm -rf` of a worktree's folder, git still lists it, with its
+  `branch` line and a line `prunable gitdir file points to non-existent location`.
+- **Today.** `_collect_branch_facts` runs `git status` only when `Path(worktree).is_dir()`
+  (`analyze.py:436`). Otherwise the count stays 0, and `_branch_entries` writes `dirty: false`,
+  `note: "clean"` and `tone: "ok"` (`:405-413`, `:421`), while `wt` still shows the gone folder's
+  path (`:443`). Measured in the same case: that branch read `clean`, tone `ok`, both before and
+  after its folder was deleted, and after the deletion the run held no question at all.
+- **The check happens there, at `analyze.py:436`.** When a branch has a worktree path and
+  `Path(worktree).is_dir()` is false, the branch is marked "folder missing" instead of keeping a
+  count of 0. `_branch_entries` checks that in the same first slot as §6.3's "changes unknown",
+  before behind and ahead, and writes `note: "folder missing"`, `tone: "neutral"`, `dirty: false`.
+  `wt` keeps the path, so the row says which folder is gone. `ahead`, `behind`, `last`, the diff
+  and the commits come from the repository and are computed as today. No question is added,
+  because no git command failed and the note and the path already say what is known. The scan's
+  filter in §4.1 is unchanged.
+- **Board rendering: no code change**, as in §6.3: `neutral` is in the board's `TONES`
+  (`Treko.dc.html:375`).
+
+**Byte-for-byte guarantee, restated.** For a repository whose `git status` succeeds in every
+worktree, whose every `git diff --shortstat` succeeds, and whose every listed worktree folder
+exists, stdout, stderr and exit status stay byte-identical to today's; E2's fixtures must all be
+such repositories. Criteria E7 and E8 check the two new branches, each with a falsifier.
 
 ## 7. One run from several repos (D9)
 
@@ -1538,6 +1652,7 @@ Scenario Outline: hostile and malformed requests are refused before git or cmux 
     | 5000 bytes                    | 413    | too_large     |
     | directory "dev/x"             | 422    | relative_path |
     | a directory containing a tab  | 422    | invalid_input |
+    | a lone surrogate in directory | 422    | invalid_input |
 
 Scenario: file:// shows no runs
   Given treko/Ledger.dc.html is opened as a file, with the sample data beside it
@@ -1689,13 +1804,20 @@ Scenario: a repo-named gpg program never runs
 Scenario: a partial clone is never fetched from
   Given a partial clone whose remote.origin.uploadpack is a marker-writing script, with a branch whose blobs are missing
   When  a Ledger job analyzes it
-  Then  no marker file exists, no object is downloaded, and that branch's diff is empty
+  Then  no marker file exists, and no object is downloaded
+  And   that branch's diff reads "diff unknown", never empty, and one question names that branch
 
 Scenario: a worktree whose git status fails shows changes unknown
   Given a repo with a worktree whose git status exits 128
   When  the repo is analyzed
   Then  that worktree's branch reads "changes unknown" with tone neutral, and dirty stays false
   And   one question names that worktree and git's message
+  And   every other branch, and that branch's ahead, behind and last, read as they would anyway
+
+Scenario: a worktree whose folder was deleted by hand shows folder missing
+  Given a repo with a worktree whose folder was removed with rm -rf, so git still lists it
+  When  the repo is analyzed
+  Then  that worktree's branch reads "folder missing" with tone neutral, never "clean"
   And   every other branch, and that branch's ahead, behind and last, read as they would anyway
 
 Scenario: shutdown in the middle of a two-repo job
@@ -1726,7 +1848,13 @@ assertions that tell the two apart.
   directions. Its `launch_failed` row is driven by a scan launcher passed in code that raises
   `OSError(ENOENT)`. The second table, codes only an item carries, is D7's and D12–D14's.
 - A3. For each op, one unknown key gives 400. A 4097-byte body gives 413, and `/command` still gives
-  413 at 1025.
+  413 at 1025. **Since round 4 (U7):** for each of §3.4's six fields in turn, a value holding a
+  lone surrogate, sent as the JSON escape `\ud800`, gives that field's code (`422 invalid_input`
+  for `directory`, `repo`, `branch` and `worktree`; `400 malformed` for `item` and `run`), with
+  exactly one audit line carrying that reason and no traceback on stderr, and no git or cmux
+  process starts. Falsifier: the same `directory` request against a handler with the UTF-8 rule
+  removed and the length rule written as `.encode("utf-8")` gets no `422 invalid_input` and no
+  audit line (the round-4 compliance judge's stub got no response at all).
 - A4. `POST /command {"id":"reanalyze"}` gives `403` (`unknown_id`) and the store is untouched.
 - A5. Across every `/ledger` and `/ledger/status` test, the fake cmux log stays empty.
 - A6. The token appears in no file under the store directory (`ledger.json` and the lock
@@ -1776,14 +1904,24 @@ assertions that tell the two apart.
   because the builder's own `GIT_CONFIG_COUNT` already overwrites or ignores an inherited pair
   (probe 16, measured at the round-2 count) and the pairs override a file (probe 6); they guard
   against a regression in the builder's overwrite, not the drop. So a unit row checks the drop
-  directly: given a base holding `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT=3` and
-  `GIT_CONFIG_KEY_0`…`_2`/`VALUE_0`…`_2` naming other keys, the result holds none of the base's
+  directly: given a base holding `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT=5` and
+  `GIT_CONFIG_KEY_0`…`_4`/`VALUE_0`…`_4` naming other keys, the result holds none of the base's
   values for those variables and no `GIT_CONFIG_PARAMETERS`; its `GIT_CONFIG_*` variables,
   `GIT_OPTIONAL_LOCKS` and `GIT_NO_LAZY_FETCH` are exactly the rows of §2 default 3's table; and
   every other base key is unchanged. Its falsifier is a builder that keeps them. (Corrected at
   round 3: this row used to say the result held "none of those" while also keeping
-  `GIT_CONFIG_COUNT`, and named the table by a count.) **The AST check, widened at round 2:** in `ledger_jobs.py`, `ledger_scan.py` and
-  `ledger_routes.py` (which starts the submit-time scan), no `ast.Name` or `ast.Attribute` is
+  `GIT_CONFIG_COUNT`, and named the table by a count.) **The base's count is 5, not 3 (my call,
+  round 4).** Until round 4 the base held `GIT_CONFIG_COUNT=3` and pairs `_0`…`_2`. The builder's
+  own count is also 3, so "none of the base's values" was literally false for a correct builder
+  (its `3` equals the base's), and pairs `_0`…`_2` are overwritten by the builder's own pairs
+  whether or not it drops anything, so on those variables the falsifier could not fail (the
+  compliance judge's round-4 note). With a count of 5, the result's `3` differs from the base's,
+  and pairs `_3` and `_4` sit above the builder's count, where only the drop removes them: a
+  builder that keeps the base's family leaves both, and the row fails. **The AST check, widened at round 2:** in `ledger_jobs.py`, `ledger_scan.py` and
+  `ledger_routes.py` (which starts the submit-time scan), and since round 4 also in
+  `ledger_state.py` and `ledger_merge.py`, so that it covers the same five modules as the launch
+  check below (my call, round 4; with a falsifier copy of each of those two that reads the
+  environment, each making the check fail), no `ast.Name` or `ast.Attribute` is
   named `environ`, `environb`, `getenv` or `getenvb`, and no `from os import` names one. That
   catches whole-environment copies such as `os.environ.copy()`, `dict(os.environ)`,
   `{**os.environ}` and `environ` bound by an import, which the round-1 list of
@@ -1802,19 +1940,24 @@ assertions that tell the two apart.
   - in `ledger_scan.py`, which runs inside a child that already has the builder's environment,
     its git calls pass **no** `env=`, so they inherit it, as `analyze.py`'s `_git` does
     (`analyze.py:92-103`); an `env=` there fails the check, since it could only replace the
-    protective settings.
+    protective settings;
+  - in `ledger_state.py` and `ledger_merge.py`, there is no such call at all, since neither
+    starts a process, so any process-starting call there fails the check **(my call, round 4)**.
+    Until round 4 the launch check read only the three modules above, so a launch in either of
+    these two went unseen (the observability judge's round-4 read).
 
-  Falsifier: copies of those modules with the scan launch's `env=` removed, and with a second
-  `subprocess.run` added outside the registry, each make the check fail.
+  Falsifier: copies of those modules with the scan launch's `env=` removed, with a second
+  `subprocess.run` added outside the registry, and, since round 4, with one `subprocess.run`
+  added to `ledger_state.py` and another to `ledger_merge.py`, each make the check fail.
 - C9. **Unconditional since round 2 (F3).** A job over a fixture repo with a worktree, a
   stat-dirty tracked file in each checkout, and a repo-set `core.hooksPath` whose
   `post-index-change` hook writes a marker: no marker, and every file under the repo's `.git`
   identical in content and mtime after the job (probe 14). Falsifier: a builder passed in
   code that sets only the fsmonitor pair writes the marker and rewrites both index files (probe 13).
-  **The filter rows wait for task 1 (D15/U3, §2 default 3).** If task 1 finds LFS-backed
-  scanning survives blanked drivers, a fixture whose config names a clean filter writing a marker
-  leaves no marker. Whatever task 1 finds, a repository whose `.gitattributes` names
-  `filter=lfs` is found and analyzed like any other (user: LFS repos are never skipped).
+  **No filter row (U8, round 4; until then this waited for task 1's test, D15/U3, superseded by
+  U8).** File filters stay on (§2 default 3), so a filter a scanned repository names runs, and C9
+  claims nothing about it. A repository whose `.gitattributes` names `filter=lfs` is found and
+  analyzed like any other (user: LFS repos are never skipped).
 - C10. **`gpg.program` never runs (U4, round 3).** A job over a fixture repo whose branch tip is a
   commit carrying a `gpgsig` header, with repo config `log.showSignature=true` and `gpg.program`
   set to a marker-writing script: no marker, and the job succeeds (probe 19). Falsifier: a
@@ -1823,13 +1966,14 @@ assertions that tell the two apart.
   branch, must write it too (probe 17), or the fixture proves nothing.
 - C11. **No lazy fetch (U4, round 3).** A job over a `--filter=blob:none` clone of a fixture
   origin, with a local branch whose blobs are missing and `remote.origin.uploadpack` set to a
-  marker-writing script: no marker, the job succeeds and that branch's `diff` is `""` (probe 23),
+  marker-writing script: no marker, the job succeeds and that branch's `diff` is `"diff unknown"`
+  with one question naming the branch (U9, §6.4; it was `""` until round 4, probe 23),
   and `git rev-list --objects --missing=print` counts the same missing objects before and after
   (measured on the working clone of probe 25). Falsifier: a builder that sets every protective setting except
   `GIT_NO_LAZY_FETCH` writes the marker (probe 24). Baseline: a plain `git diff --shortstat` on
   that branch writes it (probe 21). A second row on a clone with the real upload-pack checks the
-  same `""` and unchanged missing count, against a falsifier run that downloads the objects and
-  shows `+3 −1` (probes 25 and 26).
+  same `"diff unknown"` and unchanged missing count, against a falsifier run that downloads the
+  objects and shows `+3 −1` (probes 25 and 26).
 - C12. **Other routes are named, not claimed (U4, round 3).** Not a test: the ADR task 1 writes
   lists the config routes tried (§2 default 3, "Which config routes were tried") and says that
   git's other config keys were not enumerated.
@@ -1852,7 +1996,19 @@ way `HANGING_ANALYZER` is, `server_harness.py:77`)
   there is none for the second family), the first's process group is gone inside the bound, and
   the item is `interrupted` with the first family in `detail`, not `analysis_failed`. A launch
   asked of the registry after it closed starts nothing. Falsifier: a registry with no `closed`
-  flag, under which the second family starts after the sweep.
+  flag, under which the second family starts after the sweep. **Since round 4, a waiting item
+  (my call, round 4; §5.4 step 1):** the same run has a second item waiting behind that job.
+  After shutdown, `ledger.json` holds it as `waiting`, never `running` or `interrupted`, and no
+  scan or analyzer of its own has started; after a restart it starts by itself. Because the
+  end-to-end order of shutdown and the runner's next pass is timing-dependent, the discriminating
+  half runs in-process: with the registry already closed and one waiting item, one pass of the
+  runner loop marks nothing `running`, starts nothing, and leaves `ledger.json` byte-identical.
+  Falsifier: a runner without the check before §5.4 step 1, under which that pass marks the item
+  `running` and then, its scan refused by the closed registry, `interrupted`. **The remaining
+  window (my call, round 4; §5.4 step 1):** an item already marked `running` whose step-2 scan the
+  closed registry refuses ends `waiting` in `ledger.json`, and a second in-process case, whose
+  analyzer launch (step 3) is refused after a successful scan, ends `interrupted`. Falsifier: a
+  job that treats every refusal alike, under which one of the two cases fails.
 - D7. OQ-2 (user): a two-repo job whose second analyzer exits non-zero writes a run holding the
   first repo, plus one question naming the second with its exit status and the analyzer's last
   stderr line. A job whose analyzers all fail writes nothing, and its item fails with
@@ -1910,7 +2066,13 @@ way `HANGING_ANALYZER` is, `server_harness.py:77`)
   item starts; and with none waiting the idle predicate turns true once the idle period passes.
   If the failure's own write is made to fail as well (D10's writer), memory still records the
   failure and `busy` is still false. An exception raised in the runner loop outside any item
-  pauses the runner (§5.4) and is written to stderr the same way.
+  pauses the runner (§5.4) and is written to stderr the same way. **Since round 4 (my call, round
+  4), the bounded reap wait:** with a reap wait passed in code that never sees the process end
+  (it blocks until the limit it is given and then reports a timeout, and blocks for ever when
+  given none), the item still ends `failed` with `internal_error`, stderr carries exactly one
+  `server: job <item> reap timeout <pid>` line, the process is still in the child registry, and
+  the next waiting item starts. Falsifier: a catch-all that passes that wait no limit never marks
+  the item failed, so the test's own time limit fails it.
 
 **E. Progress** (`test_analyze_options.py` and `test_ledger_jobs.py`; `test_analyze.py` stays
 unchanged, §1.1)
@@ -1926,7 +2088,9 @@ unchanged, §1.1)
   (the exit-1 path); and a card with an id-less task. Fixtures commit
   with fixed dates, so git's relative times match. stdout, stderr and exit status must be equal
   byte for byte, both plain and with `--pretty`. Every E2 fixture's `git status` succeeds in each
-  worktree, which is the scope §6.3 keeps byte-identical (round 3). A falsifier runs the same comparison on a copy
+  worktree, which is the scope §6.3 keeps byte-identical (round 3), and, since round 4, every
+  fixture's `git diff --shortstat` succeeds for each branch and every listed worktree folder
+  exists, the scope §6.4 adds (so no fixture holds an orphan branch). A falsifier runs the same comparison on a copy
   with one default-path byte changed and must see it fail. Both analyzers run under the pinned
   runtime interpreter, `/usr/bin/python3` (3.9.6), not the test runner's (§15). That makes E2
   also split 1's proof (§1.1).
@@ -1950,6 +2114,31 @@ unchanged, §1.1)
   `8b805d1…`, as in E2) must fail, because it reports that branch as `"clean"` with tone `"ok"`
   and no question (measured: `probe_r3.sh` row S2). And with the index restored, the new and
   baseline analyzers agree byte for byte, which is E2's guarantee on this fixture.
+- E7. **A diff git cannot compute shows "diff unknown" (U9, round 4), in
+  `test_analyze_options.py`.** The fixture is a `--filter=blob:none` clone of a fixture origin
+  (whose config sets `uploadpack.allowFilter=true`, served over `file://`), with a local branch
+  whose changed blob is missing and a card naming that branch, and both analyzers run with
+  `GIT_NO_LAZY_FETCH=1` in their environment, the setting under which a partial clone cannot
+  fetch (§2 default 3). The fixture asserts its own precondition first: `git diff --shortstat
+  <base>...<branch>` there exits non-zero under that setting, and `git rev-list --objects
+  --missing=print --all` reports at least one missing object. The new analyzer: that card's tasks
+  carry `d.diff == "diff unknown"`; the run has exactly one more question than the baseline's,
+  naming that branch, with git's message in its context; every other field equals the baseline's
+  output byte for byte, the branch's `ahead` included. **Falsifier:** the same assertions against
+  the baseline analyzer (blob `8b805d1…`, as in E2) must fail, because it gives `""` and no
+  question (measured: `probe_r4.py` case 2). And once the missing object has been fetched (one
+  plain `git diff` without the setting), the new and baseline analyzers agree byte for byte.
+- E8. **A worktree whose folder is gone shows "folder missing" (U9, round 4), in
+  `test_analyze_options.py`.** The fixture is a repo with two branches, one checked out in a
+  second worktree whose folder is then deleted with `rm -rf`, not `git worktree remove`, so git
+  still lists it. The fixture asserts its own precondition first: `git worktree list --porcelain`
+  still names that path, with a `prunable` line, and the path does not exist. The new analyzer:
+  that branch has `dirty: false`, `note: "folder missing"`, `tone: "neutral"`, `wt` the gone
+  folder's home-collapsed path, and the same `ahead`, `behind` and `last` as the baseline gives;
+  the run has no extra question; every other branch, feature and section equals the baseline's
+  output byte for byte. **Falsifier:** the same assertions against the baseline analyzer must
+  fail, because it reports that branch as `"clean"` with tone `"ok"` (measured: `probe_r4.py`
+  case 1). And before the folder is deleted, the new and baseline analyzers agree byte for byte.
 
 **F. Merge** (`test_ledger_merge.py`)
 - F1. Identity on one family (§7.3).
@@ -2193,8 +2382,8 @@ and the board stays at `/`. Until round 2 every one of them had to move to `/boa
 - `test_server_lifetime.py`: the banner prefix (`:209`) is unchanged (§3.2); its second-server
   test (`:100-113`) reuses the first server's port, so the bind fails before §5.1's lock is
   taken, and the message is today's.
-- `test_analyze.py`: unchanged (§1.1). The analyzer's new tests (E1, E2, E5) go in a new
-  `test_analyze_options.py`. It reaches the analyzer only through `analyzer.analyze` (26 uses,
+- `test_analyze.py`: unchanged (§1.1). The analyzer's new tests (E1, E2, E5, and E6–E8 from
+  rounds 3 and 4) go in a new `test_analyze_options.py`. It reaches the analyzer only through `analyzer.analyze` (26 uses,
   `grep -o 'analyzer\.[A-Za-z_]*' treko/test_analyze.py | sort | uniq -c`).
 - `test_store.py`, `test_store_location.py`, `cdp_harness.py`, `conftest.py`: no match for any
   pattern above except one docstring mention of `Treko.dc.html` (`cdp_harness.py:9`).
@@ -2222,8 +2411,8 @@ reading each named test.
   stops it (probe 25, C11). The scan's own git calls are `rev-parse` and `worktree list` (§4.1),
   and they run with the same protective settings. That they write nothing is reasoned, not
   measured, since the scan does not exist yet; C9's whole-job check covers them once it does.
-  **Not covered:** a file filter, if task 1 leaves filters on, and any config route not yet tried
-  (next bullet).
+  **Not covered:** a file filter, which stays on (U8, round 4), and any config route not yet
+  tried (next bullet).
 - **Git runs in repositories the user did not explicitly name.** `core.fsmonitor`, repo-named
   hooks, the optional index write, `gpg.program` through `log.showSignature`, and a promisor lazy
   fetch are off, unconditionally and measured (§2, C8–C11; the last two since round 3, U4).
@@ -2236,10 +2425,10 @@ reading each named test.
   bullet said "Other config-driven programs: OQ-8, answered", which overclaimed: OQ-8 covered
   hooks and filters only. Config the server's own environment carries cannot re-enable the routes
   that are closed: the builder drops `GIT_CONFIG_PARAMETERS` and the `GIT_CONFIG_COUNT` family
-  (§2, C8). File filters: task 1 tests switching them off on a real LFS repository and the user
-  decides from the result (D15/U3, §2 default 3); until then, and if `git-lfs` cannot be
-  installed (U5), they are the accepted risk the ADR records (user). LFS repositories are never
-  skipped (user).
+  (§2, C8). File filters stay on and are the accepted risk the ADR records (user; U8 at round 4,
+  which superseded U3's task-1 test and U5's `git-lfs` install, §2 default 3): `git status` runs a
+  filter a scanned repository names, as the user's own `git status` would. LFS repositories are
+  never skipped (user).
 - **Nothing new reaches the session.** `/command` shrinks. `/ledger` never invokes cmux (A5).
 - **Unchanged:** the token's lifetime and handling, the collapsed `403`, no CORS headers, the CSP,
   `frame-ancestors 'none'`, the `Host` guard, failure bodies that echo nothing, one audit line per
@@ -2273,18 +2462,28 @@ Measured on this host 2026-11-03.
 | uv | 0.11.28 | `uv --version` |
 | node | v26.5.0 | `node --version` (the slice tests) |
 | git | 2.50.1 (Apple Git-155) | `git --version`. Needs 2.45 or later: 2.31 for `GIT_CONFIG_COUNT` and `--path-format`, and, since round 3, 2.45 for `GIT_NO_LAZY_FETCH`, whose earliest release notes are 2.45.0's (§2 default 3). This host's 2.50.1 honours it (probes 23, 25) |
-| git-lfs, **test-only** (round 3, U5) | 3.8.1, from Homebrew | Not installed today (`command -v git-lfs` finds nothing). Task 1 installs it, only with the user's approval at the permission prompt, then re-reads it with `git lfs version`. Vetted 2026-11-03: 0 stop, 0 caution, and incomplete, since all eight checks are `not_run` for Homebrew (`~/.claude/hooks/state/vetting/homebrew/git-lfs/3.8.1.md`). Nothing at runtime uses it |
 | Chrome | 156.0.8078.79 | `cdp_harness.PINNED_VERSION` (`cdp_harness.py:78`) |
 | Nocturne export | `73641b21-c7ad-488a-8264-a28262dfe83e`, schema `version: 1` | the `_ds/` directory name; ADR 0023 |
 | Phosphor | 2.1.1, vendored | `treko/vendor/phosphor/` |
 
-No new runtime dependency: the server, the scan and the analyzer use the standard library and
-git only. One **test-only tool** is new, `git-lfs` 3.8.1 (the row above), installed in task 1 only,
-and only if the user approves it at the permission prompt; if he refuses or the install fails,
-task 1 takes §2 default 3's third outcome and file filters stay the accepted risk (U5; reworded at
-round 3 from "No new dependency."). Run the card's suite with
+No new dependency: the server, the scan and the analyzer use the standard library and git only,
+and the tests use the runner and tools pinned in this table. (Round 3 reworded this to "No new
+runtime dependency" when `git-lfs` 3.8.1 became a test-only tool for task 1, with a row above; U8
+at round 4 dropped that tool and its row, so the sentence is whole again and agrees with the
+table.) Run the card's suite with
 `TREKO_CHROME_DENY_BIRD=1 uv run --python 3.11.15 --with pytest==9.1.1 --no-project pytest treko -q`:
 the whole directory, every existing module and every new one.
+**With `TMPDIR` outside every git repository (my call, round 4).** Every run of the suite sets
+`TMPDIR` to a fresh folder outside any repository, for example
+`TMPDIR="$(mktemp -d /tmp/treko-suite.XXXXXX)"` ahead of the command above. Measured by the
+round-4 compliance judge: with `TMPDIR` inside the `~/.claude` repository, which is what a pane
+worker gets, `test_outside_a_git_repository_the_server_aborts` and
+`test_outside_a_git_repository_no_browser_opens` fail, and with `TMPDIR` under `/tmp` both pass.
+(A third failure in that run, `test_the_skill_documents_a_launch_command_that_does_not_detach`,
+came from the judge's export leaving out `skills/`, not from `TMPDIR`.) Both tests make their
+"not a repository" folder under pytest's `tmp_path` (`test_autolaunch.py:223-248`), which lives
+under `TMPDIR`, so inside a repository the folder is inside one (read, not run). A suite run with
+`TMPDIR` inside a repository therefore fails those two tests for that reason alone.
 **(spec call, round 2, F1)** Until round 2 the command named a list: `treko/test_ledger_*.py
 treko/test_analyze.py treko/test_server.py treko/test_ui_commands.py treko/test_guards.py`, to
 which round 1 added `treko/test_analyze_options.py`, `treko/test_file_budgets.py`,
@@ -2353,14 +2552,11 @@ suite to the runtime pin; they still are what prove the code on it.
 - **O1 covers runs, not the nothing-found pop-up.** A refusal body carries only its code (§3.5),
   and D2 fixed the pop-up's wording. So when the scan finds nothing at all, a repository below
   the depth limit is not reported. Once anything is found, the run's question reports it (§7.2).
-- **File filters (OQ-8, user; D15/U3).** If task 1 cannot switch them off without breaking
-  LFS-backed scanning, a scanned repository's own config can still name a filter program that
-  `git status` runs. The user accepted that risk; task 1 now tests the off switch on a real LFS
-  repository and shows him the result (§2 default 3), and its ADR records whichever outcome holds.
-  `git-lfs` is not installed on this host (`command -v git-lfs` finds nothing). Since round 3
-  (U5) it is pinned as a test-only tool, Homebrew 3.8.1 (§15), installed in task 1 only with his
-  approval at the permission prompt; if he refuses or the install fails, the test does not run
-  and filters stay this accepted risk (§2 default 3, third outcome).
+- **File filters (OQ-8, user; U8 at round 4, which superseded D15/U3 and D17/U5).** A scanned
+  repository's own config can name a filter program that `git status` runs, and none of the
+  protective settings stops it (probe 31). Filters stay on: decided at round 4 without a test,
+  for the reasons §2 default 3 gives, and the user accepted the risk, since his own `git status`
+  in a terminal runs the same filters. The ADR task 1 writes records it.
 - **Config routes not yet tried (round 3, U4).** The config routes tried are fsmonitor, hooks,
   `gpg.program`/`log.showSignature`, the lazy fetch, `diff.external`, `diff.<driver>.textconv`
   and file filters (§2 default 3, "Which config routes were tried"); all but filters are closed
@@ -2467,7 +2663,8 @@ answer. All eight were answered on 2026-11-03. Each answer follows its question 
    hooks and the optional index write were measured as real routes, so `GIT_OPTIONAL_LOCKS=0` and
    `core.hooksPath=/dev/null` are set unconditionally (§2 default 3, C9). The (user) half now has
    a task-1 test on a real LFS repository, with both outcomes defined, before he decides (D15/U3).
-   The text above is kept as the answer given at the time.
+   The text above is kept as the answer given at the time. *(The U3 half is superseded by U8 at
+   round 4: there is no such test; filters stay on.)*
 
    **Superseded in part again at round 3 (2026-11-03, U4).** OQ-8 asked about hooks and filters
    only, so it never answered "other programs a scanned repo's config can start" in general, and
@@ -2478,6 +2675,10 @@ answer. All eight were answered on 2026-11-03. Each answer follows its question 
    `--shortstat`, and filters wait for task 1 (now with a third outcome if `git-lfs` cannot be
    installed, U5). Git's other config keys that can name a program have **not** been enumerated,
    so these routes are a lower bound (§16).
+
+   **Superseded in part again at round 4 (2026-11-03, U8).** Filters no longer wait for task 1:
+   U8 superseded U3 and U5, so there is no LFS test and no `git-lfs` install, and filters stay on
+   as the user's accepted risk (§2 default 3). The rest of the round-3 note stands.
 
 **Also decided on 2026-11-03.** The user confirmed the spec call that the last visible run cannot
 be deleted (§8.4, criterion G5). He accepted this file running over ADR 0017's 800-line cap
@@ -2500,7 +2701,7 @@ The labels below are how the text above cites each change.
   §3.6, §5.1, §5.2, §5.4, §5.5, §5.6, §9.2, four scenarios, criteria A2, D12, D13, D14.
 - **U3 = D15. File filters: task 1 tests the off switch on a real LFS repository**, shows him
   the result, and the outcome decides. Places changed: §2 default 3, §13, §16, criterion C9, the
-  OQ-8 note.
+  OQ-8 note. *(Superseded by U8 at round 4: no test; filters stay on.)*
 
 **Fixes from the verdicts (my call, 2026-11-03).**
 
@@ -2544,7 +2745,8 @@ session proposed and the user approved.
 - **U5 = D17. `git-lfs` is a test-only tool, pinned:** Homebrew 3.8.1, vetted (0 stop, 0
   caution, incomplete: every check `not_run` for Homebrew), installed in task 1 only with his
   approval at the prompt; a refused or failed install is task 1's third outcome. Places changed:
-  §2 default 3, §13, §15 (a row and the "No new dependency." sentence), §16.
+  §2 default 3, §13, §15 (a row and the "No new dependency." sentence), §16. *(Superseded by U8
+  at round 4: `git-lfs` is not installed, and its §15 row is gone.)*
 - **U6 = D18. A worktree whose `git status` fails shows "changes unknown".** The schema is
   unchanged (`dirty` stays a boolean, ADR 0023); `note` and `tone` carry it, one question says
   why, and the board needs no code change. Places changed: §1's file table, §1.1, §6.1, a new
@@ -2555,7 +2757,7 @@ session proposed and the user approved.
 1. Task 1's filter test can fail: `.required` is blanked too, driver names are read per worktree
    with includes, global and per-worktree config (measured), the fixture has a stat-dirty
    LFS-tracked file and one really modified file, and a falsifier must see the marker (§2 default
-   3).
+   3). *(Superseded by U8 at round 4: the test was removed.)*
 2. Shutdown closes the child registry first: no new family and no new job after that, and a
    killed analyzer is never a failed family (§4, §5.3, §5.4, D6, a scenario).
 3. The catch-all kills the job's live subprocess groups before marking the item failed (§5.4,
@@ -2586,6 +2788,56 @@ and a child in its own process group can outlive the server); a catch-all for re
 whether Z3's forced test edits belong in a separate commit from split 3's move; having task 1
 check each git command the analyzer runs against the config keys that can name a program, rather
 than waiting for review to find the next route; and stating in §15 where `TMPDIR` must be for
-`test_autolaunch.py`, which no one has measured. Also still open from round 2: the outcome when
-one git call passes `GIT_TIMEOUT_SECS`, `flock` open errors and a non-parse `ledger.json` read
-error, §9.1's token-block reason, §8.3's row cache.
+`test_autolaunch.py`, which no one had measured then. *(Since measured by the round-4 compliance
+judge; §15 now requires a `TMPDIR` outside every repository, my call, round 4.)* Also still open
+from round 2: the outcome when one git call passes `GIT_TIMEOUT_SECS`, `flock` open errors and a
+non-parse `ledger.json` read error, §9.1's token-block reason, §8.3's row cache.
+
+## Revised after compliance round 4 (2026-11-03)
+
+Round 4 failed with one new violation (`core-conduct/validate-input-at-boundaries`): a field
+holding a lone surrogate passed every check and then crashed the byte-length rule, so the request
+got no code and no audit line. The observability judge's fourth read found that task 1's filter
+test could not pass on its own fixture and that its falsifier could not fire, plus smaller items.
+The user decided four things; the card records them as D19–D22. D22 (both judges run once more,
+as round 5, and he then picks from one list what gets fixed, with no further automatic rounds) is
+a process decision and changes no text here. The rest are the planning session's calls, tagged
+"(my call, round 4)" where they appear.
+
+**The user's decisions (user, 2026-11-03).**
+
+- **U7 = D19. A value that cannot be written as UTF-8 is refused like any other bad value.**
+  Every one of §3.4's six fields is checked first: `422 invalid_input`, or `400 malformed` for
+  `item` and `run`, with one audit line. Places changed: §3.4 (step 7, the field table's heading,
+  a new rule after the table), one row of §10's hostile-request outline, criterion A3.
+- **U8 = D20. File filters stay on, decided now; no Git LFS test and no `git-lfs` install.
+  Supersedes U3 and U5.** Places changed: §2 default 3 (the filter paragraph rewritten with the
+  reasons; the test, its fixture, falsifier, "works" rule, three outcomes and the `git-lfs` pin
+  removed with his approval; the pending-pairs sentence and the routes-tried list), §13, §15 (the
+  `git-lfs` row removed and "No new dependency." restored), §16, criterion C9, and superseded
+  markers on the OQ-8 notes and the round-2 and round-3 summaries, whose history is kept.
+- **U9 = D21. Two more "cannot check" cases get honest labels, extending U6.** A branch whose
+  `git diff --shortstat` fails shows "diff unknown" with one question, by U6's mechanism; a
+  branch whose worktree folder is gone shows "folder missing", checked at `analyze.py:436`.
+  Places changed: §1's file table, §1.1, §2's partial-clone paragraph, §6.1, §6.3, a new §6.4,
+  two scenarios (one new, one edited), criteria C11 and E2, new criteria E7 and E8, and the
+  `test_analyze.py` lines in §1.1 and §12.
+
+**Small fixes (my call, round 4).**
+
+1. The runner checks the registry's `closed` flag before §5.4 step 1, so at shutdown a waiting
+   item stays `waiting` (§5.3, §5.4, D6). The narrower window left by the check (shutdown between
+   the check and the write) is closed too: a job whose first launch, its scan, is refused puts its
+   item back to `waiting`; a refused later launch still ends it `interrupted` (§5.4 step 1, D6).
+2. The catch-all's reap wait is bounded by `REAP_WAIT_SECS = 5`, with a defined outcome when it
+   expires (§5.4, D14).
+3. C8's unit row gives the base `GIT_CONFIG_COUNT=5` and pairs `_0`…`_4`, so it can fail (C8).
+4. C8's launch check covers all five `ledger_*` modules, and so does its AST `environ` check (C8).
+5. §15 requires `TMPDIR` outside every repository, as measured by the round-4 compliance judge
+   (§15, the "Not changed at round 3" note).
+
+**Not changed at round 4**, raised in the round-4 reads but outside this revision's brief: no
+SIGTERM handler; no request-thread catch-all (U7 removes its one measured trigger);
+no check that git is at least 2.45, below which `GIT_NO_LAZY_FETCH` would be ignored silently;
+the probe scripts (`probe_r3.sh` and, since round 4, `surrogate.py` and `probe_r4.py`) live in
+session scratch folders, not in the repository; a git config sweep folded into task 1.
