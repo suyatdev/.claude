@@ -312,7 +312,9 @@ check of git's config keys that can name a program, against the commands the sca
 recommendation to park it. A plain stop request (`kill`, logout) or a closed terminal runs the same
 shutdown path as `Ctrl-C` (§5.3): registry closed, subprocess groups killed, the running item marked
 `interrupted`. Until now both were a hard kill, which can leave a running analyzer behind as an
-orphan in its own process group. He chose both signals over SIGTERM alone.
+orphan in its own process group. He chose both signals over SIGTERM alone. D29 is new design added
+after D27's waiver; asked, he chose no extra judge pass on it (user, 2026-11-04): D27's waiver covers
+it, and its own criteria test it at build.
 
 ## Decisions carried to the relations card (user, 2026-11-02)
 
