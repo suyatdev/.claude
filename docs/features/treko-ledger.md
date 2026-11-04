@@ -282,6 +282,17 @@ observability read measured a 12-branch blobless clone going from 2 questions to
 compliance judge checks only whether those fixes were made correctly (round 6), not the whole spec
 again. Whatever it finds goes to him; no loop.
 
+**D27 — Fix round 6's five findings, then his review; further judge passes waived.** (user, round-6
+list, 2026-11-03) The narrow round-6 check failed with five new ids, all inside the round-5 fixes:
+`core-conduct/audit-sent-unsourced` (the catch-all logs `sent=no` on `/command` even when keystrokes
+landed; fix: `sent=unknown` there, plus a hang-up test), `writing-specs/two-way-command-unchanged`
+(§3.5 still says `/command` is unchanged), `writing-specs/a2-falsifier-outcome` (A2's sample value
+lacks a trailing newline), `writing-specs/two-way-poll-banner` (the new banner has no clearing rule)
+and `writing-specs/card-needs-a-task` (the new scenario and E7 need a card with a task). He chose to
+have all five fixed and to **waive any further compliance or observability pass on the spec**: he
+reviews it himself next, and the spec's own criteria catch what is left at build time. This waiver is
+his explicit decision, recorded here as the spec-compliance gate requires.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
