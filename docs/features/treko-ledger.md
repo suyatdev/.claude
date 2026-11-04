@@ -256,6 +256,32 @@ of an empty diff, and a worktree whose folder was deleted by hand shows "folder 
 round-4 fixes, both judges run once more (round 5). Whatever they find goes to him as one list, and
 only what he chooses gets fixed, with no further automatic rounds.
 
+**D23 — A safety net for any request that crashes, plus two named refusals.** (user, round-5 list,
+2026-11-03) The round-5 compliance judge measured two more inputs that make the server drop the
+connection with no answer and no audit line, on code the Ledger reuses from `/command`: a token header
+holding a non-ASCII byte (`hmac.compare_digest` raises `TypeError`; no valid token needed) and a body of
+1024 `[` (`RecursionError`, which `server.py:589`'s `except (ValueError, UnicodeDecodeError)` does not
+catch). Both re-measured here on `/usr/bin/python3` 3.9.6. He chose a request-thread catch-all that
+answers `500` with one audit line, plus a refusal for each case (the token one stays inside the
+collapsed `403 forbidden`; the bracket one is `400 malformed`). Because the code is shared, `/command`
+gets the same protection.
+
+**D24 — The shutdown put-back stays, written fully into the job lifecycle.** (user, round-5 list,
+2026-11-03) Against my recommendation to drop it. A job whose first launch (its scan) is refused by
+the closed registry puts its item back to `waiting`. Both round-5 reads found this exit missing from
+§5.2's diagram, the "three exits" sentence, the `last_job_end` list and §5.6's write table, and D6's
+falsifier unable to fire. He chose to keep the rule and write it in everywhere, with a failure rule for
+the put-back write and a test that can tell the check from the put-back.
+
+**D25 — "diff unknown" asks a question only for a branch a card names.** (user, round-5 list,
+2026-11-03) Refines D21. The label stays wherever a diff cannot be measured, but a question is added
+only when a card names that branch, since a diff is shown only on a card's tasks. The round-5
+observability read measured a 12-branch blobless clone going from 2 questions to 14 without this.
+
+**D26 — A narrow final check.** (user, round-5 list, 2026-11-03) After the round-5 fixes, the
+compliance judge checks only whether those fixes were made correctly (round 6), not the whole spec
+again. Whatever it finds goes to him; no loop.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**

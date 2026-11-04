@@ -17,9 +17,10 @@ Delete. The card is `docs/features/treko-ledger.md`. Its decisions are cited her
 the user's decisions after compliance round 2, are cited as U1–U3, D16–D18, his decisions after
 round 3, as U4–U6, and D19–D21, his decisions after round 4, as U7–U9: U1 = D13, U2 = D14, U3 =
 D15, U4 = D16, U5 = D17, U6 = D18, U7 = D19, U8 = D20, U9 = D21. U8 supersedes U3 and U5. D22, one
-more judge round after which he picks what gets fixed, is a process decision and has no U-number;
-see the last three sections). This file turns them into contracts and tests. It does not reopen
-them.
+more judge round after which he picks what gets fixed, is a process decision and has no U-number.
+D23–D25, his picks from the round-5 list, are cited as U10–U12: U10 = D23, U11 = D24, U12 = D25.
+D26, a narrow round-6 check of those fixes, is a process decision and has no U-number; see the last
+four sections). This file turns them into contracts and tests. It does not reopen them.
 
 **Tags.** **(spec call)** marks a detail the card left open that this spec settles with the
 simplest safe option; the reviewer can overturn any of them. **OQ-n** marks a choice that changes
@@ -51,6 +52,11 @@ not fetched). Round 4's probes are `surrogate.py` and `probe_r4.py` in the round
 run on `/usr/bin/python3` against the real `treko/analyze.py` at that commit, on git 2.50.1, in
 scratch repositories whose commits were made with git plumbing (`write-tree`, `commit-tree`,
 `update-ref`), under an explicit minimal environment with global and system git config cut off.
+Revised a fifth time the same day for compliance round 5 and the user's picks after it (U10–U12)
+at `47f6700`; both `git diff --stat` commands above still print nothing (`origin/main` still at
+`fc08216`, not fetched). Round 5's probe is `u10_inputs.py` in the round-5 scratch folder, run on
+`/usr/bin/python3`; the rest of round 5 is read from the code at that commit, and says so where
+it is reasoned.
 
 **Size (user, 2026-11-03).** He accepted this half running over ADR 0017's 800-line cap.
 
@@ -93,7 +99,7 @@ flowchart LR
 | `treko/ledger_routes.py` | new | the `/ledger` and `/ledger/status` handlers: field validation, op dispatch, the status payload (§3) |
 | `treko/cards.py` | new | split 1: the analyzer's card-reading layer, moved unchanged (§1.1) |
 | `treko/board-commands.js` | new, one manifest row | split 3: the board's node-loadable command slice, moved unchanged, then the Re-analyze change (§1.1, §9.4) |
-| `treko/server.py` | changed | routes, validation, idle rule, startup, the launch address (§3, §3.2); split 2 moves its send path out (§1.1) |
+| `treko/server.py` | changed | routes, validation, idle rule, startup, the launch address (§3, §3.2); split 2 moves its send path out (§1.1); since round 5, the token check and body reader `/ledger` and `/command` share, and the request catch-all every route runs inside, `/command` included (§3.8; U10) |
 | `treko/channel.py` | changed | split 2: receives `confirm_surface`, `send_keys` and `CONFIRM_REFUSAL_REASONS` unchanged (§1.1) |
 | `treko/analyze.py` | changed | two optional inputs: the progress report (§6) and `--card` (§4.3; OQ-1, (my call)); since round 3 one behaviour change, a worktree whose `git status` fails shows "changes unknown" instead of "clean" (§6.3; U6); and since round 4 two more of the same kind, a branch whose `git diff --shortstat` fails shows "diff unknown" instead of an empty diff, and a branch whose worktree folder is gone shows "folder missing" instead of "clean" (§6.4; U9). Nothing else. Split 1 also moves its card layer out, with no change in behaviour (§1.1) |
 | `treko/Treko.dc.html` | changed | two icon links, Re-analyze, graph svg size, the Re-analyze pop-up (§9.4); split 3 moves its command slice out (§1.1) |
@@ -121,14 +127,14 @@ would cross 800, a split decided now. Sizes are `wc -l` at `6331b5d`:
 |---|---|---|---|
 | `treko/analyze.py` | 797 | ≤ 740 | split 1 |
 | `treko/cards.py` (new) | — | ≤ 200 | receives split 1 |
-| `treko/server.py` | 793 | ≤ 780 | split 2; all Ledger logic in the new modules, server.py only routes and delegates |
+| `treko/server.py` | 793 | ≤ 780 | split 2; all Ledger logic in the new modules, server.py only routes and delegates; since round 5 it also holds U10's shared token check, body reader and request catch-all (§3.8), about 25 lines (estimated), inside the same budget |
 | `treko/channel.py` | 95 | ≤ 200 | receives split 2 |
 | `treko/Treko.dc.html` | 783 | ≤ 720 | split 3 |
 | `treko/board-commands.js` (new) | — | ≤ 250 | receives split 3 |
 | `treko/Ledger.dc.html` (new) | — | ≤ 600 | its logic stays in an in-page slice (§9.1) |
 | `treko/ledger_*.py` (five new) | — | ≤ 400 each | the house target |
 | `treko/server_harness.py` | 339 | ≤ 400 | |
-| `treko/test_server.py` | 789 | ≤ 800 | no new tests here: new behaviour is tested in new modules |
+| `treko/test_server.py` | 789 | ≤ 800 | new behaviour is tested in new modules, with one exception since round 5: the `/command` test that drives `internal_error`, which this module's reason coverage requires (§12; U10) |
 | `treko/test_analyze.py` | 599 | unchanged | E1, E2, E5, E6 (round 3) and E7–E8 (round 4) go in a new `test_analyze_options.py` |
 | `treko/test_guards.py` | 599 | ≤ 800 | split 3's edits, then the re-pin (§12) |
 | `treko/test_ui_commands.py` | 468 | ≤ 800 | §12 |
@@ -253,6 +259,11 @@ deliberately narrow:
   (`test_server.py:16-20`), so no test module pins those sets.
 - ADR 0024's "one audit line per request" gains one exception: an accepted status poll (default
   4 below).
+- **`/command` gets U10's protection (user, round 5).** Its token check and body reader are the
+  ones `/ledger` uses, and every route runs inside one request catch-all (§3.8). So `/command`'s
+  failure table gains one row, `500 internal_error`, and two inputs that today drop its
+  connection with no answer get `403 bad_token` (a token header that is not ASCII) and
+  `400 malformed` (a body nested too deeply to parse). Its arguments rule is unchanged.
 
 **Task 1 writes an ADR** recording the routes, ops, argument shapes and validation of §3, the
 amendments above, and D10's defaults below. Take its number from `origin/main` at write time,
@@ -353,7 +364,8 @@ round-1 read (O3):
    makes its `git diff --shortstat` exit 128 (measured at round 4, §6.4), which today's analyzer
    turns into an empty diffstat, `""`, the value the board shows for a branch with no diff
    (probe 25); every other field of the run was unchanged. **Since round 4 (U9) that branch shows
-   "diff unknown" with one question instead (§6.4).** In the two-run comparison the only other difference was the relative commit age, a
+   "diff unknown" instead, and since round 5 (U12) the run gains a question about it only when a
+   card names the branch (§6.4).** In the two-run comparison the only other difference was the relative commit age, a
    clock artefact of fixtures made seconds apart. Under the round-2 settings the same run fetched
    over the network and wrote the downloaded objects into the scanned repository's `.git`, which
    §13's "git writes nothing in a scanned repository" did not allow for, so the setting closes a
@@ -510,7 +522,8 @@ board's file is served exactly as today's code serves it (criterion A1). `check_
 ### 3.3 `GET /ledger/status`
 
 Checks, in order: `Host`; `Origin` and `Sec-Fetch-Site`, each only when present (the rule at
-`server.py:531-536`); `X-Tracker-Token` by `hmac.compare_digest`. Every failure is the collapsed
+`server.py:531-536`); `X-Tracker-Token`, refused at once when it is not all ASCII and otherwise
+compared by `hmac.compare_digest` (§3.8; U10, round 5). Every failure is the collapsed
 `403 forbidden`. Success is `200`, `Content-Type: application/json`, `Cache-Control: no-store`,
 `nosniff`:
 
@@ -548,13 +561,16 @@ the way `analyze._home_collapse` does it (`analyze.py:116-119`), for D8.
 Checks, in order. Each failure answers once and writes one audit line:
 
 1. `Host` (`403 host_mismatch`), then `Origin` and `Sec-Fetch-Site` (`403 origin_mismatch`),
-   then the token (`403 bad_token`). Same code as `_handle_command` (`server.py:524-556`).
+   then the token (`403 bad_token`). Same code as `_handle_command` (`server.py:524-556`), which
+   since round 5 refuses a token that is not all ASCII before comparing it (§3.8; U10).
 2. `Content-Type` is `application/json` (`415`).
 3. The body: `Transfer-Encoding` refused, `Content-Length` required, at most
    `LEDGER_MAX_BODY_BYTES = 4096` bytes read (`413`), the same mechanics as `_read_body`
-   (`server.py:558-599`). **(spec call)** 4096, not `/command`'s 1024: a macOS path alone can be
-   1024 bytes, and JSON quoting can double it. `/command` keeps 1024.
-4. The body is a JSON object with a string `op` (`400 malformed`).
+   (`server.py:558-599`), and since round 5 the same reader, shared with `/command` and taking
+   the cap as a parameter (§3.8; U10). **(spec call)** 4096, not `/command`'s 1024: a macOS path
+   alone can be 1024 bytes, and JSON quoting can double it. `/command` keeps 1024.
+4. The body is a JSON object with a string `op` (`400 malformed`). A body nested too deeply to
+   parse is `400 malformed` too (§3.8; U10).
 5. `op` is one of the five below (`403 forbidden`, reason `unknown_op`). As with `/command`, an
    unknown op is indistinguishable from a bad token.
 6. The key set is exactly the op's own keys, every value a string (`400 malformed`). Unknown keys
@@ -627,8 +643,8 @@ The body is always `{"ok": false, "error": "<error>"}` and echoes nothing from t
 
 | Status | `error` | Cause | Audit `reason` |
 |---|---|---|---|
-| 400 | `malformed` | §3.4 steps 3, 4, 6; a bad `item` or `run` shape | `malformed` |
-| 403 | `forbidden` | host, origin, token, unknown op | `host_mismatch`, `origin_mismatch`, `bad_token`, `unknown_op` |
+| 400 | `malformed` | §3.4 steps 3, 4, 6, a body nested too deeply to parse among them (§3.8); a bad `item` or `run` shape | `malformed` |
+| 403 | `forbidden` | host, origin, token (one that is not all ASCII included, §3.8), unknown op | `host_mismatch`, `origin_mismatch`, `bad_token`, `unknown_op` |
 | 404 | `no_such_item` | `remove`/`retry`: no item with that id | `no_such_item` |
 | 404 | `no_such_run` | `delete`/`reanalyze`: no run with that id | `no_such_run` |
 | 405 | `method_not_allowed` | §3.1 | `method_not_allowed` |
@@ -651,13 +667,16 @@ The body is always `{"ok": false, "error": "<error>"}` and echoes nothing from t
 | 500 | `launch_failed` | `analyze`/`reanalyze`: the submit-time scan subprocess could not be started at all (an `OSError` from the spawn, today's branch at `server.py:330-331`). Nothing is queued (U2) | `launch_failed` |
 | 500 | `ledger_write_failed` | the request's own write of `ledger.json` failed, so nothing changed (§5.6) | `ledger_write_failed` |
 | 500 | `store_unreadable` | `delete`/`reanalyze`: the store does not parse | `store_unreadable` |
+| 500 | `internal_error` | any unexpected exception while a request is handled, caught by the request catch-all (§3.8; U10, round 5) | `internal_error` |
 
 `GET /` and `GET /ledger` keep today's `500 asset_unreadable` for an unreadable page. `/command` is
 unchanged apart from its allowlist: `{"id": "reanalyze"}` is now `403`, reason `unknown_id`.
 
-**Codes only a failed item carries (U2, round 2).** These never answer a request. They are the
-`error` of a failed queue item (§5.4), written to `ledger.json` and shown from it (§9.2). A2 does
-not drive them over HTTP; criteria D7 and D12–D14 do, through the job runner.
+**Codes only a failed item carries (U2, round 2).** These never answer a request, apart from the
+two the table marks as also a request answer: `launch_failed`, and since round 5 `internal_error`
+(U10). They are the `error` of a failed queue item (§5.4), written to `ledger.json` and shown from
+it (§9.2). A2 does not drive them over HTTP as item codes; criteria D7 and D12–D14 do, through the
+job runner.
 
 | `error` | Cause | `detail.stage` |
 |---|---|---|
@@ -665,20 +684,36 @@ not drive them over HTTP; criteria D7 and D12–D14 do, through the job runner.
 | `store_write_failed` | `store.emit_run` raised | `write` |
 | `merge_failed` | `ledger_merge.merge` raised: the per-repo results could not be combined into one run | `merge` |
 | `launch_failed` | a job's scan or analyzer subprocess could not be started at all (an `OSError` from the spawn). Also a request answer, above | `scan`, or `worktrees` for an analyzer (the stage it would have run first) |
-| `internal_error` | any other exception on the job thread, caught by the catch-all of §5.4 | the stage it had reached, or `null` |
+| `internal_error` | any other exception on the job thread, caught by the catch-all of §5.4. Also a request answer, above, from the request catch-all (§3.8; U10) | the stage it had reached, or `null` |
 
 `ledger_write_failed` and the scan outcomes (`no_such_directory` through `scan_failed` above) are
-both: a request answer at submit, and an item's `error` at job time.
+both: a request answer at submit, and an item's `error` at job time. So, since round 5, is
+`internal_error`, from two different catch-alls: the request one (§3.8) and the job one (§5.4).
 
 ### 3.6 Audit lines and diagnostics
 
 The audit format (`server.py:134-147`) is unchanged: one line per request, except an accepted
 status poll, which writes none (§2, default 4; O3). A refused poll is audited.
-**(spec call)** `id=` carries the op for `/ledger`, `status` for the poll, and `-` for the pages
-and for an op that failed before it was read. **Field values are never logged.** The directory is
+**(spec call)** `id=` carries the op for `/ledger` once step 5 has accepted it as one of the five,
+`status` for the poll, and `-` everywhere else: the pages, a request refused before step 5, the
+request catch-all's line (§3.8), and **an unknown op, which logs `id=-` (my call, round 5)**, as
+`/command` does for an unknown id (`server.py:552` passes no id, so `audit`'s default `-` is
+written; measured by the round-5 compliance judge: `refused id=- … reason=unknown_id`). An
+unknown op is client text, and `audit` formats every field with `%s` and no escaping
+(`server.py:143-144`), so writing it would let a token holder put a newline into the log: the
+round-5 compliance judge's stub call with a newline-bearing value wrote 3 lines, and
+`server_harness.parse_audit` read the middle one as a normal accepted entry. Until round 5 this
+sentence gave `-` only "for an op that failed before it was read", and an unknown op has been
+read, so it could be taken either way. **Field values are never logged.** The directory is
 request content, and the old spec bans logging request bodies "in whole or in part"
 (`tracking-feature-state.spec.md:547-551`).
-Job events go to stderr as `server: job <item> <event>` and name item and run ids only. An
+Job events go to stderr as `server: job <item> <event>` and name item and run ids, and never
+request content. **Besides those ids and the fixed words this paragraph names below (codes,
+stages, exception classes, errno names), the one value a job or scan line can carry is a
+process id, in a reap-timeout line (§4, §5.4; my call, round 5):** a pid is the server's own
+number, not request content. Until round 5 this sentence said "item and run ids only", which the
+reap-timeout line added at round 4 contradicted. The request catch-all writes its own line,
+`server: request internal_error <ExceptionClass>` (§3.8), on the same terms. An
 analyzer's or scan's own last stderr line may follow, as `_reanalyze_failed` does today
 (`server.py:348-351`). **(spec call, round 2)** A failed job's line names its code and
 `detail.stage`; for `merge_failed` and `internal_error` it also names the exception's **class**
@@ -704,13 +739,92 @@ Both pages therefore see only visible runs, and the board needs no hide logic. O
 there is no server, the board falls back to the bundled sample (`SKILL.md`, "Opening the vendored
 file over file:// no longer shows your survey"), and nothing hidden exists to leak.
 
+### 3.8 Requests that crash, and two inputs that used to (user, U10 = D23, round 5)
+
+**Why.** Today an exception that escapes a route goes to `socketserver`'s default handling: a
+traceback on stderr, the connection closed, no response and no audit line. `ControlHandler` and
+`ControlServer` define no handler of their own (`server.py:357-652`). The round-5 compliance judge
+measured two inputs that do this on the real server under `/usr/bin/python3` 3.9.6, through
+`/command`, whose code §3.3 and §3.4 reuse: a token header holding byte `0xE9` (no valid token
+needed) and a body of 1024 `[` (valid token). In both the client got an empty reply, no audit line
+was written, and the server stayed up. Both exist today on `/command`, so this card inherits them
+rather than causing them. A dropped connection also reads on the Ledger as "The control server is
+no longer running." (§9.2), and §2 default 4 relies on every refusal leaving an audit line.
+
+**Two named refusals (user).**
+
+- **A token that is not all ASCII.** `http.server` reads header values as ISO-8859-1, so byte
+  `0xE9` arrives as the one-character string `'\xe9'`, and `hmac.compare_digest` raises
+  `TypeError: comparing strings with non-ASCII characters is not supported` when given it
+  (both measured on 3.9.6, `u10_inputs.py`, through `http.client.parse_headers`). The shared
+  token check refuses a presented token that is not entirely ASCII (`str.isascii()`) as
+  `403 forbidden`, reason `bad_token`, without calling `hmac.compare_digest`, and otherwise
+  compares as today. The server's own token comes from `secrets.token_urlsafe(32)`
+  (`server.py:722`) and is ASCII, so the comparison then always sees two ASCII strings and cannot
+  raise. The early refusal tells the caller only whether its own value was ASCII, nothing about
+  the token. **(my call, round 5)** An ASCII check rather than a byte comparison: it is one line,
+  and it leaves the comparison as it is today.
+- **A body nested too deeply to parse.** `json.loads` raises `RecursionError` on 1000 or more
+  unclosed `[`, and on 1024 nested `[` that are properly closed; it is a `RuntimeError`, not a
+  `ValueError` (measured on 3.9.6, `u10_inputs.py`), so today's
+  `except (ValueError, UnicodeDecodeError)` (`server.py:589`) does not catch it. The shared
+  reader catches `RecursionError` beside those two and answers `400 malformed`, with one audit
+  line. The depth at which it fires depends on the call stack, so the rule names the exception,
+  not a depth.
+
+**Shared with `/command` (user).** The token check is one function in `server.py`, and so is the
+body reader (`Transfer-Encoding`, `Content-Length`, the cap, the strict UTF-8 decode and
+`json.loads`). `_handle_command` and the `/ledger` routes call the same two. The reader takes the
+cap as a parameter (`MAX_BODY_BYTES = 1024` for `/command`, `server.py:64`;
+`LEDGER_MAX_BODY_BYTES = 4096` for `/ledger`), and each route keeps its own shape check: exactly
+`id` for `/command` (`server.py:595-598`), §3.4 steps 4 to 6 for `/ledger`. So `/command` gets
+both refusals and the catch-all below (§2).
+
+**The request catch-all (user; the details are my call, round 5).** Every request runs inside one
+handler in `ControlHandler`, around the dispatch of every method, so every route gets it: both
+pages, the static assets, `GET /ledger/status`, `POST /ledger`, `POST /command`, and the 404 and
+405 answers. It catches `Exception`; `KeyboardInterrupt` and `SystemExit` pass through, as on the
+job thread (§5.4). When it catches one, it:
+
+1. answers `500` with `{"ok": false, "error": "internal_error"}`, the same fixed body shape as
+   every failure, when no response has started. If one has (its status line has gone out), it
+   cannot answer again and sends nothing more;
+2. writes exactly one audit line:
+   `failed id=- surface=- sent=no status=500 reason=internal_error path=- errno=<name>`, where
+   `<name>` is the symbolic errno when the exception is an `OSError` carrying one (a client that
+   hung up gives `EPIPE` or `ECONNRESET`), and `-` otherwise. `id=-` because it cannot know how far
+   the request got (§3.6). `status=500` even when a response had started, because the line records
+   the server's verdict and the audit format requires a number there (`AUDIT_RE`,
+   `server_harness.py:238-241`). Every route writes its own audit line as its last step, as each
+   does today, so a request that reaches the catch-all has written none (read, not run);
+3. writes one diagnostic line to stderr, `server: request internal_error <ExceptionClass>`, naming
+   the class only and never the message, which can carry request content (the round-4 compliance
+   judge's traceback printed the offending character);
+4. closes the connection, since the request's state is unknown.
+
+It never echoes request content: not in the body, the audit line or the diagnostic line. It
+replaces no named refusal: every input this spec names keeps its own code, and A2, A3 and the §10
+outline drive them; the catch-all is for what nobody has named yet. If its own writes fail
+(stderr closed, say), the exception goes to `socketserver`'s default, as today.
+
+**What the pages show.** The Ledger has a row for `internal_error` as a request answer (§9.2). The
+board's Re-analyze maps it on its own (§9.4), because a catch-all cannot promise that nothing
+changed. On `/command`, the board needs no change: a code with no entry in its table resolves to
+"Unexpected error." (`Treko.dc.html:429-436`).
+
 ## 4. Directory scan (D2, D3 as confirmed, D11)
 
 `ledger_scan.py` runs as a subprocess, launched with the server's own `sys.executable` like the
 analyzer (§5.4), with the request on stdin, and prints one JSON object on stdout. It runs under
 `TREKO_SCAN_SECS = (30, 5)` (default, floor), with the same no-"never" rule
 as the other timeouts (`read_timeout`, `server.py:153-168`), in its own process group, which is
-killed when the bound passes. Each git call inside it has `GIT_TIMEOUT_SECS = 5` (`server.py:61`).
+killed when the bound passes. **The wait to reap it after that kill reuses `REAP_WAIT_SECS` (§5.4;
+my call, round 5).** When that wait expires, the outcome is the catch-all's: a reap-timeout line
+on stderr (`server: job <item> reap timeout <pid>` at job time, `server: scan reap timeout <pid>`
+at submit), the process left in the child registry for shutdown's sweep, and the answer the scan
+would have had anyway, `scan_timeout`. Until round 5 this wait had no stated bound, so "no item
+stays `running` for ever" rested on the kill landing (the round-5 compliance judge's note).
+Each git call inside it has `GIT_TIMEOUT_SECS = 5` (`server.py:61`).
 **(spec call)** Out of process for the reason `run_reanalyze` gives (`server.py:317-321`): a
 directory listing that blocks cannot be interrupted inside a thread. The same scan runs twice:
 at submit, to decide whether anything is queued at all (D2: nothing found means nothing queued),
@@ -833,7 +947,8 @@ waves, graph and constraints from them itself.
 `no_such_worktree` or `nothing_matched`. Each of these is a result, printed with exit 0.
 `no_such_directory` happens only at job time, when the directory went away while the item waited;
 at submit, §3.4's field rules catch it first. A crash is a non-zero exit and becomes
-`scan_failed`. `missed` holds §4.1's three counts.
+`scan_failed`, except a job-time scan that ended because shutdown killed it, which makes the item
+`interrupted` instead (§5.3, §5.4 step 2; my call, round 5). `missed` holds §4.1's three counts.
 
 ### 4.5 Nothing found (D2)
 
@@ -908,6 +1023,7 @@ stateDiagram-v2
   running --> [*]: run written
   running --> failed: job failure
   running --> interrupted: server stopped mid-job
+  running --> waiting: put back, its scan refused by the closed registry at shutdown (§5.4 step 1)
   failed --> waiting: Retry
   interrupted --> waiting: Retry
   failed --> [*]: remove
@@ -923,9 +1039,12 @@ stateDiagram-v2
   **(spec call)**. A failure seen only by a page that was open when it happened would be invisible
   to the user D5 describes, who leaves and comes back.
 - **No item stays `running` for ever (U2, round 2).** Every job leaves `running` by one of the
-  diagram's three exits: the run written, `failed` (including the catch-all's `internal_error`,
-  §5.4), or `interrupted` at shutdown. So `busy` (§5.5) always clears and the idle exit can
-  follow.
+  diagram's four exits: the run written, `failed` (including the catch-all's `internal_error`,
+  §5.4), `interrupted` at shutdown, or, since round 5, back to `waiting` at shutdown when the
+  closed registry refused its first launch, its scan, so nothing of it ran (the put-back, §5.4
+  step 1; user, U11 = D24). So `busy` (§5.5) always clears and the idle exit can follow. Until
+  round 5 this said "three exits": round 4 added the put-back to §5.4 without adding it here or
+  to the diagram.
 - **One live item per run (round 2, F8).** `retry` is refused with `409 already_queued` when
   another item with the same run id is waiting or running, checked under the ledger lock like
   `analyze` (§5.6). Without it, a failed item retried while a fresh submit of the same request
@@ -954,9 +1073,12 @@ stateDiagram-v2
   waiting item stays `waiting`). It then kills the process group of every subprocess in the registry: the job's
   current one, and since round 2 any submit-time scan still running on a request thread (F7).
   The runner marks the item `interrupted` with the stage and repo it had reached in `detail`, and
-  persists. An analyzer that ends because shutdown killed it is never read as a failed family
-  (§5.4 step 3), so a one-family job stopped mid-run is `interrupted`, not `analysis_failed`. A request whose scan was killed this
-  way gets no answer; the server is exiting. If that write fails, stderr says so and the server exits anyway (§5.6, write 5).
+  persists, unless the closed registry refused the job's first launch, its scan: then it puts the
+  item back to `waiting` instead (§5.4 step 1, §5.6 write 6; U11). An analyzer that ends because
+  shutdown killed it is never read as a failed family (§5.4 step 3), so a one-family job stopped
+  mid-run is `interrupted`, not `analysis_failed`; and since round 5 a job-time scan that ends the
+  same way is never read as `scan_failed` (§5.4 step 2; my call, round 5). A request whose scan was killed this
+  way gets no answer; the server is exiting. If that write fails, stderr says so and the server exits anyway (§5.6, writes 5 and 6).
   This must fit inside the existing
   bound, exit within `TREKO_POLL_SECS` + 1 s of parent death (old criterion 14). A hard kill skips
   this, and the next startup's recovery reaches the same state.
@@ -976,17 +1098,28 @@ stateDiagram-v2
    shutdown take different locks (§4 keeps the registry's lock apart from the ledger's), so a
    shutdown that closes the registry after the check and before this step's write still leaves
    that item marked `running`. **So a job whose first launch, step 2's scan, is refused by the
-   closed registry puts its item back to `waiting`, never `interrupted` (my call, round 4):**
-   nothing of it ran, so it starts by itself after a restart, like any other waiting item. A
-   refusal of any later launch (a family's analyzer, step 3) still ends the item `interrupted`,
-   because by then the job has run.
+   closed registry puts its item back to `waiting` (my call, round 4; kept and written into the
+   whole lifecycle by the user at round 5, U11 = D24):** nothing of it ran, so it starts by itself
+   after a restart, like any other waiting item. The put-back is §5.2's fourth exit from
+   `running` and §5.6's write 6; if that write fails, the file keeps `running` and the next
+   startup makes the item `interrupted` (§5.6). Until round 5 this sentence said "never
+   `interrupted`", which a failed put-back write makes untrue. A refusal of any later launch (a
+   family's analyzer, step 3) still ends the item `interrupted`, because by then the job has run.
 2. **Scan** (§4). An outcome other than `ok` fails the job with that code. A scan subprocess that
    cannot be started at all fails the job with `launch_failed`, `detail.stage = "scan"` and the
-   errno (U2).
+   errno (U2). **A scan that ends because shutdown killed it is never a failed scan (my call,
+   round 5):** when it ends, the job checks the registry, and if the registry is closed the item
+   becomes `interrupted` with `detail.stage = "scan"`, never `scan_failed` or `scan_timeout`, as
+   step 3 already does for an analyzer. Until round 5 only the analyzer had this rule, so a scan
+   killed at shutdown, a likely moment for Ctrl-C during a 30 s scan of `~`, would have read as a
+   failed job (the observability judge's round-5 read; reasoned, not measured).
 3. **Per family, in order:** `analyze.py <primary checkout> --progress`, plus one `--card` per
    chosen copy (§4.3; OQ-1, (my call)), run with `sys.executable` like `run_reanalyze`
    (`server.py:322-327`). It runs in its own process group, under `ANALYZE_SECS`
-   (`server.py:56`) **per repo**, with D10's environment. stdout is drained by a second thread so
+   (`server.py:56`) **per repo**, with D10's environment. Killed at that bound, it is reaped
+   within `REAP_WAIT_SECS`, with the catch-all's outcome if that wait expires (a reap-timeout
+   line, the process left in the registry), and the family has failed with `timedOut` either way
+   (my call, round 5; §4 says the same for the scan). stdout is drained by a second thread so
    a large run cannot fill the pipe and deadlock the stderr reader **(spec call)**. stdout must
    parse as a JSON object holding the run keys of ADR 0023's schema. A family that times out,
    exits non-zero or prints a bad run has **failed**. The job carries on, and the run gets a
@@ -1021,7 +1154,11 @@ stateDiagram-v2
 **Every end records `last_job_end` (round 3).** Until round 3 only step 6 recorded the end time,
 so a long job that failed could let the server exit at once. Now every way an item leaves
 `running` sets `last_job_end` (§5.5) in the same step that changes its state: success (step 6),
-every failure code (steps 1 to 5), the catch-all below, and interruption at shutdown (§5.3).
+every failure code (steps 1 to 5), the catch-all below, interruption at shutdown (§5.3), and,
+since round 5, the put-back to `waiting` (step 1). **The put-back counts as an end (my call,
+round 5)**, so the rule keeps no exception: one rule with none is simpler to build and to test
+(B1), and here the value changes nothing, because the registry is closed only during shutdown,
+so a put-back only happens while the server is already exiting.
 
 **The catch-all (U2, round 2).** Steps 1 to 6 run inside one handler on the job thread that
 catches **any** other exception (`except Exception`). It:
@@ -1119,6 +1256,7 @@ in memory or on disk.
 | 3 | job failure: `running` → `failed` with its code and `detail`, including the catch-all's `internal_error` (§5.4) | Memory records the failure, so `busy` clears either way. If the server stops before a later write succeeds, the item comes back `interrupted`, and the failure's code and detail are lost |
 | 4 | startup recovery: `running` → `interrupted` | Startup aborts with exit 2, naming the file and the errno, as for a corrupt `ledger.json` (§5.1). The server cannot keep D5's restart rule without recording it |
 | 5 | shutdown: `running` → `interrupted` with `detail` | stderr says so, and the server exits anyway, inside its exit bound. At the next startup the file's `running` becomes `interrupted` (write 4), without the detail |
+| 6 | shutdown put-back: `running` → `waiting`, the job's scan launch refused by the closed registry (§5.4 step 1; U11) | **(my call, round 5)** As write 5: stderr says so, and the server exits anyway, inside its exit bound. The file keeps `running`, so at the next startup write 4 makes the item `interrupted`, without detail, and it waits for Retry instead of starting by itself. That is the one way a put-back still ends `interrupted`, and it needs the disk to fail on top of the shutdown race |
 
 `ledger_write_failed` is therefore two things, worded consistently in §3.5, §5.1, §5.4 and §9.2:
 the inline answer to a request whose own write failed, and a failed item's `error` after write 1.
@@ -1144,8 +1282,8 @@ the one behaviour change of §6.3 for a worktree whose `git status` fails (U6), 
 the two of §6.4, for a diff git cannot compute and a worktree folder that is gone (U9). **The
 correction's promise is a test (E2):** without `--progress` and `--card`, stdout, stderr and exit
 status are byte-identical to today's analyzer for every repository whose `git status` succeeds in
-each of its worktrees, whose every `git diff --shortstat` succeeds, and whose every listed
-worktree folder exists, which is every E2 fixture. With `--progress`, stdout is byte-identical too, and stderr
+each of its worktrees, whose `git diff --shortstat` succeeds for every branch a card names (since
+round 5, U12; §6.4), and whose every listed worktree folder exists, which is every E2 fixture. With `--progress`, stdout is byte-identical too, and stderr
 adds exactly the four lines on success. `--card` has its own check (E5). Card 5 cites
 `analyze.py` by line at seven distinct places
 (`grep -o -E 'analyze\.py:[0-9-]+' docs/features/treko-branch-graph-traversal.md | sort -u`). As
@@ -1221,11 +1359,13 @@ today.
 **A diff git cannot compute shows "diff unknown" (spec call for the words, as in U6).**
 
 - **Today.** `_collect_branch_facts` stores `_diffstat(root, base, branch)` as the branch's `diff`
-  (`analyze.py:449`). `_diffstat` runs `git diff --shortstat <base>...<branch>` with
+  fact (`analyze.py:449`). `_diffstat` runs `git diff --shortstat <base>...<branch>` with
   `allow_failure=True` (`analyze.py:160-172`, the call at `:163`), so a failure returns `""`.
-  Each task of a card on that branch carries it as `d.diff` (`analyze.py:389`), and the board's
-  drawer prints it as plain text after the branch name (`Treko.dc.html:173`; `:677` maps a missing
-  value to `""`). `""` is also what a branch with no diff gets, so the two read the same.
+  That fact is internal: `branches[]` has no `diff` key (`test_analyze.py:40` pins its key set),
+  and the one place it reaches the run is `d.diff` on each task of a card whose `branch:` names
+  that branch (`analyze.py:389`, the fact's only reader). The board's drawer prints it as plain
+  text after the branch name (`Treko.dc.html:173`; `:677` maps a missing value to `""`). `""` is
+  also what a branch with no diff gets, so the two read the same.
 - **The partial clone.** Under `GIT_NO_LAZY_FETCH=1` (U4) a branch whose changed blobs are not
   local makes that call fail. Measured at round 4 (`probe_r4.py` case 2: a `--filter=blob:none`
   clone of a `file://` origin, with a card on the branch, every protective setting on):
@@ -1234,20 +1374,44 @@ today.
   `ahead 1`.
 - **The change: U6's mechanism, applied to this one call.** `_diffstat` calls `_git` without
   `allow_failure` and catches the `GitError` it raises on a non-zero exit (`analyze.py:92-103`).
-  The branch's `diff` becomes `"diff unknown"`, and the run gains one question per such branch,
-  "Why could git not compute the diff of `<branch>`?", with the `GitError`'s text as its context,
-  placed with §6.3's, after the analyzer's existing questions. There is no second mechanism: the
-  test is the call's exit status, exactly as for `git status`. A diff that succeeds and is empty
-  still reads `""`. `ahead`, `behind`, `last`, the commits and every other field are computed as
-  today.
+  The branch's `diff` fact becomes `"diff unknown"` wherever the diff cannot be measured, so every
+  task of a card naming that branch shows it. **A question is added only when a card names that
+  branch (user, U12 = D25, round 5):** "Why could git not compute the diff of `<branch>`?", with
+  the `GitError`'s text as its context, placed with §6.3's, after the analyzer's existing
+  questions. "Names" means a card the analyzer reads, after `--card` narrowing, whose `branch:`
+  equals that branch as `Card.branch` normalizes it (`analyze.py:273-274`), the same match that
+  puts the fact on its tasks; cards are read after branch facts (`analyze.py:480`, `:483`), so the
+  question is added once both are known. Until round 5 every such branch got a question, including
+  one no card names, whose value is shown nowhere: the round-5 observability read measured a
+  12-branch blobless clone going from 2 questions to 14. There is no second mechanism: the test is
+  the call's exit status, exactly as for `git status`. A diff that succeeds and is empty still
+  reads `""`. `ahead`, `behind`, `last`, the commits and every other field are computed as today.
+  One edge, as the user's words fall (reasoned): a card that names the branch but has no tasks
+  yet still brings the question, though the value shows nowhere.
+- **Where a question's context goes (my call, round 5).** §6.3's and this section's questions
+  carry the `GitError`'s text, which includes the repository's absolute path ("… failed in
+  /Users/…", `analyze.py:100-102`), while `dir` and `wt` are home-collapsed. Checked where it goes:
+  the analyzer prints its run on stdout, the job merges it and writes it to the store, and the
+  store directory is created owner-only (`STORE_DIR_MODE = 0o700`, `store_location.py:32`, applied
+  at `:93-96`) under `~/.local/state/treko` by default (`:29-30`, `:60-62`). From there it reaches
+  only `GET /tracker-data.js` on `127.0.0.1` and the board, as text. It is not in `ledger.json`
+  (D11), not in the status rows (§8.3), and not in any log: the analyzer turns the `GitError` into
+  a question on stdout instead of printing it, the job's stderr lines carry ids and fixed words
+  (§3.6), and neither `server.py` nor `store.py` reads `questions`. So it stays on this machine and
+  is shown only on the local page, and the path is kept: it is git's own message, and rewriting
+  it would make the evidence less exact.
 - **The test is the exit status, not the clone type, so it reaches further than partial
   clones.** Any failure of that one call reads the same way. Measured at round 4 (`probe_r4.py`
   case 3): in an ordinary repository, a branch with no history in common with the base (an
   orphan branch, such as a `gh-pages` branch) makes `git diff --shortstat main...orphan` exit 128
-  with "no merge base". Such a branch reads `""` today and will read "diff unknown", with a
-  question carrying git's "no merge base" message. That follows from reusing U6's mechanism;
-  whether it is wanted is for the user's review (the exit status is measured; the new analyzer's
-  output for it is reasoned, since it is not built).
+  with "no merge base". The round-5 observability read measured the same for a branch checked out
+  in a worktree of a blobless clone and for a shallow clone. At round 4 such a branch was to get a
+  question whether or not any card named it, and that was left for the user's review. **His answer
+  is U12:** the value is still "diff unknown" wherever it cannot be measured, but a branch no card
+  names, such as a `gh-pages` branch, gets no question and shows the value nowhere, so the run is
+  unchanged by it. A card that names such a branch shows "diff unknown" on its tasks, with the
+  question carrying git's "no merge base" message (the exit status is measured; the new analyzer's
+  output is reasoned, since it is not built).
 - **Board rendering: no code change.** `d.diff` is already printed as text, so the drawer reads
   "`<branch>` diff unknown".
 
@@ -1277,9 +1441,12 @@ today.
   (`Treko.dc.html:375`).
 
 **Byte-for-byte guarantee, restated.** For a repository whose `git status` succeeds in every
-worktree, whose every `git diff --shortstat` succeeds, and whose every listed worktree folder
-exists, stdout, stderr and exit status stay byte-identical to today's; E2's fixtures must all be
-such repositories. Criteria E7 and E8 check the two new branches, each with a falsifier.
+worktree, whose `git diff --shortstat` succeeds for every branch a card names, and whose every
+listed worktree folder exists, stdout, stderr and exit status stay byte-identical to today's;
+E2's fixtures must all be such repositories. Since round 5 (U12) the diff condition covers only
+branches a card names: a failed diff on any other branch reaches no task and adds no question,
+so it changes nothing in the output (reasoned from `analyze.py:389` being the fact's only
+reader). Criteria E7 and E8 check the two new branches, each with a falsifier.
 
 ## 7. One run from several repos (D9)
 
@@ -1378,7 +1545,7 @@ D12 id, and the old run stays, untouched, until the user deletes it (OQ-7, (my c
 | name, analyzed-at, dir | `name`, `analyzedAt` as stored (an ISO timestamp, no relative time), `dir` |
 | repos | distinct `branches[].repo` values (the prototype's derivation, `Ledger.dc.html:189`) |
 | branches | `len(branches)` |
-| worktrees | branches whose `wt` is neither `""` nor `—`. The prototype counts `b.wt` truthiness (`Ledger.dc.html:190`), but the analyzer writes `—` when a branch has no worktree (`analyze.py:443`), so that count equals every branch. Detached worktrees are not in the run's data and are not counted |
+| worktrees | branches whose `wt` is neither `""` nor `—`, and whose `note` is not `"folder missing"`. The prototype counts `b.wt` truthiness (`Ledger.dc.html:190`), but the analyzer writes `—` when a branch has no worktree (`analyze.py:443`), so that count equals every branch. Detached worktrees are not in the run's data and are not counted. **(my call, round 5)** A branch whose worktree folder is gone keeps its path in `wt` (§6.4), and the scan has already left that worktree out (§4.1), so counting by `wt` alone would count a folder that no longer exists; its `note` is the run's own record of that |
 | features | `len(features)` |
 | tasks-done bar | sums of `done` and `total` over features whose `meta` matches `^(\d+)/(\d+)$`. Label `<done> / <total> tasks done`, plus ` · <n> unreadable` when n features carry `?/?` (`analyze.py:47`), so the bar never reads as covering cards it skipped **(spec call)** |
 
@@ -1431,7 +1598,8 @@ structure and wording; take the board's conventions for everything else:
   state, running (bar and stage label, no ✕), waiting (✕), interrupted or failed (Retry and ✕).
 - **Runs on disk:** count and rows (§8.3), each with Open and the ✕ when `canDelete`.
 - **Polling:** `GET /ledger/status` on load, then every `LEDGER_POLL_MS = 2000` **(spec call)**.
-  Polling stops on `403` and on a rejected fetch, both terminal (§9.2).
+  Polling stops on `403` and on a rejected fetch, both terminal (§9.2). A poll answered
+  `500 internal_error` (§3.8) is not terminal: polling continues (my call, round 5).
 - **Open / Open the board:** write `taskTracker.run` to the run's id, then go to `/`, where the
   board stays (U1). That is the prototype's handoff (`Ledger.dc.html:198`) and the key the board
   already reads at mount (`Treko.dc.html:540`).
@@ -1464,6 +1632,7 @@ or a URL. Wording is **(spec call)** except where a source is named.
 | `merge_failed` | item | "The results for each repository could not be combined into one run, so nothing was saved. Retry runs it again." (U2) |
 | `store_write_failed` | item | "The run could not be saved to the store folder (<errno>)." |
 | `internal_error` | item | "Treko hit an unexpected error while <stage>, so this analysis stopped. Retry runs it again." With `detail.stage` `null`: "Treko hit an unexpected error, so this analysis stopped. Retry runs it again." (U2) |
+| `internal_error` | inline; on a status poll, the banner, not terminal | "Treko hit an unexpected error with that request. The queue and runs below show what actually happened." (U10; my call, round 5: the request catch-all cannot say whether the change was made, §3.8, and the list below is read fresh by the next poll) |
 | `ledger_write_failed` | inline | "The queue file could not be written, so nothing changed." |
 | `ledger_write_failed` | item | "The queue file could not be written (<errno>), so this analysis did not start. Retry it once the disk can be written again." |
 | `no_such_item` | inline | "That item is no longer in the queue." (round 2, F6) |
@@ -1535,7 +1704,10 @@ bundled sample is never listed (builder check). The board's own copy-only `file:
    table. **Reworded at round 3:** the string used to end "Open the Ledger to see why.", but for
    every code in this bucket nothing was queued, so the Ledger had nothing to show. "Nothing
    changed" holds for each of them: each is a refusal before anything is queued, and a failed
-   ledger write changes nothing (§5.6). In copy mode (no token) the `python3 treko/analyze.py .` chip stays as it is.
+   ledger write changes nothing (§5.6). **`internal_error` is taken out of that bucket (my call,
+   round 5)**, since the request catch-all (§3.8; U10) cannot promise nothing changed: it maps to
+   "Re-analysis hit an unexpected error on the server. Open the Ledger to see whether it was
+   queued." In copy mode (no token) the `python3 treko/analyze.py .` chip stays as it is.
    The transport and the mapping live in `board-commands.js` after split 3 (§1.1).
    **When the run can no longer be analyzed (spec call, round 1).** For `no_such_directory`,
    `no_such_worktree`, `no_repository`, `no_matching_repository` and `nothing_matched`, nothing
@@ -1640,19 +1812,29 @@ Scenario: a scanned repo's fsmonitor program never runs
   Then  no marker file exists
 
 Scenario Outline: hostile and malformed requests are refused before git or cmux runs
-  Given a valid token
-  When  POST /ledger carries <body>
-  Then  the answer is <status> <error>
+  Given a valid token, unless the row replaces it
+  When  POST /ledger carries <request>
+  Then  the answer is <status> <error>, with one audit line
   And   no git or cmux process was started
 
   Examples:
-    | body                          | status | error         |
+    | request                       | status | error         |
     | an unknown key                | 400    | malformed     |
     | an unknown op                 | 403    | forbidden     |
     | 5000 bytes                    | 413    | too_large     |
     | directory "dev/x"             | 422    | relative_path |
     | a directory containing a tab  | 422    | invalid_input |
     | a lone surrogate in directory | 422    | invalid_input |
+    | byte 0xE9 as the token        | 403    | forbidden     |
+    | a body of 4000 [              | 400    | malformed     |
+
+Scenario: a request that crashes is answered and audited
+  Given a server whose handling of a request raises an exception nothing else catches
+  When  GET /ledger/status, POST /ledger or POST /command is sent
+  Then  the answer is 500 with {"ok": false, "error": "internal_error"}
+  And   one audit line reads failed with reason internal_error, and stderr names the exception's class
+  And   neither the answer nor stderr holds the exception's message or any request content
+  And   the server answers the next request normally
 
 Scenario: file:// shows no runs
   Given treko/Ledger.dc.html is opened as a file, with the sample data beside it
@@ -1803,9 +1985,16 @@ Scenario: a repo-named gpg program never runs
 
 Scenario: a partial clone is never fetched from
   Given a partial clone whose remote.origin.uploadpack is a marker-writing script, with a branch whose blobs are missing
+  And   a card with at least one task whose branch: names that branch
   When  a Ledger job analyzes it
   Then  no marker file exists, and no object is downloaded
-  And   that branch's diff reads "diff unknown", never empty, and one question names that branch
+  And   that card's tasks show the diff "diff unknown", never empty, and one question names that branch
+
+Scenario: a branch no card names asks no question about its diff
+  Given a partial clone with two branches whose blobs are missing, and a card naming only the first
+  When  the repo is analyzed
+  Then  the first branch's card shows "diff unknown" and one question names the first branch
+  And   no question names the second branch, whose diff appears nowhere in the run
 
 Scenario: a worktree whose git status fails shows changes unknown
   Given a repo with a worktree whose git status exits 128
@@ -1846,7 +2035,14 @@ assertions that tell the two apart.
 - A2. Every row of §3.5's first table is driven. Each returns its status and exact body, and writes
   one audit line with its reason. The test compares the table's reasons with the code's, both
   directions. Its `launch_failed` row is driven by a scan launcher passed in code that raises
-  `OSError(ENOENT)`. The second table, codes only an item carries, is D7's and D12–D14's.
+  `OSError(ENOENT)`, and since round 5 its `internal_error` row by a route passed in code that
+  raises (A8). The second table, codes only an item carries, is D7's and D12–D14's. **Since round
+  5, `id=` (my call, round 5; §3.6):** every refusal before step 5 accepts the op, and every
+  unknown op, writes `id=-`; an accepted op writes its name. An unknown op whose value is
+  `"x\n<a well-formed accepted audit line>"` writes exactly one audit line, with `id=-`, and
+  `server_harness.parse_audit` finds no accepted entry in it. Falsifier: a handler that writes the
+  raw op into `id=` writes three lines for that request, the middle one parsed as accepted (the
+  round-5 compliance judge's stub result).
 - A3. For each op, one unknown key gives 400. A 4097-byte body gives 413, and `/command` still gives
   413 at 1025. **Since round 4 (U7):** for each of §3.4's six fields in turn, a value holding a
   lone surrogate, sent as the JSON escape `\ud800`, gives that field's code (`422 invalid_input`
@@ -1854,7 +2050,19 @@ assertions that tell the two apart.
   exactly one audit line carrying that reason and no traceback on stderr, and no git or cmux
   process starts. Falsifier: the same `directory` request against a handler with the UTF-8 rule
   removed and the length rule written as `.encode("utf-8")` gets no `422 invalid_input` and no
-  audit line (the round-4 compliance judge's stub got no response at all).
+  audit line (the round-4 compliance judge's stub got no response at all). **Since round 5
+  (U10), two refusals, each with its own falsifier:**
+  - **A token that is not ASCII.** An `X-Tracker-Token` holding byte `0xE9`, and one holding the
+    UTF-8 bytes of `é`, with no valid token, sent to `GET /ledger/status`, `POST /ledger` and
+    `POST /command`: each answers `403 forbidden`, writes one audit line with reason `bad_token`,
+    and leaves no traceback on stderr. Falsifier: a token check that passes the raw header to
+    `hmac.compare_digest`, as `server.py:538-540` does today, gets no response and no audit line
+    (measured by the round-5 compliance judge on `/command`).
+  - **A body nested too deeply.** With a valid token, a body of 1024 `[` to `POST /command` (its
+    cap is 1024 bytes) and of 4000 `[` to `POST /ledger`: each answers `400 malformed`, writes
+    one audit line with reason `malformed`, and leaves no traceback. Falsifier: a reader that
+    catches only `ValueError` and `UnicodeDecodeError`, as `server.py:589` does today, gets no
+    response and no audit line (measured by both round-5 judges on `/command`).
 - A4. `POST /command {"id":"reanalyze"}` gives `403` (`unknown_id`) and the store is untouched.
 - A5. Across every `/ledger` and `/ledger/status` test, the fake cmux log stays empty.
 - A6. The token appears in no file under the store directory (`ledger.json` and the lock
@@ -1863,13 +2071,27 @@ assertions that tell the two apart.
 - A7. O3: an accepted `GET /ledger/status` writes no audit line. A refused one (bad token, foreign
   `Host`, wrong `Origin`) writes one, with its reason. Every other accepted request still writes
   one.
+- A8. **The request catch-all (U10, round 5; §3.8).** In-process, a `ControlServer` whose
+  handler has one route replaced in code by one that raises `RuntimeError("secret
+  /Users/x/path")`. Sent to `GET /ledger/status`, `POST /ledger` and `POST /command` in turn,
+  each answers `500` with exactly `{"ok": false, "error": "internal_error"}` and closes the
+  connection; each writes exactly one audit line,
+  `failed id=- surface=- sent=no status=500 reason=internal_error path=- errno=-`, and one
+  `server: request internal_error RuntimeError` line; neither the body nor stderr contains
+  `secret`, the path or any request content; and a next request, on a new connection, is answered
+  normally. A second case raises after the route has sent its status line: nothing more is sent,
+  the connection closes, and there is still exactly one audit line. Falsifier: the same handler
+  without the catch-all gives no response, no audit line and a traceback on stderr that contains
+  the message (`socketserver`'s default, the state both round-5 judges measured). The `/command`
+  case lives in `test_server.py`, where reason coverage requires it (§12).
 
 **B. Lifetime** (`test_ledger_lifetime.py`)
 - B1. The idle predicate (§5.5), as a table over injected clocks: busy is never idle, and the idle
   period counts from the later of the last request and the last job end. Since round 3 the table
-  has a row per way a job ends (success, a failure code, `internal_error`, interruption), and in
-  each `last_job_end` is the end's time; its falsifier is a runner that records the end only on
-  success, under which the failure rows go idle at once.
+  has a row per way a job ends (success, a failure code, `internal_error`, interruption, and
+  since round 5 the put-back to `waiting`, §5.4), and in each `last_job_end` is the end's time;
+  its falsifier is a runner that records the end only on success, under which the other rows go
+  idle at once.
 - B2. End to end: a status-only poller does not keep the server alive (slow: the 60 s floor is
   never lowered to make it fast).
 
@@ -1965,9 +2187,12 @@ assertions that tell the two apart.
   writes the marker (probe 20). The fixture's baseline, a plain `git log -1 --format=%cr` on that
   branch, must write it too (probe 17), or the fixture proves nothing.
 - C11. **No lazy fetch (U4, round 3).** A job over a `--filter=blob:none` clone of a fixture
-  origin, with a local branch whose blobs are missing and `remote.origin.uploadpack` set to a
-  marker-writing script: no marker, the job succeeds and that branch's `diff` is `"diff unknown"`
-  with one question naming the branch (U9, §6.4; it was `""` until round 4, probe 23),
+  origin, with a local branch whose blobs are missing, a card with at least one task whose
+  `branch:` names that branch, and `remote.origin.uploadpack` set to a marker-writing script: no
+  marker, the job succeeds, that card's tasks carry `d.diff == "diff unknown"`, and the run has
+  one question naming the branch (U9 and U12, §6.4; it was `""` until round 4, probe 23). The
+  card is there because `branches[]` has no `diff` key (`test_analyze.py:40`), so without a card
+  with a task the diff appears nowhere (my call, round 5; the round-5 compliance judge's note),
   and `git rev-list --objects --missing=print` counts the same missing objects before and after
   (measured on the working clone of probe 25). Falsifier: a builder that sets every protective setting except
   `GIT_NO_LAZY_FETCH` writes the marker (probe 24). Baseline: a plain `git diff --shortstat` on
@@ -1981,7 +2206,8 @@ assertions that tell the two apart.
 **D. Queue and jobs** (`test_ledger_jobs.py`, with fake analyzers dropped into the harness tree the
 way `HANGING_ANALYZER` is, `server_harness.py:77`)
 - D1. Start-or-queue; first in, first out; a retried item keeps its place.
-- D2. The lifecycle of §5.2, every transition, and each refused one.
+- D2. The lifecycle of §5.2, every transition, and each refused one. Since round 5 (U11) that
+  includes `running` → `waiting`, the put-back, driven as D6's put-back case drives it.
 - D3. A restart turns running into interrupted and waiting into started; nothing restarts silently.
 - D4. A job with no client connected runs to completion.
 - D5. `ledger.json` survives a mid-write kill with the old or new content. A corrupt or
@@ -2001,14 +2227,30 @@ way `HANGING_ANALYZER` is, `server_harness.py:77`)
   After shutdown, `ledger.json` holds it as `waiting`, never `running` or `interrupted`, and no
   scan or analyzer of its own has started; after a restart it starts by itself. Because the
   end-to-end order of shutdown and the runner's next pass is timing-dependent, the discriminating
-  half runs in-process: with the registry already closed and one waiting item, one pass of the
-  runner loop marks nothing `running`, starts nothing, and leaves `ledger.json` byte-identical.
-  Falsifier: a runner without the check before §5.4 step 1, under which that pass marks the item
-  `running` and then, its scan refused by the closed registry, `interrupted`. **The remaining
-  window (my call, round 4; §5.4 step 1):** an item already marked `running` whose step-2 scan the
-  closed registry refuses ends `waiting` in `ledger.json`, and a second in-process case, whose
-  analyzer launch (step 3) is refused after a successful scan, ends `interrupted`. Falsifier: a
-  job that treats every refusal alike, under which one of the two cases fails.
+  cases run in-process, with D10's ledger writer passed in code so that writes are counted. **Each
+  case is its own assertion with its own falsifier (rewritten at round 5, U11 = D24):**
+  - **The check.** With the registry already closed and one waiting item, one pass of the runner
+    loop makes **zero** ledger writes, marks nothing `running`, starts nothing, and leaves
+    `ledger.json` byte-identical. Falsifier: a runner without the check before §5.4 step 1. That
+    pass makes two writes (write 1, then write 6), and the item still ends `waiting` with
+    `ledger.json` byte-identical, so the write count is the only thing that tells the two apart.
+    Until round 5 this case asserted only the end state, and its falsifier said the item would
+    end `interrupted`, but the put-back added at round 4 sends it back to `waiting`, so that
+    falsifier could not fire (the observability judge's round-5 read).
+  - **The put-back.** The registry is open when the runner checks it, and the writer passed in
+    code closes it as it makes write 1, standing for a shutdown that lands between the check and
+    the write. The pass makes exactly **two** writes, write 1 and then write 6; no scan or analyzer
+    starts; the item ends `waiting` in memory and in `ledger.json`; and `last_job_end` is set
+    (§5.4). Falsifier: a job that ends every refused launch `interrupted`, under which the item
+    ends `interrupted`.
+  - **A later refusal.** The scan succeeds, and the registry closes before the first family's
+    analyzer launch: the item ends `interrupted`, never `waiting`. Falsifier: a job that puts the
+    item back on every refused launch, under which it ends `waiting`.
+  - **A job-time scan killed by shutdown (my call, round 5; §5.4 step 2).** End to end, a job
+    whose fake scan sleeps, with shutdown sent while it runs: the scan's process group is gone
+    inside the exit bound, and the item is `interrupted` with `detail.stage = "scan"`, never
+    `failed` with `scan_failed` or `scan_timeout`. Falsifier: a job that reads every non-zero scan
+    exit as `scan_failed`, under which the item ends `failed`.
 - D7. OQ-2 (user): a two-repo job whose second analyzer exits non-zero writes a run holding the
   first repo, plus one question naming the second with its exit status and the analyzer's last
   stderr line. A job whose analyzers all fail writes nothing, and its item fails with
@@ -2031,11 +2273,14 @@ way `HANGING_ANALYZER` is, `server_harness.py:77`)
   item raced, the same way, against an `analyze` of the same request: every round leaves exactly
   one live item for that run id, and the loser gets `409 already_queued`. A plain `retry` while a
   same-run item waits is refused the same way.
-- D10. Each of §5.6's five runner-side writes, and one request-side write, is made to fail by a
+- D10. Each of §5.6's six runner-side writes (five until round 5, when U11 added write 6, the
+  put-back), and one request-side write, is made to fail by a
   writer passed in code. Each ends in the state §5.6's table gives. stderr carries one
   `server: ledger write failed` line naming the errno and no field value. The file on disk is
   the previous one, byte for byte. After write 1 fails, no subprocess starts until a later write
   succeeds, and the server can still go idle (§5.5). After write 4 fails, the server exits 2.
+  After write 6 fails, the server still exits inside its bound, the file still says `running`,
+  and a restart makes the item `interrupted`.
 - D11. O2: a failed item and an interrupted item each carry the `detail` their failure had
   (stage, repo, exit status or timeout, errno). `ledger.json` holds no other text: none of the
   fixture's stderr lines appears in it. **Rewritten at round 2 (§5.1):** request field values
@@ -2090,7 +2335,8 @@ unchanged, §1.1)
   byte for byte, both plain and with `--pretty`. Every E2 fixture's `git status` succeeds in each
   worktree, which is the scope §6.3 keeps byte-identical (round 3), and, since round 4, every
   fixture's `git diff --shortstat` succeeds for each branch and every listed worktree folder
-  exists, the scope §6.4 adds (so no fixture holds an orphan branch). A falsifier runs the same comparison on a copy
+  exists, which keeps every fixture inside the scope §6.4 adds (so no fixture holds an orphan
+  branch; since round 5 that scope asks this only of branches a card names, U12). A falsifier runs the same comparison on a copy
   with one default-path byte changed and must see it fail. Both analyzers run under the pinned
   runtime interpreter, `/usr/bin/python3` (3.9.6), not the test runner's (§15). That makes E2
   also split 1's proof (§1.1).
@@ -2128,6 +2374,12 @@ unchanged, §1.1)
   the baseline analyzer (blob `8b805d1…`, as in E2) must fail, because it gives `""` and no
   question (measured: `probe_r4.py` case 2). And once the missing object has been fetched (one
   plain `git diff` without the setting), the new and baseline analyzers agree byte for byte.
+  **Since round 5 (U12), a branch no card names.** The fixture also holds a second local branch
+  whose changed blob is missing, which no card names; its own precondition is asserted the same
+  way. The new analyzer adds no question for it, so the question count is still the baseline's
+  plus exactly one, and the output is otherwise byte-identical to the baseline's: that branch's
+  failed diff appears nowhere. **Falsifier:** an analyzer that asks for every branch whose diff
+  failed, as the round-4 text did, adds two questions, not one.
 - E8. **A worktree whose folder is gone shows "folder missing" (U9, round 4), in
   `test_analyze_options.py`.** The fixture is a repo with two branches, one checked out in a
   second worktree whose folder is then deleted with `rm -rf`, not `git worktree remove`, so git
@@ -2157,7 +2409,9 @@ unchanged, §1.1)
 - G3. Delete: hidden in status and in `GET /tracker-data.js`, the store's bytes unchanged,
   un-hidden by a successful re-analysis and not by a failed one. With an empty hide list,
   `GET /tracker-data.js` is byte-identical to the file.
-- G4. Row fields from fixture runs, including a `?/?` card, a `—` worktree and an empty run.
+- G4. Row fields from fixture runs, including a `?/?` card, a `—` worktree and an empty run. Since
+  round 5 (my call, round 5; §8.3), also a branch with `note: "folder missing"` and its path in
+  `wt`, which the worktrees count leaves out; falsifier: a count by `wt` alone counts it.
 - G5. `last_run` (the spec call the user confirmed on 2026-11-03).
 - G6. OQ-7 (my call): Re-analyze of a run with no recorded request queues its directory, `~`
   expanded, with no narrowing. The result lands under the D12 id, and the old run's bytes in the
@@ -2174,7 +2428,8 @@ unchanged, §1.1)
   or markup all reach fixed strings only. O2: each code's message is built from a `detail` with
   every part present, and again with each part `null`, and an unknown stage key is left out.
   Round 2: the `runsError` message contains the response's `storeDir` as text and does not
-  contain the word "log" (F5, §9.2).
+  contain the word "log" (F5, §9.2). Round 5 (U10): a status poll answered `500 internal_error`
+  shows §9.2's string in the banner and polling continues, while a `403` still stops it.
 - H2. Served: form, queue and rows render from a seeded store. Analyze on an empty folder shows the
   pop-up with the exact D2 wording and queues nothing. Analyze with a Branch that no card names
   shows the "No card matches that branch or worktree." pop-up and queues nothing (OQ-4).
@@ -2182,7 +2437,8 @@ unchanged, §1.1)
 - H4. Board icons: `/ledger` when served, `Ledger.dc.html` over `file://` (U1).
 - H5. Open and Open the board land on `/`, the board, showing that run (U1).
 - H6. Re-analyze posts to `/ledger` and never to `/command`. After a `200` the browser is at
-  `/ledger` (OQ-5; U1). The transport lives in `board-commands.js` after split 3.
+  `/ledger` (OQ-5; U1). The transport lives in `board-commands.js` after split 3. Round 5 (U10):
+  a Re-analyze answered `500 internal_error` shows §9.4's string for it, never "nothing changed".
 - H7. On a merged two-family run, the board's svg box contains every node box.
 - H8. D8: the store directory is text, and the DOM has no input or Save for it.
 - H9. The Ledger's token block equals the board's byte for byte.
@@ -2298,6 +2554,17 @@ and the board stays at `/`. Until round 2 every one of them had to move to `/boa
     leaves `server.py` with `run_reanalyze`. `/ledger`'s reasons live in `ledger_routes.py`, which
     that scan does not read; criterion A2 covers them. `CONTRACT_STATUSES` (`:78`) still holds,
     because `asset_unreadable` keeps the 500.
+  - **Since round 5 (U10):** `REASON_STATUS` gains `"internal_error": 500`, because the request
+    catch-all's audit call lives in `server.py`, and `reasons_emitted_in_source()` reads every
+    `audit(…, reason="…")` literal there (`:767`), so the comparison at `:771` would fail without
+    it. And `test_zz_every_reason_value_was_driven_by_a_real_request` (`:781`) fails for any
+    reason no test in this module drove, so one new test here drives `internal_error` through
+    `POST /command`: the `/command` case of A8, in-process, with a route that raises, recording
+    the reason in `OBSERVED_REASONS` (`:82`). Writing the catch-all's reason any other way so the
+    scan misses it would hide the very gap that test guards. The module stays ≤ 800: today it is
+    789, and `test_a_hanging_analyzer_times_out_and_leaves_the_store_intact` (`:732-748`), which
+    moves out below, frees more lines than the new test takes (estimated). The two named refusals
+    emit existing reasons (`bad_token`, `malformed`), so they change nothing here; A3 drives them.
   - `test_the_token_never_leaves_the_served_page` (`:290`): its `reanalyze` precondition
     (`:300-302`) becomes "a Ledger job completed". Its clause (3) (`:319-326`) asserts `"env="`
     appears in neither `server.py` nor `channel.py`, under a comment that a child's environment
@@ -2316,7 +2583,8 @@ and the board stays at `/`. Until round 2 every one of them had to move to `/boa
   - Unchanged here: both `GET /` loads (`:224`, `:297`); the manifest test (`:105`), which is
     parametrized over `server.STATIC_MANIFEST` and so covers `board-commands.js` with no edit;
     the off-manifest list (`:361-368`), which names no new path; `server.CONFIRM_REFUSAL_REASONS`,
-    which still resolves after split 2 through the import back. New tests go in the new modules.
+    which still resolves after split 2 through the import back. New tests go in the new modules,
+    apart from the one `internal_error` test above (round 5).
 - `test_guards.py` (599): Z3's edits 2 to 5 at split 3's commit. (`EXPECTED_MANIFEST_ROWS`: the
   first draft said it stays 17, which holds for the Ledger page alone, since that page adds no
   row. Split 3 adds `board-commands.js`, so the constant becomes 18.) Then, in the Re-analyze task: the
@@ -2430,10 +2698,17 @@ reading each named test.
   filter a scanned repository names, as the user's own `git status` would. LFS repositories are
   never skipped (user).
 - **Nothing new reaches the session.** `/command` shrinks. `/ledger` never invokes cmux (A5).
+- **A request that crashes is answered and audited (user, U10, round 5; §3.8).** Every route,
+  `/command` included, runs inside a request catch-all that answers `500 internal_error`, writes
+  one audit line and names only the exception's class. Two inputs that today drop the
+  connection with no audit line, measured by the round-5 compliance judge, are named refusals: a
+  token header that is not ASCII (`403 bad_token`, and it needs no valid token) and a body nested
+  too deeply to parse (`400 malformed`). An unknown op is logged as `id=-`, so a token holder
+  cannot write a line of their own into the log (§3.6).
 - **Unchanged:** the token's lifetime and handling, the collapsed `403`, no CORS headers, the CSP,
   `frame-ancestors 'none'`, the `Host` guard, failure bodies that echo nothing, one audit line per
-  request (apart from an accepted status poll since round 1: §2, default 4), and the parent-death
-  check.
+  request (apart from an accepted status poll since round 1: §2, default 4; and since round 5 kept
+  even when a request crashes, §3.8), and the parent-death check.
 - **Rendering:** status data and run data come partly from scanned repositories, which may be
   hostile, and both pages render them as text only (§9.2, H1).
 
@@ -2783,7 +3058,8 @@ session proposed and the user approved.
 **Not changed at round 3**, because each is a design change for the planning session to decide,
 not a factual fix: a SIGTERM handler (`server.py` installs none, so SIGTERM is §5.3's hard kill
 and a child in its own process group can outlive the server); a catch-all for request threads
-(an unexpected exception there drops the connection, which §9.1 reads as the server gone);
+(an unexpected exception there drops the connection, which §9.1 reads as the server gone)
+*(added at round 5, U10, §3.8)*;
 §8.3's rows over a store run holding only `id` and `name` (as `test_autolaunch.py` seeds);
 whether Z3's forced test edits belong in a separate commit from split 3's move; having task 1
 check each git command the analyzer runs against the config keys that can name a program, rather
@@ -2817,8 +3093,9 @@ a process decision and changes no text here. The rest are the planning session's
   `git-lfs` row removed and "No new dependency." restored), §16, criterion C9, and superseded
   markers on the OQ-8 notes and the round-2 and round-3 summaries, whose history is kept.
 - **U9 = D21. Two more "cannot check" cases get honest labels, extending U6.** A branch whose
-  `git diff --shortstat` fails shows "diff unknown" with one question, by U6's mechanism; a
-  branch whose worktree folder is gone shows "folder missing", checked at `analyze.py:436`.
+  `git diff --shortstat` fails shows "diff unknown" with one question, by U6's mechanism *(refined
+  by U12 at round 5: the question only when a card names the branch)*; a branch whose worktree
+  folder is gone shows "folder missing", checked at `analyze.py:436`.
   Places changed: §1's file table, §1.1, §2's partial-clone paragraph, §6.1, §6.3, a new §6.4,
   two scenarios (one new, one edited), criteria C11 and E2, new criteria E7 and E8, and the
   `test_analyze.py` lines in §1.1 and §12.
@@ -2837,7 +3114,71 @@ a process decision and changes no text here. The rest are the planning session's
    (§15, the "Not changed at round 3" note).
 
 **Not changed at round 4**, raised in the round-4 reads but outside this revision's brief: no
-SIGTERM handler; no request-thread catch-all (U7 removes its one measured trigger);
+SIGTERM handler; no request-thread catch-all (U7 removes its one measured trigger) *(round 5
+measured two more triggers, and U10 adds the catch-all and names both, §3.8)*;
 no check that git is at least 2.45, below which `GIT_NO_LAZY_FETCH` would be ignored silently;
 the probe scripts (`probe_r3.sh` and, since round 4, `surrogate.py` and `probe_r4.py`) live in
 session scratch folders, not in the repository; a git config sweep folded into task 1.
+
+## Revised after compliance round 5 (2026-11-03)
+
+Round 5 failed with three violations: two more inputs still got no answer and no audit line
+(`core-conduct/validate-input-at-boundaries`, a different input under the same id); the round-4
+put-back was missing from the lifecycle (`writing-specs/two-way-lifecycle`); and `id=` for an
+unknown op could be read two ways (`writing-specs/two-way-audit-id`). The observability judge's
+fifth read found that "diff unknown" reached past D21, that D6's new falsifier could not fire,
+and that a job-time scan killed at shutdown had two answers, plus smaller items. Per D22 the
+list went to the user, and he picked; the card records his picks as D23–D26. D26 (the compliance
+judge checks only these fixes, as round 6, with no loop) is a process decision and changes no
+text here. The rest are the planning session's calls, tagged "(my call, round 5)" where they
+appear.
+
+**The user's decisions (user, 2026-11-03).**
+
+- **U10 = D23. A request catch-all, and two named refusals.** Every route, `/command` included,
+  runs inside one catch-all that answers `500 internal_error` with one audit line (`id=-`,
+  `reason=internal_error`, `errno` when an `OSError` carries one) and one stderr line naming
+  only the exception's class, never request content. A token header that is not all ASCII is
+  refused `403 bad_token` before `hmac.compare_digest` runs; a body nested too deeply to parse
+  (`RecursionError`) is `400 malformed`. Both were measured again here on 3.9.6
+  (`u10_inputs.py`). The token check and body reader are shared with `/command`. Places changed:
+  §1's file table and §1.1 (`server.py`, `test_server.py`), §2's amendment list, §3.3, §3.4
+  steps 1, 3 and 4, §3.5 (two causes widened, a new `internal_error` row, the item-codes note),
+  §3.6, a new §3.8, §9.1, §9.2 (an inline row), §9.4 (the board's Re-analyze mapping), the §10
+  outline (its `Given`, its column and two rows) and a new scenario, criteria A2, A3, a new A8,
+  H1, H6, §12's `test_server.py` bullet, §13, and the "Not changed" notes of rounds 3 and 4.
+- **U11 = D24. The put-back stays, written into the whole lifecycle** (against the planning
+  session's recommendation to drop it). §5.2's diagram gains `running` → `waiting`, and "three
+  exits" became four; the put-back sets `last_job_end` like every other end; §5.6 gains write 6
+  with its failure rule; D6's in-process half became separate cases (the check asserts zero
+  writes, the put-back exactly two, a later refusal `interrupted`), each with its own falsifier.
+  Places changed: §5.2, §5.3, §5.4 (step 1 and the `last_job_end` paragraph), §5.6, criteria B1,
+  D2, D6 and D10.
+- **U12 = D25. "diff unknown" asks a question only for a branch a card names.** The value
+  still reads "diff unknown" wherever the diff cannot be measured; it appears only on the tasks
+  of a card naming the branch, since `branches[]` has no `diff` key. Places changed: §2's
+  partial-clone paragraph, §6.1, §6.4 (the change, the orphan case, the guarantee), the
+  partial-clone scenario and a new scenario, criteria C11, E2 and E7, and a marker on the
+  round-4 summary's U9 bullet.
+
+**Small fixes (my call, round 5).**
+
+1. An unknown op logs `id=-`, as `/command` does for an unknown id, so client text never
+   reaches the log unescaped (§3.6, A2).
+2. A job-time scan killed by shutdown makes the item `interrupted`, never `scan_failed` (§4.4,
+   §5.3, §5.4 step 2, a D6 case).
+3. §8.3's worktree count leaves out a branch whose note is "folder missing" (§8.3, G4).
+4. C11 and the partial-clone scenario name a card with a task, so the diff has somewhere to
+   appear (C11, §10).
+5. §3.6 says job lines name ids and, in the reap-timeout line alone, a process id, which matches
+   §5.4.
+6. The wait to reap a process killed at its time limit reuses `REAP_WAIT_SECS`, with the
+   catch-all's outcome when it expires (§4, §5.4 step 3).
+7. A question's context carries the repository's absolute path; checked where it goes: only the
+   owner-only store directory and the local board, never a log, `ledger.json` or the status
+   rows. It is kept and the spec says so (§6.4).
+
+**Not changed at round 5**, raised in the round-5 reads but outside the user's picks: no SIGTERM
+or SIGHUP handler; no check that git is at least 2.45; git's other config keys not enumerated
+(the observability judge's round-4 sweep of 166 keys, 0 hits on one fixture, is evidence, not a
+list); the probe scripts, now also `u10_inputs.py`, live in session scratch folders.
