@@ -5,6 +5,9 @@ frontmatter because it is not a card: the analyzer selects cards by filename and
 purpose: `hooks/lib/feature_tasks.py` `compare()` matches task numbers between the two halves,
 and the card's ## Tasks is not written yet. The checklist and the verification record stay in
 the .md; this file is design, contracts, scenarios and acceptance criteria.
+Since 2026-11-05 it does carry checkbox lines, in its closing section "Tasks, in detail
+(2026-11-05)": the task detail, one item per task, with the same identities as the card's
+## Tasks, which is what compare() needs. The sentence above describes the file before that date.
 -->
 
 # Treko Ledger — build spec
@@ -24,6 +27,8 @@ sections revised after rounds 2 to 5. D27, his pick after round 6, and D28 and D
 this file on 2026-11-04, have no U-numbers either and are cited by D-number; see "Revised after
 compliance round 6" and "Revised after his review" at the end). This file turns them into
 contracts and tests. It does not reopen them.
+D30, his confirmations of 2026-11-04, and D31–D34, his answers in the checklist review of
+2026-11-05, are cited by D-number too; see "Revised after the checklist review" at the end.
 
 **Tags.** **(spec call)** marks a detail the card left open that this spec settles with the
 simplest safe option; the reviewer can overturn any of them. **OQ-n** marks a choice that changes
@@ -67,6 +72,9 @@ revision's probes are `config_keys.py`, `attr_keys.py`, `signal_probe.py` and
 `signal_probe_server.py` in this revision's scratch folder, run on `/usr/bin/python3` 3.9.6 and
 git 2.50.1. They read the man pages installed with that git and start stand-alone processes; they
 touch no repository.
+Revised again on 2026-11-05 for the checklist review (D31–D34 and the planning session's calls)
+at `8fd9184`; both `git diff --stat` commands above still print nothing (`origin/main` still at
+`fc08216`, not fetched). This revision ran no new probe.
 
 **Size (user, 2026-11-03).** He accepted this half running over ADR 0017's 800-line cap.
 
@@ -116,6 +124,9 @@ flowchart LR
 | `treko/server_harness.py` | changed | an `interpreter` parameter for criterion Z1 (§11) |
 | `skills/treko/SKILL.md` | changed | routes, the Ledger, the new files in the store directory, the auto-opened address (§3.2) |
 | existing test modules | changed | exactly the edits §12 lists, each module measured ≤ 800 lines (§1.1) |
+| nine new test modules | new | `test_ledger_routes.py`, `test_ledger_lifetime.py`, `test_ledger_scan.py`, `test_ledger_jobs.py`, `test_ledger_merge.py`, `test_ledger_state.py`, `test_ledger_page.py`, `test_analyze_options.py`, `test_file_budgets.py`, in `treko/` (§11; each ≤ 800, §1.1; row added 2026-11-05, my call) |
+| `docs/decisions/<NNNN>-<slug>.md` | new | task 1's ADR: §3's wire contract, §2's amendments of ADR 0034 and ADR 0024, decision D10's defaults, the config-key table (§2; inside Z2's path filter; row added 2026-11-05, my call) |
+| `docs/features/tracking-feature-state.spec.md` | changed | one dated pointer to that ADR beside each rule it amends (§2; row added 2026-11-05, my call) |
 
 **(spec call)** The work lands in new modules rather than in `server.py`, which is 793 lines
 today (`wc -l treko/server.py`) against the house limit of 800 (`rules/core-conduct.md`). The
@@ -291,6 +302,20 @@ not from a local listing. It is judged the way a spec is: the compliance judge, 
 observability judge's architecting read alongside (`running-the-compliance-judge`). **No Ledger
 screen task starts until that verdict passes.** The card's order (Ledger, then card 5, then the
 relations card) is unchanged.
+**Which work waits for that verdict (user, D31, 2026-11-05).** Everything a browser can reach:
+the new routes (`GET /ledger`, `GET /ledger/status`, `POST /ledger`), `/command`'s changes, the
+Ledger page and the board's changes. The three splits, the analyzer's options, the scan, the merge,
+the state module and the job runner may start once `gate confirmed` is given, before or alongside
+task 1. Task 1's config-key check can still change the protective-settings table below (D34), so
+the task that closes criterion C8 waits for that check as well.
+**How the ADR is judged (user, D32, 2026-11-05).** One compliance round, with the observability
+judge's architecting read alongside; the fixes it asks for; then whatever is still open goes to the
+user as one list, with no further automatic round. D27's waiver covers this spec, not that ADR (my
+call, 2026-11-05). A fix that would change this spec follows D34 (default 3, "Outcomes").
+**What else the ADR records (my call, 2026-11-05).** It names both records it amends, ADR 0034 and
+ADR 0024, and task 1 puts a one-line dated pointer to it beside each amended rule of
+`tracking-feature-state.spec.md` (`:404-411`, `:541-544`, `:691-703`, `:933-1064`, `:1079-1096`,
+`:1101`), as that file's own "Superseded paths" note (`:1158`) does.
 
 D10's defaults, as requirements: the card's three, and a fourth from the observability judge's
 round-1 read (O3):
@@ -398,6 +423,20 @@ round-1 read (O3):
    The variable's own first release was not separately established. §15's git is 2.50.1, which
    honours it (probes 23 and 25), so the pin does not predate it; §15's stated floor rises from
    2.31 to 2.45.
+   **Below that floor the Ledger starts no analysis (user, D33, 2026-11-05; the shape is my call).**
+   Once, at startup and before the runner starts, a function in `ledger_jobs.py` runs
+   `git --version` through the child registry's launch method (§4), so with the builder's
+   environment and the `PATH` every scan and analyzer gets, under `GIT_TIMEOUT_SECS`, and reads
+   `git version <major>.<minor>` from its first line. Below 2.45, an answer with no such version,
+   a non-zero exit, a timeout or a spawn error all count as too old. Then the runner is not started
+   (waiting items stay `waiting` and, like a paused runner's, do not count as busy, §5.5);
+   `analyze`, `reanalyze` and `retry` answer `503 git_too_old` as the first thing each op does,
+   before any scan or state change, with nothing queued (§3.4 step 8, §3.5, §9.2); first launch
+   queues nothing (§5.3); and startup writes one stderr line, `server: git 2.45 or newer needed;
+   the Ledger will not start analyses (found <x.y>)`, with `unreadable` for `<x.y>` when no version
+   was read. Nothing else changes: the board, `GET /tracker-data.js`, `/command`, the status poll,
+   `remove` and `delete` work as with a newer git. At startup because one probe per process,
+   before anything can launch, is the least that holds the floor. Criterion A9.
 
    **Which config routes were tried, and which were not (U4).** Tried, by probes in this file or
    by the judges' reads that these probes reproduce: `core.fsmonitor` (1–7), hooks through
@@ -436,6 +475,12 @@ round-1 read (O3):
      `diff.<driver>.textconv`, `filter.<driver>.clean` and `.smudge`. That is the filter's own
      falsifier: a word list that loses any of them is too narrow, and without `command` it loses
      the two filter keys (measured).
+     **The set C12 compares, pinned (my call, 2026-11-05).** Exactly the keys with an entry of
+     their own whose text matches the words, plus the three driver keys. A key printed without an
+     entry of its own (954 − 699 = 255 at 2.50.1, by the counts above, read in the `advice.*`,
+     `color.*`, `fsck.*` and `receive.fsck.*` group entries) is not a candidate, and the ADR says
+     plainly that those keys were not checked one by one, as D16 had this file say of the keys no
+     probe had reached.
    - **Judging, by reading.** Each candidate's text is read once. A key **names a program** when
      the text says git runs its value, a program its value names, or a program found through it
      (a hook in a directory it names), as a process or a shell command; otherwise its row quotes
@@ -460,6 +505,10 @@ round-1 read (O3):
      accepted risk only with the user's OK, as file filters are (U8). A key measured as not firing
      is recorded as checked, with its trigger, the commands run and the result. A row left not
      measured needs the user's OK too.
+     **When a key fires, or a row stays not measured (user, D34, 2026-11-05),** the builder stops
+     and brings it to the user; this file, its table and its criteria change only with his OK.
+     In C12's words, a key measured as not firing is "does not fire": "checked" above and in the
+     Check bullet names that verdict, not a sixth one (my call, 2026-11-05).
    - **Bound.** One pass over that list at the pinned git, and nothing more. It does not cover a
      key git documents only in another page, behaviour its documentation does not describe, or
      another git version; when §15's git changes, the check runs again, and C12 fails until it
@@ -655,6 +704,8 @@ Checks, in order. Each failure answers once and writes one audit line:
 7. The field rules below (`422`), starting with the UTF-8 rule after the table, which every field
    passes before any length rule (U7, round 4).
 8. The op itself.
+   Since D33 (2026-11-05), `analyze`, `reanalyze` and `retry` first read the startup git check
+   (§2 default 3): when it found git too old, the answer is `503 git_too_old`.
 
 | `op` | Keys: required, optional | Effect |
 |---|---|---|
@@ -745,6 +796,7 @@ The body is always `{"ok": false, "error": "<error>"}` and echoes nothing from t
 | 500 | `ledger_write_failed` | the request's own write of `ledger.json` failed, so nothing changed (§5.6) | `ledger_write_failed` |
 | 500 | `store_unreadable` | `delete`/`reanalyze`: the store does not parse | `store_unreadable` |
 | 500 | `internal_error` | any unexpected exception while a request is handled, caught by the request catch-all (§3.8; U10, round 5) | `internal_error` |
+| 503 | `git_too_old` | `analyze`, `reanalyze`, `retry`: the startup check found git older than 2.45, or read no version (§2 default 3; user, D33, 2026-11-05). Nothing is queued and no scan runs | `git_too_old` |
 
 `GET /` and `GET /ledger` keep today's `500 asset_unreadable` for an unreadable page. `/command`
 changes in two ways only. Its allowlist shrinks: `{"id": "reanalyze"}` is now `403`, reason
@@ -760,6 +812,8 @@ two the table marks as also a request answer: `launch_failed`, and since round 5
 (U10). They are the `error` of a failed queue item (§5.4), written to `ledger.json` and shown from
 it (§9.2). A2 does not drive them over HTTP as item codes; criteria D7 and D12–D14 do, through the
 job runner.
+Until 2026-11-05 that was not true of every code: nothing drove `store_write_failed`, a job-time
+`scan_failed` or the job-time scan outcomes as an item's `error`. D12 now drives them (my call).
 
 | `error` | Cause | `detail.stage` |
 |---|---|---|
@@ -958,6 +1012,10 @@ at submit), the process left in the child registry for shutdown's sweep, and the
 would have had anyway, `scan_timeout`. Until round 5 this wait had no stated bound, so "no item
 stays `running` for ever" rested on the kill landing (the round-5 compliance judge's note).
 Each git call inside it has `GIT_TIMEOUT_SECS = 5` (`server.py:61`).
+**A git call that passes that bound (my call, 2026-11-05)** is killed and read as git refusing
+that path: the candidate is skipped and named in §4.1's "Why could git not read `<path>`?"
+question with the time limit as its context, and a family whose `worktree list` times out is left
+out and named the same way, so the run says which repository is missing and why, as OQ-2 asks.
 **(spec call)** Out of process for the reason `run_reanalyze` gives (`server.py:317-321`): a
 directory listing that blocks cannot be interrupted inside a thread. The same scan runs twice:
 at submit, to decide whether anything is queued at all (D2: nothing found means nothing queued),
@@ -1146,6 +1204,10 @@ messages are unchanged, the server takes `fcntl.flock(LOCK_EX | LOCK_NB)` on
 the lock is held, it aborts with exit 2: "another Treko server is using <store dir>". Without this,
 two servers on different `TREKO_PORT`s would both start the same waiting item at launch, and the
 store's read-modify-write could drop a run.
+**Other read and open errors (my call, 2026-11-05).** A `ledger.json` that exists but cannot be
+read (an `OSError` other than its absence, such as `EACCES`), and a lock file that cannot be opened
+or created, take the same path as a corrupt file and a held lock: startup aborts with exit 2,
+naming the file and the errno's symbolic name.
 
 ### 5.2 Item lifecycle
 
@@ -1202,6 +1264,9 @@ stateDiagram-v2
   naming a folder that is not a repository, is written to stderr, nothing is queued, and the
   server still serves. `run_reanalyze` (`server.py:314-345`) is then left with no caller and goes,
   and the `--repo` help text (`server.py:694-696`) stops naming `reanalyze`.
+  Since D33 (2026-11-05), when the startup git check finds git too old (§2 default 3), the runner
+  is not started and first launch queues nothing, writing
+  `server: first launch not queued: git 2.45 or newer needed` to stderr.
 - **On shutdown** (idle, parent death, `Ctrl-C`, and since his review `SIGTERM` and `SIGHUP`,
   D29, next bullet): the server **closes** the child registry first
   (§4; round 3), so nothing can start after this point: no new family of the running job and no
@@ -1420,6 +1485,8 @@ ever **(spec call, round 1)**. An item cannot hold `busy` true for ever either: 
 `running`, the catch-all included (§5.2, §5.4; U2). And every job's end, not only a success's,
 moves `last_job_end` (§5.4, round 3), so the rule below reads the same whichever way a job ended:
 the idle exit comes no sooner than `idle_secs` after the last job's end.
+A runner never started, because the startup git check found git too old (D33, 2026-11-05),
+counts as paused.
 
 A running job counts as activity (D5's ⚠️), and so does its end **(spec call)**: without that, a
 job that outlasts the idle period ends with the server exiting at once, under the user who just
@@ -1783,6 +1850,10 @@ computed server-side in `ledger_state.py`, from the store, on every request that
 (user, D28: no cache; one is added only if a measurement shows the rows slow, YAGNI). Until his
 review (2026-11-04) this said they were "cached on the store file's `(st_mtime_ns, st_size)`
 **(spec call)**". No criterion, test or risk depended on that cache.
+**A run missing a field (my call, 2026-11-05).** A store run without a key a figure is derived
+from, such as a run holding only `id` and `name` as `test_autolaunch.py` seeds, is still listed:
+each such figure shows `—`, there is no tasks-done bar, and a run with no `analyzedAt` sorts after
+every run that has one. No figure is computed from an absent key, so none reads as a zero.
 
 ### 8.4 Delete
 
@@ -1809,6 +1880,9 @@ structure and wording; take the board's conventions for everything else:
 - **Theme:** the board's token `<style>` block copied byte for byte, read from `taskTracker.theme`
   at mount **(spec call)**. A guard test pins the two copies equal. No colour literals outside the
   block; the prototype's hex values become the board's tokens.
+  **Why a copy (my call, 2026-11-05):** sharing the block would need a stylesheet file, which is a
+  new `STATIC_MANIFEST` row and so a spec change of its own; the copy keeps the manifest closed,
+  and H9 makes any drift between the two copies fail a test.
 - **Logic:** pure functions in a node-loadable slice between start and end markers, cut out and
   tested in node the way `test_ui_commands.py` tests the board's slice (`Treko.dc.html:402-525`).
   **(spec call)** This keeps the manifest closed. The board's own slice moves out to
@@ -1857,6 +1931,7 @@ or a URL. Wording is **(spec call)** except where a source is named.
 | `invalid_input` | inline | "Treko cannot use one of those values: check for stray characters." |
 | `already_queued` | inline | "That analysis is already queued or running." (since round 1 the code covers a running item too, §3.5) |
 | `queue_full` | inline | "The queue is full. Remove an item first." |
+| `git_too_old` | inline | "git 2.45 or newer needed: this server's git is older, so Treko cannot analyze and nothing was queued." (user, D33, 2026-11-05: his words lead; the rest is my call) |
 | `scan_timeout` | inline / item | "The directory scan took too long. Try a smaller directory." |
 | `scan_failed` | inline / item | "The directory scan stopped with an error." On an item, plus " (exit status <exit>)" |
 | `launch_failed` | inline | "Treko could not start the directory scan, so nothing was queued." (U2) |
@@ -1955,6 +2030,8 @@ bundled sample is never listed (builder check). The board's own copy-only `file:
      was queued."
 
    These five are taken out of "every other code" above.
+   `git_too_old` (D33, 2026-11-05) stays in "every other code", whose string is true of it:
+   nothing was queued (my call).
 
    **The leftover `reanalyze_failed` entry goes, in the same commit (user, D28).** The board's
    error table, `TRACKER_ERROR_OUTCOMES` (`Treko.dc.html:436-444`, in `board-commands.js` after
@@ -2302,6 +2379,11 @@ assertions that tell the two apart.
   `Treko.dc.html` with today's one meta substitution, and its status and headers equal today's,
   with only the token's value different. `srv.token` (`server_harness.py:164`) still reads the
   token from `GET /`, unchanged.
+  **Since 2026-11-05 (my call), the Ledger file's own checks:** startup aborts with exit 2, naming
+  the file, when `Ledger.dc.html` cannot be read or has no `<head>` to inject into, as it does for
+  the board (`check_index_injectable` checks both, §3.2; the board's test is
+  `test_degraded.py:415-421`, §12); and `GET /ledger` answers `500 asset_unreadable` when the file
+  cannot be read after startup, as `GET /` does (§3.5).
 - A2. Every row of §3.5's first table is driven. Each returns its status and exact body, and writes
   one audit line with its reason. The test compares the table's reasons with the code's, both
   directions. Its `launch_failed` row is driven by a scan launcher passed in code that raises
@@ -2392,6 +2474,18 @@ assertions that tell the two apart.
     `GET /ledger`, a client that closes with data unread leaves exactly one audit line, the
     accepted one. Falsifier: a catch-all around `handle_one_request` writes a second,
     `failed … errno=ECONNRESET` (the round-6 compliance judge's first stub; §3.8).
+- A9. **git older than 2.45 (user, D33, 2026-11-05; §2 default 3; the shape is my call).** A
+  server launched with a fake `git` first on `PATH`, which answers `--version` with
+  `git version 2.44.0` and hands every other call to the real git: `analyze`, `reanalyze` and
+  `retry` each answer `503 git_too_old` with one audit line carrying that reason (this is also
+  A2's row for the code), nothing is queued, and no scan or analyzer starts; a `waiting` item
+  seeded in `ledger.json` is still `waiting` after a poll interval; stderr holds the startup line
+  naming `2.44`; and `GET /`, `GET /tracker-data.js`, `GET /ledger/status` and
+  `POST /command {"id": "clear"}` answer as they do on a server with §15's git. With `--open` and
+  an empty store, nothing is queued and stderr says why (this case in `test_autolaunch.py`, beside
+  D8). With a fake answering `git version 2.45.0`, `analyze` is accepted (the boundary); with one
+  whose answer holds no version, `analyze` is refused. Falsifier: a check that compares only the
+  major number accepts 2.44.0, so `analyze` is queued.
 
 **B. Lifetime** (`test_ledger_lifetime.py`)
 - B1. The idle predicate (§5.5), as a table over injected clocks: busy is never idle, and the idle
@@ -2452,6 +2546,9 @@ assertions that tell the two apart.
 - C5. D11: each branch of §4.3's three-step rule, including disagreeing copies and their question.
 - C6. Unreadable folders are counted, and refused candidates are named. The question's context
   carries the three counts of §4.1 as §7.2 words it, leaving out any count that is zero.
+  Since 2026-11-05 (my call; §4), a candidate whose git call passes `GIT_TIMEOUT_SECS` (a fake
+  `git` first on `PATH` that sleeps past it for that path) is skipped and named the same way, with
+  the time limit as its context.
 - C7. A scan that hangs is killed at `TREKO_SCAN_SECS` with its process group, and the result is
   `scan_timeout`.
 - C8. D10 default 3, in two halves that must disagree: a job over a repo whose fsmonitor writes a
@@ -2520,6 +2617,9 @@ assertions that tell the two apart.
   U8).** File filters stay on (§2 default 3), so a filter a scanned repository names runs, and C9
   claims nothing about it. A repository whose `.gitattributes` names `filter=lfs` is found and
   analyzed like any other (user: LFS repos are never skipped).
+  **That last sentence describes; it asks for no test (my call, 2026-11-05; D20: no LFS test).**
+  An LFS repository goes through the same scan and analyzer as any other, and nothing in this card
+  skips one, so no fixture or assertion is required for it.
 - C10. **`gpg.program` never runs (U4, round 3).** A job over a fixture repo whose branch tip is a
   commit carrying a `gpgsig` header, with repo config `log.showSignature=true` and `gpg.program`
   set to a marker-writing script: no marker, and the job succeeds (probe 19). Falsifier: a
@@ -2571,6 +2671,8 @@ way `HANGING_ANALYZER` is, `server_harness.py:77`)
 - D5. `ledger.json` survives a mid-write kill with the old or new content. A corrupt or
   wrong-version file aborts startup naming it. A second server on the same store directory aborts
   naming the lock.
+  Since 2026-11-05 (my call; §5.1), a `ledger.json` that cannot be read (mode `000`) aborts
+  startup the same way, naming the file and `EACCES`.
 - D6. Shutdown mid-job kills the analyzer's process group, so no orphan outlives the server's exit
   bound, and marks the item interrupted. Since round 2, shutdown while an `analyze` request's
   submit-time scan hangs (a fake scan dropped into the harness tree) also kills that scan's
@@ -2651,6 +2753,15 @@ way `HANGING_ANALYZER` is, `server_harness.py:77`)
   bytes are unchanged; stderr's job line names `ValueError` and not the exception's message; no
   item is `running`, so a waiting item starts next, and with none waiting the idle predicate
   (§5.5) turns true once the idle period passes.
+  **Since 2026-11-05 (my call), the item codes nothing drove until then (§3.5).** With
+  `store.emit_run` passed in code raising `OSError(ENOSPC)`, the item is `failed` with
+  `store_write_failed`, `detail.stage = "write"` and `detail.errno = "ENOSPC"`, and the store's
+  bytes are unchanged. A job-time fake scan that exits 1 fails its item `scan_failed`, with
+  `detail.stage = "scan"` and `detail.exit = 1`. Items seeded as `waiting` in `ledger.json` whose
+  requests now meet each job-time scan outcome (`no_such_directory`, the directory removed while
+  the item waited; `no_repository`; `no_matching_repository`; `no_such_worktree`;
+  `nothing_matched`) each end `failed` with that code and `detail.stage = "scan"`. Falsifier: a job
+  that marks each of those ends `internal_error` fails every one of these rows.
 - D13. `launch_failed` (U2). With an analyzer launcher passed in code that raises
   `OSError(ENOENT)` on the first family's spawn: the item is `failed` with `launch_failed`,
   `detail.stage = "worktrees"`, `detail.repo` that family's label and `detail.errno = "ENOENT"`,
@@ -2802,6 +2913,9 @@ unchanged, §1.1)
 - G4. Row fields from fixture runs, including a `?/?` card, a `—` worktree and an empty run. Since
   round 5 (my call, round 5; §8.3), also a branch with `note: "folder missing"` and its path in
   `wt`, which the worktrees count leaves out; falsifier: a count by `wt` alone counts it.
+  Since 2026-11-05 (my call; §8.3), also a store run holding only `id` and `name`: it is listed,
+  each figure reads `—` and it has no tasks-done bar; falsifier: rows that read an absent key as
+  zero show `0`.
 - G5. `last_run` (the spec call the user confirmed on 2026-11-03).
 - G6. OQ-7 (my call; confirmed by the user, D28): Re-analyze of a run with no recorded request
   queues its directory, `~`
@@ -2909,6 +3023,10 @@ unchanged, §1.1)
      falsifier then has 17 rows and matches.
 
   Nothing else changes at split 3: no assertion, no other constant, no other module.
+  **These five edits share split 3's commit (my call, 2026-11-05; open since round 3).** The suite
+  must pass at that commit, so they cannot land apart from the move. The builder applies them
+  first and sees the two modules fail on the missing file, then makes the move, so the test edits
+  and the move are still two separate steps.
 
 **I. Docs.** `skills/treko/SKILL.md` describes the Ledger, the routes, `ledger.json` and the lock
 file in "Where the survey is stored", the new startup aborts, and drops "`reanalyze` … is the only
@@ -2920,6 +3038,17 @@ banner example at `SKILL.md:66` is unchanged, because the banner is (§3.2).
 `test_autolaunch.py:401` (`test_the_skill_documents_a_launch_command_that_does_not_detach`) reads
 every `SKILL.md` line naming `server.py`; the edit must keep those lines free of `nohup`,
 `setsid`, a stderr redirect and a trailing `&`.
+
+**Where each criterion's test lives (my call, 2026-11-05).** Each group's heading names its
+module; these are the exceptions and the gaps. A4 is the `/command` test in `test_server.py` that
+§12 rewrites from `test_reanalyze_succeeds_without_invoking_cmux_at_all`. A8's second case lives in
+`test_ledger_routes.py`, like every A8 case but the `/command` one. A9's first-launch case lives in
+`test_autolaunch.py`. D8 lives in `test_autolaunch.py`. E1, E2 and E5–E8 live in
+`test_analyze_options.py`; E3's poll half and E4 in `test_ledger_jobs.py`; E3's bar-width half in
+`test_ledger_page.py`. H6's leftover-entry check lives in `test_ui_commands.py`. Z1 lives in
+`test_ledger_jobs.py` and Z2 in `test_file_budgets.py`. Two have no module, by their nature: Z3
+is a check made at each split's own commit (the suite passes, and `git show --stat` lists only the
+files allowed), and I is the skill's text, checked by reading it and by `test_autolaunch.py:401`.
 
 ## 12. Existing tests this changes (decided here, so no task discovers it)
 
@@ -2989,6 +3118,11 @@ and the board stays at `/`. Until round 2 every one of them had to move to `/boa
     the off-manifest list (`:361-368`), which names no new path; `server.CONFIRM_REFUSAL_REASONS`,
     which still resolves after split 2 through the import back. New tests go in the new modules,
     apart from the one `internal_error` test above (round 5).
+  - **Correction (my call, 2026-11-05).** The 18 lines are every line of the module that names
+    `reanalyze`, comments, docstrings and the `REASON_STATUS` entry included, not 18 lines of
+    tests. One of them is named by no bullet above: the section comment at `:608-610` ("the one
+    thing it cannot see is a `reanalyze` that still writes into the tree"). It is corrected in the
+    Re-analyze task, beside the `test_store_writer.py` rewrite it points at.
 - `test_guards.py` (599): Z3's edits 2 to 5 at split 3's commit. (`EXPECTED_MANIFEST_ROWS`: the
   first draft said it stays 17, which holds for the Ledger page alone, since that page adds no
   row. Split 3 adds `board-commands.js`, so the constant becomes 18.) Then, in the Re-analyze task: the
@@ -3010,6 +3144,10 @@ and the board stays at `/`. Until round 2 every one of them had to move to `/boa
   are corrected to 19 and 17 rows; their assertions already pass at 18. `EXPECTED_COMMAND_IDS`
   (`:318`) is unchanged: `TRACKER_COMMAND_IDS` keeps all three ids, because the Re-analyze button
   stays and only its transport moves.
+  **The window this leaves, accepted (my call, 2026-11-05).** From split 3's commit to the
+  Re-analyze commit, criterion 17's external-fetch scan reads only the page, and the manifest
+  falsifier's messages still say 18 and 16 rows. No task between the two edits `board-commands.js`,
+  so the narrowed scan has nothing there to miss, and both stay as they are until that commit.
 - `test_ui_commands.py` (468): Z3's edit 1 at split 3. Then, with the Re-analyze change, which
   after a `200` now goes to `/ledger` instead of reloading (OQ-5; U1), and whose outcome table is
   §9.4:
@@ -3053,6 +3191,17 @@ and the board stays at `/`. Until round 2 every one of them had to move to `/boa
   `sys.executable` (Z1). The docstring and comment that name `reanalyze` (`:14`, `:263`) are
   updated. `srv.token` (`:164`) and the readiness probe (`:317`) still `GET /` and still get the
   board: no change there.
+  **Two more lines (my call, 2026-11-05).** The module docstring's claim that "every child here
+  inherits the server's environment verbatim (`server.py` passes no `env=` …)" (`:17-21`) is
+  narrowed to the cmux children it was written for, in the task where the server first starts a
+  Ledger child with the built environment; and `TREKO_SCAN_SECS` joins the variables `server_env`
+  removes from the inherited environment (`:273-274`), so a developer's own value cannot reach a
+  test.
+- **Only if §1.1's fallback split happens (my call, 2026-11-05).** Should `read_timeout` through
+  `probe_listener` move to `server_startup.py`, that move's own commit widens the two guards that
+  read `server.py`'s source to read the new file too: `test_server.py`'s clause (3) `env=` check
+  (`:319-326`) and `test_rename.py:86-90`'s retired-name check, since `resolve_repo`'s
+  `subprocess.run` moves with it.
 
 **`reanalyze_failed`, line by line (D28).** `grep -rn reanalyze_failed treko/` at `be662cb`
 prints 12 lines. Seven are in `server.py`: `run_reanalyze`'s five failure returns (`:329-344`),
@@ -3196,6 +3345,9 @@ Until his review (2026-11-04) the runtime had two rows: "Python", 3.9.6, re-read
 `/usr/bin/python3 -V`, the interpreter the skill launches `server.py` with, so the server, the
 scan and every analyzer run on it, and the one Z1 and E2 run on. D28 merged them into the first
 row above, which keeps every one of those facts.
+
+Since D33 (2026-11-05) the server also reads git's version at startup, and below the 2.45 floor
+the Ledger starts no analysis (§2 default 3, criterion A9). The pin stays 2.50.1.
 
 No new dependency: the server, the scan and the analyzer use the standard library and git only,
 and the tests use the runner and tools pinned in this table. (Round 3 reworded this to "No new
@@ -3812,3 +3964,937 @@ for D28 and D29 was put to the user and confirmed as recommended: the `default_i
 the ignore step for a second signal, respecting an inherited ignore, C12's strict pin, deleting the
 board's `analysis_failed` message and tone, and the two readings (the two messages; OQ-1's per-copy
 reading). The tags in the body keep their "(my call)" wording; the card's D30 is the record.
+
+## Tasks, in detail (2026-11-05)
+
+The card's ## Tasks holds one line per task; this is each task's detail, with the same identities
+(the text before the em dash), as `hooks/lib/feature_tasks.py` requires. Each task is one builder
+session. Rules that hold for every task:
+
+- **The gate (decision D31).** Nothing starts before the gate transition (the literal
+  `gate confirmed`) and the planning → implementation model-switch checkpoint (`rules/gates.md`).
+  Everything a browser can reach waits for task 1d's passing verdict: the new routes (`GET /ledger`,
+  `GET /ledger/status`, `POST /ledger`), `/command`'s changes, the Ledger page and the board's
+  changes. The three splits, the analyzer's options, the scan, the merge, the state module and the
+  job runner may start right after the gate, before or alongside task 1. Each task's "Depends on"
+  says which side it is on; "1d" there means that verdict.
+- **Names.** A bare "D1"–"D15" or "F1"–"F3" below is a criterion of §11; a card decision is
+  written "decision D10", and a round-2 fix "fix F4". Decisions D16 and above are unambiguous.
+- **`SUITE <target>`** means §15's pinned command, run from the worktree root:
+  `TMPDIR="$(mktemp -d /tmp/treko-suite.XXXXXX)" TREKO_CHROME_DENY_BIRD=1 uv run --python 3.11.15 --with pytest==9.1.1 --no-project pytest <target> -q`.
+  `SUITE treko` is the whole directory, §15's own form; every task's proof ends with it.
+- **Red, then green, as separate commits** (`rules/core-conduct.md`: never edit tests and
+  implementation in the same step). Red: write the task's tests, run them, and see each fail for
+  the reason it names. Green: implement until they pass. A test that guards code an earlier task
+  built may pass on arrival; it counts only once its falsifier (§11's, or the two-stub rule of
+  §11's preamble where §11 names none) has been run and seen to fail.
+- **Owns** = the task that makes a §11 criterion's tests complete and green; every criterion has
+  exactly one owner. **Adds** = writes part of a criterion that a later task closes.
+- **§12 edits** = the existing-test edits that task's own change forces, and nothing else.
+- **Sizes.** Every task that changes a file in §1.1's table ends with `wc -l` on it against its
+  budget. Z2 (task 41) turns the table into a test; until then this is the check.
+- **A spec change is never made inside a task** (decision D34 and the phase gate). A task that
+  finds this file wrong, or an existing test that needs an edit §12 does not list, stops and
+  brings it to the user.
+
+- [ ] 1 — **Write the decision record that lets the page send the server a directory (decision D10's gate, part 1 of 5: the ADR's prose).**
+      What: one new ADR under `docs/decisions/` recording §2's amendment of "commands take no
+      arguments, in v1 or after": the routes, ops, argument shapes and validation of §3
+      (§3.1–§3.8, `503 git_too_old` included); §2's amendment bullets (`/command` keeps its
+      no-arguments rule and its allowlist shrinks to `clear` and `handoff`; arguments only on
+      `POST /ledger`, which never reaches cmux; ADR 0034's "the browser cannot name a path"
+      reversed for reads only; old criterion 15's `500` row and reload retired; old criterion 13's
+      request sets gain `/board-commands.js`; ADR 0024's one-line-per-request rule gains the
+      accepted-poll exception; `/command` gets U10's changes, `sent=unknown` widening the old
+      spec's `unknown`); decision D10's four defaults, with §2 default 3's protective-settings
+      table, the config routes already tried (probes 1–33), the "lower bound until the check has
+      run" wording and the git 2.45 floor (decision D33); file filters as the user's accepted risk
+      (U8 = D20); an empty config-key table heading, filled by 1b and 1c. It names both records it
+      amends, ADR 0034 and ADR 0024. Number: taken from `origin/main` at write time and checked
+      free across every ref (`git fetch -q origin && git log --all --name-only --pretty=format: --
+      'docs/decisions/<NNNN>*'` prints nothing), as ADR 0055 records doing. One dated pointer to
+      the ADR beside each amended rule of `docs/features/tracking-feature-state.spec.md`
+      (`:404-411`, `:541-544`, `:691-703`, `:933-1064`, `:1079-1096`, `:1101`), as that file's
+      "Superseded paths" note (`:1158`) does (§2, "What else the ADR records").
+      Files: `docs/decisions/<NNNN>-<slug>.md` (new); `docs/features/tracking-feature-state.spec.md`.
+      Owns: none.
+      §12 edits: none.
+      Proof: every `file:line` the ADR cites re-opened before the commit; `wc -l` on the ADR ≤ 800
+      (Z2 measures `docs/decisions`).
+      Depends on: the gate transition.
+- [ ] 1a — **Write the test that checks the config-key table covers git's documented list (C12, red).**
+      What: in a new `treko/test_ledger_scan.py`, C12's test. It first asserts `git --version` is
+      §15's 2.50.1 (Apple Git-155), as `cdp_harness.Chrome` refuses an unpinned Chrome. It
+      re-derives the candidate set §2 pins: the keys `git help --config` prints that have an entry
+      of their own in `$(git --man-path)/man1/git-config.1` whose text matches the fifteen words,
+      plus `diff.<driver>.algorithm`, `filter.<driver>.process` and `filter.<driver>.required` from
+      `man5/gitattributes.5`; keys read only in a group entry are not candidates. It compares that
+      set with the ADR table's key column both ways; checks that every key a §2 probe measured is
+      present; checks the five-verdict vocabulary; checks that every "fires" row names a §2 setting
+      or the user's decision, and every "not measured" row names his decision. §11's four
+      falsifiers written beside it. The test finds the ADR by the filename task 1 gave it.
+      Files: `treko/test_ledger_scan.py` (new).
+      Owns: none.
+      Adds: C12 (closed in 1c).
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_scan.py` fails on the empty table, not on a parse error; the
+      derivation selects 262 of the 699 keys with an entry of their own, plus the 3 driver keys, as
+      §2 measured.
+      Depends on: 1.
+- [ ] 1b — **Read every candidate key once and sort it (config-key check, part 1).**
+      What: for each candidate, read its text once and write its row: "does not name a program"
+      (quoting the sentence that says what the value is); "unreachable" (its text names only
+      commands outside §4.1's three scan commands and the analyzer's eight `_git(` calls, as
+      `sendemail.*` does); a key §2's probes already measured, recorded from that probe; or "to
+      measure". A key that only switches on another key's program (`log.showSignature` for
+      `gpg.program`) is judged with that key. If the reading does not fit one session, stop at a
+      key-group boundary and continue in a second.
+      Files: the ADR (table rows).
+      Owns: none.
+      §12 edits: none.
+      Proof: every candidate has exactly one row; the "to measure" list is written down for 1c.
+      Depends on: 1a.
+- [ ] 1c — **Measure each remaining key in a scratch repository, so the table is complete (config-key check, part 2; C12 green).**
+      What: for each "to measure" key, in a scratch repository under `mktemp -d`, never this one:
+      set the key in that repository's `.git/config` to a marker-writing script (a directory
+      holding one, for a directory-valued key), and build the trigger its text names (a signed
+      tip, a missing blob, a stat-dirty file). The baseline first: a plain git command its text
+      says runs it, without the settings, must write the marker, or the row says why and reads
+      "not measured". Then run §4.1's three scan commands and the real `treko/analyze.py` under
+      every protective setting of §2's table, set by hand. Record "does not fire" (trigger,
+      commands, result) or "fires". Tasks 6–8 change only `allow_failure` on two of the analyzer's
+      git calls, not which commands it runs, so this can run alongside them. **On any "fires" or
+      "not measured" row, stop and bring it to the user (decision D34)**: a new protective
+      setting, its probe and its criterion, or his accepting the risk, each change this file, and
+      only his OK allows that.
+      Files: the ADR; probe scripts in the session's scratch folder.
+      Owns: C12.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_scan.py` green, and each of C12's four falsifiers seen failing.
+      Depends on: 1b.
+- [ ] 1d — **Have the ADR judged: one round, its fixes, then his list (decisions D32, D34).**
+      What: one compliance round on the ADR, with the observability judge's architecting read
+      alongside, per `running-the-compliance-judge` (judges run in panes, `dispatching-pane-agents`;
+      verdicts go to this worktree's ledgers); make the fixes it asks for; then bring whatever is
+      still open to the user as one list, with no further automatic round (decision D32). D27's
+      waiver covers the spec, not this ADR. A fix that would change this spec stops and goes to
+      the user first (decision D34).
+      Files: the ADR; `coding-memory/compliance-judge/verdicts.jsonl`,
+      `coding-memory/observability-judge/verdicts.jsonl`.
+      Owns: none.
+      §12 edits: none.
+      Proof: a passing compliance verdict recorded for the ADR, or his written answer to the list.
+      Depends on: 1c. Every browser-reachable task waits for this one (decision D31).
+- [ ] 2 — **Prove "the analyzer is unchanged" with a byte-for-byte comparison, before anything moves (E2).**
+      What: new `treko/test_analyze_options.py` with E2. Blob
+      `8b805d1f826cae5c22fdcb23de3a57e56049a734` is materialized with `git cat-file -p` beside a
+      `hooks/lib` link, as `build_tree` does; it and the tree's `analyze.py` run on
+      `/usr/bin/python3` (3.9.6), without `--progress` or `--card`, plain and with `--pretty`,
+      over E2's three fixtures (worktrees, a depends-on chain, a cycle and a spec half; a
+      directory that is not a repository; a card with an id-less task), committed with fixed
+      dates. stdout, stderr and exit status must match byte for byte. Every fixture keeps
+      `git status`, each card-named branch's `git diff --shortstat` and every worktree folder
+      healthy (§6.3, §6.4). It passes on arrival, since nothing has changed yet; its falsifier, a
+      copy with one default-path byte changed, must fail.
+      Files: `treko/test_analyze_options.py` (new).
+      Owns: E2.
+      §12 edits: none.
+      Proof: `SUITE treko/test_analyze_options.py` green; the falsifier seen failing.
+      Depends on: the gate transition (decision D31). Must land before task 3, whose proof it is
+      (§1.1; Z3: "For split 1, E2 passes too").
+- [ ] 3 — **Move the analyzer's card-reading code into its own file, changing nothing (split 1).**
+      What: `_card_paths`, `_parse_frontmatter`, `_checklist`, `_depends_on`, `_normalize_target`
+      and `Card` (`analyze.py:189-291`), the constants they use (`:36-47` less `MINUS` at `:44`,
+      and `:70-73`) and the `feature_tasks` import move verbatim into new `treko/cards.py`;
+      `NO_VALUE`, `SPEC_SUFFIX` and `UNPARSEABLE_META` move and are imported back; `analyze.py`
+      imports back whatever else it uses. Its own commit; no test edited. Runs Z3's split-1
+      clause (Z3 is owned by task 5).
+      Files: `treko/analyze.py`, `treko/cards.py` (new).
+      Owns: none.
+      §12 edits: none (Z3: "For splits 1 and 2 there are none").
+      Proof: `SUITE treko/test_analyze.py treko/test_analyze_options.py` green with
+      `test_analyze.py` unchanged and E2 passing; `SUITE treko`; `git show --stat HEAD` lists only
+      those two files; `wc -l`: `cards.py` ≤ 200, `analyze.py` near §1.1's estimate of 682
+      (budget 740 at card end).
+      Depends on: 2.
+- [ ] 4 — **Move the server's keystroke-sending code into the channel file, changing nothing (split 2).**
+      What: `CONFIRM_REFUSAL_REASONS`, `confirm_surface` and `send_keys` (`server.py:263-311`) move
+      verbatim into `treko/channel.py`; `server.py` imports the three back. Its own commit; no
+      test edited. Runs Z3's split-2 clause. Then estimate `server.py`'s size at card end against
+      its 780 budget (a rough reading of today's line ranges puts it near 790: about 100 lines
+      leave and about 100 arrive). If it is over, do §1.1's named fallback now, as a second move
+      commit before any behavioural change to `server.py`: `read_timeout` through `probe_listener`
+      (`server.py:150-257`) into a new `treko/server_startup.py`, with §12's conditional row in
+      that same commit.
+      Files: `treko/server.py`, `treko/channel.py`; on the fallback also `treko/server_startup.py`,
+      `treko/test_server.py`, `treko/test_rename.py`.
+      Owns: none.
+      §12 edits: none for the move; on the fallback, §12's "Only if §1.1's fallback split
+      happens" row (`test_server.py:319-326` and `test_rename.py:86-90` also read the new file).
+      Proof: `SUITE treko/test_server.py treko/test_degraded.py treko/test_server_lifetime.py`
+      green with all three unchanged; `SUITE treko`; `git show --stat HEAD` lists only
+      `server.py` and `channel.py`; `wc -l treko/channel.py` ≤ 200.
+      Depends on: 3 (ordering: my inference; the splits are independent, but one at a time keeps
+      each commit's proof clean).
+- [ ] 5 — **Move the board's button logic into a served file, changing nothing it does (split 3; Z3).**
+      What: `Treko.dc.html:402-525`, both markers included, cut verbatim into new
+      `treko/board-commands.js`, loaded by `<script src="./board-commands.js"></script>` right
+      after `support.js`; one `STATIC_MANIFEST` row (`board-commands.js`, `text/javascript`). The
+      slice's comment that it "cannot live in its own .js file" stays verbatim (it is inside the
+      hashed span) until task 37. Two steps, one commit (Z3, "These five edits share split 3's
+      commit"): (a) apply Z3's five test edits, run the two modules, and see them fail on the
+      missing file; (b) make the move and see them pass.
+      Files: `treko/Treko.dc.html`, `treko/board-commands.js` (new), `treko/server.py`,
+      `treko/test_ui_commands.py`, `treko/test_guards.py`.
+      Owns: Z3.
+      §12 edits: Z3's list exactly: `test_ui_commands.py:38` `HTML` points at
+      `board-commands.js`; `test_guards.py` gains `BOARD_COMMANDS_PATH` beside `HTML_PATH`
+      (`:108`), and criterion 15's four tests (`:193`, `:208`, `:252`, `:272`) read it; criterion
+      16's extraction (`:337`) and falsifier (`:383-384`) read it; the two `CMD_BUTTONS_RE` tests
+      (`:342`, `:422`) read `board-commands.js` followed by the page; `EXPECTED_MANIFEST_ROWS`
+      17 → 18 (`:560`). Nothing else: the external-fetch scan (`:496-498`) waits for task 37, a
+      window §12 accepts.
+      Proof: `SUITE treko/test_guards.py treko/test_ui_commands.py` green (50 tests in §1.1's
+      simulation), with `BASE_FENCE_BYTES` and `BASE_FENCE_SHA256` (6692 bytes, `bfe17645…`)
+      untouched in `git show HEAD -- treko/test_guards.py`; the six board-loading modules pass
+      unedited (`SUITE treko/test_drawer.py treko/test_drawer_sections.py treko/test_sidebar.py
+      treko/test_theme.py treko/test_nontext_contrast.py treko/test_rename.py`, 85 tests at
+      `50c0f44`); `SUITE treko`; `git show --stat HEAD` lists exactly the five files; `wc -l`:
+      `Treko.dc.html` ≤ 720, `board-commands.js` ≤ 250.
+      Depends on: 4.
+- [ ] 6 — **Teach the analyzer to report each stage as it finishes, and to read a given list of cards (E1, E5).**
+      What: `analyze()` gains an optional `progress` callable, default `None`; `main()` gains
+      `--progress`, which writes `treko-progress <stage>\n` to stderr and flushes, after
+      `worktrees`, `branches`, `cards` and `order` (§6.1's table). `--card PATH`, repeatable: when
+      given, exactly those files, ordered by file name then path, instead of
+      `<root>/docs/features/*.md` (§4.3).
+      Red: E1 (the four lines in order; stdout identical without the flag; with a `git` wrapper
+      first on `PATH` delaying `for-each-ref` by 2 s, the `worktrees` line read at least 1.5 s
+      before exit) and E5 (every default path given → identical stdout; a subset → exactly that
+      subset by file name; another worktree's copy compared with its own spec half). Green:
+      implement.
+      Files: `treko/analyze.py`, `treko/test_analyze_options.py`.
+      Owns: E1, E5.
+      §12 edits: none.
+      Proof: `SUITE treko/test_analyze_options.py treko/test_analyze.py` (E2 still green);
+      `SUITE treko`; `wc -l treko/analyze.py` ≤ 740.
+      Depends on: 3.
+- [ ] 7 — **Make the analyzer say "changes unknown" and "folder missing" instead of a false "clean" (E6, E8).**
+      What: §6.3: `_collect_branch_facts` calls `git status --porcelain` without
+      `allow_failure` and catches the `GitError`; `_branch_entries` writes `note: "changes
+      unknown"`, `tone: "neutral"` in the first slot, with one question per such worktree.
+      §6.4's second half: at `analyze.py:436`, a listed worktree path that is not a directory
+      gives `note: "folder missing"`, `tone: "neutral"`, `dirty: false`, `wt` kept, no question.
+      No key added and no type changed (ADR 0023).
+      Red: E6 and E8, each asserting its fixture's precondition first, each run against the
+      baseline blob as its falsifier. Green: implement.
+      Files: `treko/analyze.py`, `treko/test_analyze_options.py`.
+      Owns: E6, E8.
+      §12 edits: none (`test_analyze.py` unchanged, §1.1).
+      Proof: as task 6.
+      Depends on: 6 (ordering: my inference; same file, one change at a time).
+- [ ] 8 — **Make the analyzer say "diff unknown" when git cannot compute a diff, and ask why only where the value shows (E7).**
+      What: §6.4's first half: `_diffstat` calls `_git` without `allow_failure` and catches the
+      `GitError`; the branch's `diff` fact becomes `"diff unknown"`; one question, "Why could git
+      not compute the diff of `<branch>`?", only when a card the analyzer reads, with at least one
+      task, names that branch (D28, refining U12), added once the cards are read.
+      Red: E7's three parts (the branch a card with a task names; a second branch no card names;
+      the second fixture whose only naming card has no tasks), each with its falsifier, both
+      analyzers under `GIT_NO_LAZY_FETCH=1`. Green: implement.
+      Files: `treko/analyze.py`, `treko/test_analyze_options.py`.
+      Owns: E7.
+      §12 edits: none.
+      Proof: as task 6.
+      Depends on: 7.
+- [ ] 9 — **Give each run a stable id, a name, and a list row computed only from its own data (ledger_state, part 1; G1, G4).**
+      What: new `treko/ledger_state.py`: the in-memory ledger (§5.1's shape: `version`, `queue`,
+      `hidden`, `requests`) behind one `threading.Lock`, with request-side changes made on a copy
+      (§5.6); run id, name, dir and queue label (§8.1); rows (§8.3: distinct repos, branches,
+      worktrees leaving out `""`, `—` and `folder missing`, features, tasks done with
+      ` · <n> unreadable`, sorted by `analyzedAt` descending, computed on every call with no cache,
+      D28; `—` for a figure whose key a run lacks); `canDelete`. No file I/O yet (task 15).
+      Red: G1 (one folder typed three ways → one id; `~/dev/foo` and `~/work/foo` → two; each
+      narrowing changes the id) and G4 (row fields from fixture runs, including `?/?`, `—`, an
+      empty run, a `folder missing` branch and a run holding only `id` and `name`, each with its
+      falsifier). Green: implement.
+      Files: `treko/ledger_state.py` (new), `treko/test_ledger_state.py` (new).
+      Owns: G1, G4.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_state.py`; `SUITE treko`; `wc -l` ≤ 400.
+      Depends on: the gate transition (decision D31).
+- [ ] 10 — **Combine several repositories' results into one run without inventing anything (ledger_merge; F1, F2, F3).**
+      What: new `treko/ledger_merge.py`, `merge(request, parts, scan_questions) -> run`, a pure
+      function: §7.1 section by section (`id`, `name`, `dir` from the request through task 9's
+      functions, ordering: my inference; questions scan-level first, then failed families, then
+      each family's, renumbered `q1…`; constraints renumbered `C1…`; layered waves merged by index
+      and every cycle wave merged last under `CYCLE_NOTE`; graph nodes renumbered with
+      `analyze._node_id`, edges remapped, each family shifted down by `analyze.GRAPH_DY`; kanban
+      per column); §7.2's failed-family question; OQ-3's path labels when folder names collide.
+      Red: F1, F2 (with `CYCLE_NOTE` pinned to the real analyzer's cycle note), F3. Green:
+      implement.
+      Files: `treko/ledger_merge.py` (new), `treko/test_ledger_merge.py` (new).
+      Owns: F1, F2, F3.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_merge.py`; `SUITE treko`; `wc -l` ≤ 400.
+      Depends on: 3, 9.
+- [ ] 11 — **Find every repository in and around a typed directory, each counted once (ledger_scan, part 1; C1, C2, C3, C6).**
+      What: new `treko/ledger_scan.py`, run as a subprocess: the request as JSON on stdin, one
+      JSON object on stdout (§4.4), exit 0 for every outcome. §4.1: down (breadth-first to depth 5;
+      stop at a `.git` entry, depth 0 included; skip `node_modules`, dot folders, `UF_HIDDEN` and
+      symlinked folders; count unlistable folders, depth-5 folders that are not repositories, and
+      skipped symlinks); up (`rev-parse --show-toplevel`, within 5 ancestors); confirm
+      (`rev-parse --path-format=absolute --git-common-dir --show-toplevel`; refused candidates
+      named in a question); families by common directory, worktrees from `worktree list
+      --porcelain` (prunable and missing paths left out; the first non-bare entry is the
+      primary); sorted by primary path; `no_repository`. Git calls pass no `env=`, and one that
+      passes `GIT_TIMEOUT_SECS = 5` is read as a refusal of that path (§4). The scan words the
+      "Were repositories missed?" question with §7.2's text and emits it among its own questions,
+      since C6 tests that wording in this module (my inference: §7.2 heads it "merge-level").
+      Red: C1 (its run-level sentence composed in the test as scan → `analyze.py --card` →
+      `ledger_merge.merge`, ordering: my inference), C2, C3, C6 (its timeout case included).
+      Green: implement.
+      Files: `treko/ledger_scan.py` (new), `treko/test_ledger_scan.py`.
+      Owns: C1, C2, C3, C6.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_scan.py`; `SUITE treko`; `wc -l` ≤ 400.
+      Depends on: 3, 6, 10.
+- [ ] 12 — **Narrow the scan by repo, branch or worktree, keep every card those depend on, and pick the live copy of each card (ledger_scan, part 2; C4, C5).**
+      What: §4.2: Repo by exact folder name (`no_matching_repository`); Branch by `Card.branch`'s
+      normalization; Worktree by resolved path or folder name (`no_such_worktree`); both together;
+      the transitive `## Depends on` closure through `cards.Card(...).depends_on`; families with no
+      kept card dropped (`nothing_matched`); `branches[]` and `questions[]` kept whole. §4.3: each
+      card once; the copy on its branch, else the primary's, else the first listed worktree's;
+      `branch:` read per copy; the "Which copy of `<card>` is current?" question;
+      `families[].cards`. `no_such_directory` as a job-time outcome.
+      Red: C4, C5. Green: implement.
+      Files: `treko/ledger_scan.py`, `treko/test_ledger_scan.py`.
+      Owns: C4, C5.
+      §12 edits: none.
+      Proof: as task 11.
+      Depends on: 11.
+- [ ] 13 — **Start every scan and analyzer one safe way: protected environment, own process group, time limit, and a switch that stops new launches (ledger_jobs, part 1; C7).**
+      What: new `treko/ledger_jobs.py`: the child-environment builder (§2 default 3: copy the
+      base passed in; drop `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT` and every
+      `GIT_CONFIG_KEY_<n>`/`GIT_CONFIG_VALUE_<n>`; set exactly the table's rows); the child
+      registry (a set under its own lock, never the ledger lock; a `closed` flag; one launch method
+      that checks `closed`, starts the process in its own session with `env=` the builder's
+      output, and registers it, all under that lock; a refused launch starts nothing); killing a
+      process group and a reap bounded by `REAP_WAIT_SECS = 5`, whose expiry writes the
+      reap-timeout line and leaves the process registered; the scan launcher (request on stdin,
+      `TREKO_SCAN_SECS` passed in, the group killed at the bound → `scan_timeout`). If task 1c
+      later adds a protective row with the user's OK (decision D34), the builder and C8's unit
+      row take it in task 30.
+      Red: C7; C8's unit row for the builder (a base holding `GIT_CONFIG_COUNT=5` and pairs
+      `_0`…`_4`), with its falsifier. Green: implement.
+      Files: `treko/ledger_jobs.py` (new), `treko/test_ledger_scan.py`.
+      Owns: C7.
+      Adds: C8's unit row (C8 closed in 30).
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_scan.py`; `SUITE treko`; `wc -l` ≤ 400.
+      Depends on: the gate transition (decision D31); 11 for the real scan program (C7 itself uses
+      a fake scan that hangs).
+- [ ] 14 — **Serve the Ledger page and its status answer, beside the unchanged board (A1, A7).**
+      What: `server.py` routes per §3.1 for `/ledger` (GET page, OPTIONS `204`, other methods
+      `405`) and `/ledger/status` (GET, OPTIONS `204`, `405`); both pages served by one function
+      that takes the file (both metas, the CSP, `no-store`, `nosniff`, the `Host` check), so the
+      board is served exactly as today; `check_index_injectable` checks both files, and
+      `GET /ledger` answers `500 asset_unreadable` for an unreadable file. New
+      `treko/ledger_routes.py` with the status handler (§3.3: `Host`, then `Origin` and
+      `Sec-Fetch-Site` when present, then the token, each failing as the collapsed
+      `403 forbidden`; the payload's `ok`, home-collapsed `storeDir`, `queue` with `stage` on the
+      running item from the runner's in-memory record (task 19), `runs` rows from task 9,
+      `runsError`). An accepted poll writes no audit line; a refused one writes one with
+      `id=status` (§3.6, §2 default 4). (scope: my inference) A minimal `treko/Ledger.dc.html`,
+      the `<head>` the meta injection needs and the board's asset tags, so startup's check
+      passes; tasks 33–35 build it out.
+      Red: A1 (its 2026-11-05 Ledger-file cases included), A7. Green: implement.
+      Files: `treko/server.py`, `treko/ledger_routes.py` (new), `treko/Ledger.dc.html` (new,
+      skeleton), `treko/test_ledger_routes.py` (new).
+      Owns: A1, A7.
+      §12 edits: none (`srv.token` and the readiness probe still `GET /` and get the board: A1, §12).
+      Proof: `SUITE treko/test_ledger_routes.py`; `SUITE treko`; `wc -l treko/server.py` ≤ 780.
+      Depends on: 1d (browser-reachable, decision D31); 5, 9; 19 (ordering: my inference, so the
+      status payload is whole when first served).
+- [ ] 15 — **Keep the queue in a file that survives restarts, and allow one server per store folder (D5).**
+      What: `<store dir>/ledger.json` (§5.1): absent → empty; unparseable, unreadable, a `version`
+      other than 1, or any rule broken → startup aborts with exit 2 naming the file. Every write
+      goes to a temp file in the store folder, is `fsync`ed and `os.replace`d, at mode `0o600`; a
+      failed write leaves the old file whole, removes its temp file, and writes
+      `server: ledger write failed: <errno name>`. After the bind,
+      `fcntl.flock(LOCK_EX | LOCK_NB)` on `<store dir>/.treko-server.lock` (`0o600`, never
+      deleted); held → exit 2, "another Treko server is using <store dir>"; a lock file that
+      cannot be opened aborts the same way, naming the errno.
+      Red: D5 (a mid-write kill leaves the old or the new content; corrupt, wrong-version and
+      unreadable files each abort naming it; a second server on another port, same store folder,
+      aborts naming the lock). Green: implement.
+      Files: `treko/ledger_state.py`, `treko/server.py`, `treko/test_ledger_jobs.py` (new).
+      Owns: D5.
+      §12 edits: none (`test_server_lifetime.py:100-113` reuses the port, so its bind fails before
+      the lock, as today: §12).
+      Proof: `SUITE treko/test_ledger_jobs.py treko/test_server_lifetime.py`; `SUITE treko`;
+      `wc -l treko/server.py` ≤ 780.
+      Depends on: 4 (`server.py` after its split), 9. Not browser-reachable (decision D31).
+- [ ] 16 — **Refuse every bad request to POST /ledger before anything touches the disk or git, and harden the token and body checks /command shares (A3).**
+      What: §3.8's shared token check (a presented token that is not all ASCII is
+      `403 bad_token`, without calling `hmac.compare_digest`) and shared body reader (the cap as a
+      parameter, 1024 for `/command` and 4096 for `/ledger`; `RecursionError` caught beside
+      `ValueError` and `UnicodeDecodeError` → `400 malformed`), used by `/command`, `POST /ledger`
+      and the status poll. §3.4 steps 1–7: `Host`, `Origin`, token; `415`; `Transfer-Encoding`,
+      `Content-Length`, `413`; a JSON object with a string `op`; `op` one of the five, else `403`
+      `unknown_op`, logged `id=-`; the exact key set, strings only; the UTF-8 rule on every field
+      first, then the field table (`realpath` for `directory`; `run` in the store, else
+      `404 no_such_run`); `id=<op>` once step 5 accepts it. A request that passes step 7 reaches an
+      op stub that task 17 replaces (my inference).
+      Red: A3, every part (an unknown key per op; 4097 and 1025 bytes; the lone surrogate per
+      field; the non-ASCII token on three routes; deep nesting on two), each with its falsifier;
+      the A2 rows for the codes this task introduces. Green: implement.
+      Files: `treko/server.py`, `treko/ledger_routes.py`, `treko/test_ledger_routes.py`.
+      Owns: A3.
+      Adds: A2 rows (closed in 39).
+      §12 edits: none (the two refusals emit existing reasons: §12).
+      Proof: `SUITE treko/test_ledger_routes.py treko/test_server.py`; `SUITE treko`;
+      `wc -l treko/server.py` ≤ 780.
+      Depends on: 14.
+- [ ] 17 — **Accept an analysis: scan at once, then queue it, or refuse it with a reason the page can show (analyze and reanalyze ops; A5, G7).**
+      What: `analyze`: the submit-time scan through task 13's launcher, before the ledger lock; a
+      non-`ok` outcome answers its `422` or `500` code and queues nothing; then, under the lock,
+      `already_queued` (same run waiting or running), `queue_full` (`MAX_QUEUE_ITEMS = 20`) and the
+      enqueue with `requests[run]` in one all-or-nothing write (`500 ledger_write_failed` when it
+      fails); the body `{"ok", "op", "item", "started"}`. `reanalyze`: the recorded request
+      through the same submit path (a run with no recorded request is task 28). `server.py`
+      `main()` reads the base environment once, and `TREKO_SCAN_SECS` through `read_timeout`, and
+      passes both to `ledger_jobs`, the base positionally (§12's watch on `env=`).
+      Red: G7; A5 (an autouse check that the fake cmux log stays empty across every `/ledger` and
+      `/ledger/status` test); the A2 rows for this task's codes; the §12 edits below. Green:
+      implement.
+      Files: `treko/ledger_routes.py`, `treko/ledger_state.py`, `treko/server.py`,
+      `treko/test_ledger_routes.py`, `treko/test_ledger_state.py`, `treko/test_server.py`,
+      `treko/server_harness.py`.
+      Owns: A5, G7.
+      Adds: A2 rows (closed in 39).
+      §12 edits: `test_server.py` `test_the_token_never_leaves_the_served_page`, clause (3)
+      (`:319-326`): its comment is rewritten, since Ledger children get the built environment, and
+      the clause also checks the builder's output for the token (its `reanalyze` precondition
+      changes in task 38, the change that forces that half). `server_harness.py`: the docstring's
+      "every child here inherits the server's environment verbatim" (`:17-21`) narrowed to the
+      cmux children, and `TREKO_SCAN_SECS` added to the variables `server_env` removes
+      (`:273-274`). All three are forced here, where the server first starts a Ledger child and
+      first reads `TREKO_SCAN_SECS`.
+      Proof: `SUITE treko/test_ledger_routes.py treko/test_ledger_state.py treko/test_server.py`;
+      `SUITE treko`; `wc -l`: `treko/server.py` ≤ 780, `treko/ledger_routes.py` ≤ 400.
+      Depends on: 12, 13, 15, 16.
+- [ ] 18 — **Let the page remove a waiting item, retry a failed one, and hide a run (remove, retry, delete ops; G5).**
+      What: `remove` (waiting, failed or interrupted; running → `409 item_running`; unknown →
+      `404 no_such_item`); `retry` (failed or interrupted → waiting, keeping its place; waiting or
+      running → `409 not_retryable`; another live item for the same run → `409 already_queued`);
+      `delete` (adds the run to `hidden`; the only visible run → `409 last_run`; a store that does
+      not parse → `500 store_unreadable`); all-or-nothing writes. Failed and interrupted items are
+      seeded into `ledger.json` by the tests; a seeded `running` item would stop working once task
+      22's recovery turns it `interrupted`, so `item_running`'s A2 row is driven in task 39 against
+      a real running job.
+      Red: G5; the A2 rows for these codes. Green: implement.
+      Files: `treko/ledger_routes.py`, `treko/ledger_state.py`, `treko/test_ledger_routes.py`,
+      `treko/test_ledger_state.py`.
+      Owns: G5.
+      Adds: A2 rows (closed in 39).
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_routes.py treko/test_ledger_state.py`; `SUITE treko`.
+      Depends on: 17.
+- [ ] 19 — **Run queued analyses one at a time on the server, with a progress bar that moves only when a real stage finishes (job runner, part 1; E4, D7).**
+      What: the runner thread in `ledger_jobs.py`, started by `server.py` after the lock (task 15):
+      the oldest waiting item whenever nothing runs; §5.4 steps 1–6: mark `running` and persist
+      (write 1); the job-time scan (a non-`ok` outcome fails the item with that code); per family,
+      `analyze.py <primary> --progress` plus one `--card` per chosen copy, on `sys.executable`, in
+      its own process group, under `ANALYZE_SECS` per repo, stdout drained on a second thread, the
+      run's keys checked; a failed family gets a question naming it and why, and only all
+      families failing gives `analysis_failed` (OQ-2); `ledger_merge.merge`; `store.emit_run`; on
+      success the item removed, persisted (write 2), and `last_job_end` recorded. Progress lines
+      pass through one report handler passed in code into an in-memory record of the running
+      item's stage, which the status route reads (task 14): the total is `null` until the scan
+      ends, then `4N + 3`, a failed family's unreported stages counting as done; §6.2's labels.
+      Tests enqueue items through `ledger_state` in process, since the `analyze` op is
+      browser-reachable and waits for 1d (decision D31). Taking the run off the hide list at step
+      6 is task 28's, so it gets a red test there (ordering: my inference).
+      Red: E4, D7. Green: implement.
+      Files: `treko/ledger_jobs.py`, `treko/server.py`, `treko/test_ledger_jobs.py`.
+      Owns: E4, D7.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_jobs.py`; `SUITE treko`; `wc -l treko/ledger_jobs.py` ≤ 400
+      (it holds the most of the five; watch it from here).
+      Depends on: 6, 10, 12, 13, 15. Not browser-reachable (decision D31).
+- [ ] 20 — **Give each way a job can fail its own code, and a reason naming the repository and the stage (job runner, part 2; D12, D13).**
+      What: `merge_failed` (any exception from `merge`; `detail.stage = "merge"`; nothing
+      written); `launch_failed` (an analyzer spawn `OSError` fails the whole job at once, stage
+      `worktrees`, the family's label, the errno's name; a scan spawn `OSError` at job time, stage
+      `scan`; at submit, `500 launch_failed`, nothing queued, never registered);
+      `store_write_failed` (`emit_run` raised, stage `write`); a job-time `scan_failed` and the
+      job-time scan outcomes as item errors; `detail` (stage, repo, exit, timedOut, errno) on every
+      failed item; the failed job's stderr line (code, stage, exception class or errno name,
+      never a message).
+      Red: D12 (its 2026-11-05 rows for `store_write_failed`, `scan_failed` and the scan outcomes
+      included), D13 (both halves), and the A2 `launch_failed` row. Green: implement.
+      Files: `treko/ledger_jobs.py`, `treko/ledger_routes.py`, `treko/test_ledger_jobs.py`,
+      `treko/test_ledger_routes.py`.
+      Owns: D12, D13.
+      Adds: A2's `launch_failed` row (closed in 39).
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_jobs.py treko/test_ledger_routes.py`; `SUITE treko`.
+      Depends on: 17, 19.
+- [ ] 21 — **Make sure no job can stay "running" for ever, even when something unexpected breaks or a process will not die (job runner, part 3; D14, D15).**
+      What: §5.4's job catch-all (`except Exception` around steps 1–6: kill this job's process
+      groups and reap each within `REAP_WAIT_SECS`; mark the item `failed` with `internal_error`
+      and the stage reached; persist it as write 3; clear the running item; record
+      `last_job_end`; write `server: job <item> internal_error <Class> at <stage>`; go on). An
+      exception in the runner loop outside any item pauses the runner. The same bounded reap after
+      a time-limit kill of a scan, at submit and at job time, and of an analyzer, with
+      `server: scan reap timeout <pid>` or `server: job <item> reap timeout <pid>`.
+      Red: D14, D15, each with its falsifier. Green: implement.
+      Files: `treko/ledger_jobs.py`, `treko/ledger_routes.py`, `treko/test_ledger_jobs.py`.
+      Owns: D14, D15.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_jobs.py`; `SUITE treko`.
+      Depends on: 20.
+- [ ] 22 — **After a restart, mark the interrupted job and start the waiting ones; never let polling alone keep the server awake (D3, D4, B2).**
+      What: at startup, after the lock, every `running` item becomes `interrupted` with
+      `detail.stage` and `detail.repo` `null`, persisted (write 4); then the runner starts and
+      waiting items start by themselves. The watchdog's idle test becomes §5.5's pure predicate
+      (busy: an item running, or one waiting while the runner is not paused; the idle period
+      counted from the later of the last request and `last_job_end`). The idle reset moves to
+      where the request line is parsed, and is skipped for `/ledger/status` (§2 default 2).
+      Red: D3 (the first server ended with `SIGKILL`, or `ledger.json` seeded with a `running`
+      item, never `Server.stop()`, which becomes the tidy path in task 24), D4, B2 (slow; the 60 s
+      floor is never lowered). Green: implement.
+      Files: `treko/server.py`, `treko/ledger_jobs.py`, `treko/test_ledger_jobs.py`,
+      `treko/test_ledger_lifetime.py` (new).
+      Owns: D3, D4, B2.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_jobs.py treko/test_ledger_lifetime.py
+      treko/test_server_lifetime.py`; `SUITE treko`; `wc -l treko/server.py` ≤ 780.
+      Depends on: 14, 19.
+- [ ] 23 — **Stop cleanly: no new work once shutdown starts, every running process killed, the job marked interrupted (D6).**
+      What: the shutdown path (idle, parent death, `Ctrl-C`): close the registry first; kill every
+      registered group, the job's and any submit-time scan's; the runner marks the item
+      `interrupted` with the stage and repo reached (write 5), or puts it back to `waiting` when the
+      closed registry refused its first launch, its scan (write 6); the runner checks `closed`
+      before §5.4 step 1 and before each family; a scan or analyzer that shutdown killed is never a
+      failed scan or a failed family; a request whose scan was killed gets no answer; all inside
+      `TREKO_POLL_SECS` + 1 s. The injectable ledger writer that D6 and D10 both use is introduced
+      here (task 26 reuses it).
+      Red: D6, every case; the end-to-end ones sent with `SIGINT` or parent death (`SIGTERM` is
+      still a hard kill until task 24), the in-process ones counting writes through the writer
+      passed in code. Green: implement.
+      Files: `treko/server.py`, `treko/ledger_jobs.py`, `treko/ledger_state.py`,
+      `treko/test_ledger_jobs.py`.
+      Owns: D6.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_jobs.py`; `SUITE treko`.
+      Depends on: 17, 22.
+- [ ] 24 — **Make a stop request or a closed terminal shut the server down as tidily as Ctrl-C (D29; B3).**
+      What: `SIGTERM` and `SIGHUP` get `signal.default_int_handler`, each installed only when its
+      inherited disposition is `SIG_DFL`, as the first statement of the `try` that leads into the
+      shutdown path, just before the runner starts; the shutdown's ignore step, one function that
+      sets SIGINT, SIGTERM and SIGHUP to `SIG_IGN`, right after the registry closes; exit status 0.
+      Red: B3 (parametrized over the three signals with `SIGINT` as the reference; the
+      inherited-ignore case; the second-signal case in a child interpreter), with its falsifier
+      tree copy whose `server.py` lacks the two installations. Green: implement.
+      Files: `treko/server.py`, `treko/test_ledger_lifetime.py`.
+      Owns: B3.
+      §12 edits: none. Every test server's `Server.stop()` (`server_harness.py:139-146`) and
+      `test_autolaunch.py`'s own `stop` (`:194-201`) now take the shutdown path (§12, "Every test
+      that stops a server"), so the full suite is part of this proof.
+      Proof: `SUITE treko/test_ledger_lifetime.py`; `SUITE treko` with no new failure;
+      `wc -l treko/server.py` ≤ 780.
+      Depends on: 23.
+- [ ] 25 — **Check that every way a job ends restarts the idle clock and leaves its reason on disk (B1, D11).**
+      What: two cross-cutting checks over the ends tasks 19–24 built. B1: the idle predicate as a
+      table over injected clocks, one row per end (success, a failure code, `internal_error`,
+      interruption, the put-back), each setting `last_job_end`. D11: a failed and an interrupted
+      item each carry their `detail`; `ledger.json` holds none of the fixture's stderr lines;
+      request values appear only under `queue[].request` and `requests`, and `detail.repo` only as
+      a found family's label (the narrowed case included); the detail survives a restart.
+      Red: B1, D11. They guard code that exists, so they may pass on arrival; each counts once its
+      falsifier fails (B1's: a runner that records the end only on success). Fix what they find.
+      Files: `treko/test_ledger_lifetime.py`, `treko/test_ledger_jobs.py`; source only for a fix.
+      Owns: B1, D11.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_lifetime.py treko/test_ledger_jobs.py`; `SUITE treko`.
+      Depends on: 24.
+- [ ] 26 — **Decide, case by case, what happens when the queue file cannot be written (D10).**
+      What: §5.6's six runner-side rules and the request-side one. Write 1 fails → no subprocess,
+      the item `failed` in memory with `ledger_write_failed` and stage `start`, the runner paused
+      until a later write succeeds; writes 2 and 3 → memory records the outcome; write 4 → startup
+      exits 2 naming the file and the errno; writes 5 and 6 → stderr says so and the server exits
+      inside its bound; a request-side failure → `500 ledger_write_failed`, nothing changed.
+      Red: D10, each of the seven writes failed by the writer passed in code. Green: implement.
+      Files: `treko/ledger_jobs.py`, `treko/ledger_state.py`, `treko/server.py`,
+      `treko/test_ledger_jobs.py`.
+      Owns: D10.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_jobs.py`; `SUITE treko`.
+      Depends on: 24.
+- [ ] 27 — **Check the queue's order, every allowed and refused state change, and two tabs racing (D1, D2, D9).**
+      What: D1 (start or queue; first in, first out; a retried item keeps its place); D2 (every
+      transition of §5.2, each refused one, and the put-back driven as D6 drives it); D9 (50 barrier
+      rounds each of identical `analyze` requests, of `remove` against the runner's start, and of
+      `retry` against an `analyze`; plus a plain `retry` while a same-run item waits).
+      Red: D1, D2, D9; fix what they find.
+      Files: `treko/test_ledger_jobs.py`; source only for a fix.
+      Owns: D1, D2, D9.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_jobs.py`; `SUITE treko`.
+      Depends on: 18, 26.
+- [ ] 28 — **Hidden runs disappear from both pages, analyzing again brings them back, and an old-style run can be re-analyzed (G2, G3, G6).**
+      What: `GET /tracker-data.js` (§3.7): the containment check first; an empty hide list serves
+      the file's bytes; otherwise `store.read_store`, hidden runs removed, `store.dumps` (a parse
+      failure is `500 asset_unreadable`). §5.4 step 6 takes the run off the hide list, on success
+      only. `reanalyze` of a run with no recorded request queues `{"directory": <its dir, ~
+      expanded>}` with no narrowing (OQ-7).
+      Red: G2, G3, G6. Green: implement.
+      Files: `treko/server.py`, `treko/ledger_jobs.py`, `treko/ledger_routes.py`,
+      `treko/test_ledger_state.py`.
+      Owns: G2, G3, G6.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_state.py treko/test_server.py`; `SUITE treko`;
+      `wc -l treko/server.py` ≤ 780.
+      Depends on: 18, 19.
+- [ ] 29 — **First launch with nothing analyzed queues the launch repository, and launching opens the Ledger (OQ-6; D8).**
+      What: §5.3: once the runner has started and the store holds no runs, submit
+      `{"directory": <launch repo root>}` through the `analyze` path, unless an item for it is
+      already waiting or running; a refusal goes to stderr and the server still serves;
+      `webbrowser.open(config["origin"] + "/ledger")`; the banner unchanged (§3.2).
+      `run_reanalyze` keeps one caller, `/command`'s `reanalyze`, until task 38.
+      Red: D8, every case, each seeing exactly one browser open, of `<origin>/ledger`. Green:
+      implement.
+      Files: `treko/server.py`, `treko/test_autolaunch.py`.
+      Owns: D8.
+      §12 edits: `test_autolaunch.py` `test_no_path_launch_analyzes_the_repo_root_once`
+      (`:256-265`) waits for the queued job, then checks one run under decision D12's id;
+      `test_existing_run_is_not_reanalyzed_on_launch` (`:284`) and
+      `test_no_path_launch_opens_the_browser_at_the_bound_url` (`:268-276`) stay unchanged.
+      Proof: `SUITE treko/test_autolaunch.py`; `SUITE treko`.
+      Depends on: 17, 22.
+- [ ] 29a — **With git older than 2.45, start no analysis and say so; the board works as today (decision D33; A9).**
+      What: §2 default 3's version check: a function in `ledger_jobs.py` runs `git --version`
+      through the registry's launch method under `GIT_TIMEOUT_SECS` and reads
+      `git version <major>.<minor>`; below 2.45, no version, a non-zero exit, a timeout or a spawn
+      error count as too old. `server.py` runs it once at startup, before the runner; when too old
+      it starts no runner (counted as paused, §5.5), writes the startup line, and lets first launch
+      queue nothing (§5.3); `analyze`, `reanalyze` and `retry` answer `503 git_too_old` first
+      (§3.4 step 8, §3.5). The Ledger's message for the code is task 33's (§9.2).
+      Red: A9, every case (the first-launch case in `test_autolaunch.py`), with its falsifier;
+      A2's `git_too_old` row. Green: implement.
+      Files: `treko/ledger_jobs.py`, `treko/ledger_routes.py`, `treko/server.py`,
+      `treko/test_ledger_routes.py`, `treko/test_autolaunch.py`.
+      Owns: A9.
+      Adds: A2's `git_too_old` row (closed in 39).
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_routes.py treko/test_autolaunch.py`; `SUITE treko`;
+      `wc -l treko/server.py` ≤ 780, `treko/ledger_jobs.py` ≤ 400.
+      Depends on: 18, 19, 29.
+- [ ] 30 — **Prove the protected environment cannot be bypassed: not by the server's own environment, not by a stray process launch (C8).**
+      What: C8 whole: the unit row from task 13 (with any row task 1c added under decision D34);
+      the job marker row and its in-process falsifier (a builder passed in code that drops the
+      override); the three server-environment rows (`GIT_CONFIG_PARAMETERS`, a
+      `GIT_CONFIG_COUNT=3` family whose `KEY_2` names the script, a `GIT_CONFIG_GLOBAL` file), the
+      first with its end-to-end falsifier; the AST check over all five `ledger_*` modules (no
+      `environ`, `environb`, `getenv`, `getenvb`); the launch check (exactly one process start in
+      `ledger_jobs.py` and `ledger_routes.py`, in the registry, with `env=`, the version check of
+      task 29a going through it too; none in `ledger_state.py` or `ledger_merge.py`; no `env=` in
+      `ledger_scan.py`); each with §11's falsifier copies.
+      Red: C8; fix what it finds.
+      Files: `treko/test_ledger_scan.py`; source only for a fix.
+      Owns: C8.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_scan.py`; `SUITE treko`.
+      Depends on: 1c (its outcome can change the protective table, decision D31); 28 and 29a
+      (every `ledger_*` module in its final shape: ordering, my inference).
+- [ ] 31 — **Prove the token never leaks into files, children or logs, and that everything runs on the pinned Python 3.9.6 (A6, Z1).**
+      What: A6: the token appears in no file under the store folder (`ledger.json` and the lock
+      included), in no child's environment or argv, and nowhere on stderr. Z1: one two-family
+      `analyze` job end to end on `/usr/bin/python3` (asserting `Python 3.9.6` first), through a
+      new `interpreter` parameter of `server_harness.launch`, its run checked against §7.3's
+      schema property.
+      Red: A6, Z1, with the harness parameter below; fix what they find.
+      Files: `treko/test_ledger_routes.py`, `treko/test_ledger_jobs.py`, `treko/server_harness.py`.
+      Owns: A6, Z1.
+      §12 edits: `server_harness.py` `launch` gains `interpreter`, default `sys.executable` (`:296`).
+      Proof: `SUITE treko/test_ledger_routes.py treko/test_ledger_jobs.py`; `SUITE treko`;
+      `wc -l treko/server_harness.py` ≤ 400.
+      Depends on: 29a.
+- [ ] 32 — **Prove a scanned repository cannot make git run its programs or write into it (C9, C10, C11).**
+      What: three end-to-end fixtures, each with a baseline that must fire and a builder passed in
+      code as its falsifier. C9: a worktree, a stat-dirty file in each checkout and a repo-set
+      `core.hooksPath` `post-index-change` hook; no marker, every file under `.git` identical in
+      content and mtime (C9's LFS sentence is a description, not a test: decision D20 and its
+      2026-11-05 note). C10: a signed tip, `log.showSignature=true`, a `gpg.program` marker. C11: a
+      blobless clone with missing blobs, a `remote.origin.uploadpack` marker and a card with a
+      task; no marker, `d.diff == "diff unknown"`, one question, the missing-object count
+      unchanged; plus the real-upload-pack row.
+      Red: C9, C10, C11; fix what they find.
+      Files: `treko/test_ledger_scan.py`; source only for a fix.
+      Owns: C9, C10, C11.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_scan.py`; `SUITE treko`.
+      Depends on: 8, 30.
+- [ ] 33 — **Write the Ledger page's messages and progress logic as small testable pieces (H1, H9, H11, E3).**
+      What: in `treko/Ledger.dc.html`, the node-loadable slice between start and end markers
+      (§9.1): §9.2's code → fixed-string table, `git_too_old` included; messages built from
+      `detail` (stage words, `null` parts left out); the bar's width as a function of `stage`
+      alone; the poll state machine (`403` and a rejected fetch terminal; a `500 internal_error`
+      banner that clears at the next `200`). The board's token `<style>` block copied byte for
+      byte (§9.1 says why a copy). New `treko/test_ledger_page.py` with a node loader.
+      Red: H1; H9; H11, both halves (`ledger_routes`' and `ledger_jobs`' own constants against the
+      slice's table; this spec's §3.5, §5.4 and §9.2 codes against each other, read between those
+      headings); E3, both halves (the slice's bar width; polls between two reports return the
+      same `stage`, against the server). Green: implement.
+      Files: `treko/Ledger.dc.html`, `treko/test_ledger_page.py` (new).
+      Owns: H1, H9, H11, E3.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_page.py` (node v26.5.0); `SUITE treko`;
+      `wc -l treko/Ledger.dc.html` ≤ 600.
+      Depends on: 14, 21, 29a (every code exists, so H11 compares the final sets).
+- [ ] 34 — **Show the queue and the finished runs on the Ledger, each run opening its own board (H5, H8).**
+      What: the prototype ported per §9.1 on the board's conventions: the header (icon, "Run
+      ledger", Open the board, disabled with no rows); the store path as monospace text, no input
+      and no Save (decision D8); Queued rows per state (running: bar and stage label, no ✕;
+      waiting: ✕; interrupted or failed: Retry and ✕); Runs rows (§8.3) with Open, and the ✕ when
+      `canDelete`; polling every 2000 ms; Open and Open the board write `taskTracker.run` and go to
+      `/`; status data rendered as text only.
+      Red: H5, H8 (CDP on Chrome 156.0.8078.79). Green: implement.
+      Files: `treko/Ledger.dc.html`, `treko/test_ledger_page.py`.
+      Owns: H5, H8.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_page.py`; `SUITE treko`; `wc -l treko/Ledger.dc.html` ≤ 600.
+      Depends on: 18, 19, 33.
+- [ ] 35 — **Let the user type a directory and press Analyze, with a pop-up when nothing is found, and a notice when no server runs (H2, H3).**
+      What: the form (Directory, then Repo, Branch, Worktree marked optional; trimmed, `""` for
+      empty; a blank directory never leaves the page; one Analyze, disabled while in flight; boxes
+      cleared on success); the "Nothing found" pop-up in the delete dialog's frame with one OK; the
+      delete dialog with the prototype's wording; `Esc` closes either; over `file://`, §9.3's
+      notice and launch command, no form, queue or runs, and no `tracker-data*.js` request.
+      Red: H2, H3. Green: implement.
+      Files: `treko/Ledger.dc.html`, `treko/test_ledger_page.py`.
+      Owns: H2, H3.
+      §12 edits: none.
+      Proof: `SUITE treko/test_ledger_page.py`; `SUITE treko`; `wc -l treko/Ledger.dc.html` ≤ 600.
+      Depends on: 17, 34.
+- [ ] 36 — **Link the board's Treko icons back to the Ledger, and size the board's graph to fit every node (H4, H7).**
+      What: §9.4 items 1 and 3: the collapsed-rail and sidebar icons (`:61` and `:78` before
+      split 3) wrapped in `<a href="{{ ledgerHref }}" title="Back to Ledger">`, `ledgerHref` being
+      `/ledger` with the token meta and `Ledger.dc.html` without; the missing-data icon left
+      unlinked; the graph svg's `height` bound to `graphH` and its `width` to the larger of 700 and
+      the rightmost node's x + 188 (§7.4).
+      Red: H4, H7. Green: implement.
+      Files: `treko/Treko.dc.html`, `treko/test_ledger_page.py`.
+      Owns: H4, H7.
+      §12 edits: none expected. The icon links were simulated unchanged, as a literal `href`
+      (§1.1); the svg binding was not. If `test_nontext_contrast.py`'s exact 334/347 scored marks
+      or `test_drawer.py:571`'s seven ids move, stop and report: an edit §12 does not list is a
+      spec change (decision D34's rule).
+      Proof: `SUITE treko/test_ledger_page.py`; the six board-loading modules of task 5 pass
+      unedited; `SUITE treko`; `wc -l treko/Treko.dc.html` ≤ 720.
+      Depends on: 5, 10, 14 (browser-reachable; 14 already waits for 1d).
+- [ ] 37 — **Move the board's Re-analyze button onto the Ledger queue, then take the fence pins again (H6, H10).**
+      What: in `board-commands.js`: Re-analyze posts `{"op": "reanalyze", "run": <on-screen id>}`
+      to `/ledger` and never to `/command`; §9.4's mapping (`403`, a rejected fetch,
+      `no_such_run`, `already_queued`, `queue_full`, `internal_error`'s own string, the five
+      "Cannot re-analyze" codes, everything else, `git_too_old` included, "Re-analysis could not be
+      queued, and nothing changed."); the `reanalyze_failed:'analysis_failed'` entry and the
+      `analysis_failed` message deleted. In `Treko.dc.html`: the `analysis_failed` tone
+      (`CMD_TONES`, outside the slice); the move to `/ledger` after a `200`, replacing the reload;
+      the "Cannot re-analyze" pop-up. Two comments inside the hashed span corrected (the slice's
+      "cannot live in its own .js file"; the error table's "Every row of §Design 3's failure
+      table"). Then both fence pairs re-pinned.
+      Red: H6 and H10, slice halves in `test_ui_commands.py` (with H6's leftover-entry check and
+      its falsifier) and CDP halves in `test_ledger_page.py`. Green: implement. Then re-pin.
+      Files: `treko/board-commands.js`, `treko/Treko.dc.html`, `treko/test_ui_commands.py`,
+      `treko/test_guards.py`, `treko/test_ledger_page.py`.
+      Owns: H6, H10.
+      §12 edits: `test_ui_commands.py`: `ROW_OUTCOMES` loses `"analysis_failed"` (`:48`) and
+      `test_500_leaves_the_displayed_analyzed_at_byte_identical` (`:288`) retires; deleting the
+      entry is what breaks it in this order, since its real `500 reanalyze_failed` would then
+      resolve to `unexpected`. H6's new leftover-entry test; the §9.4 slice tests; the module
+      docstring (`:9-16`) corrected. `test_guards.py`: criterion 17's external-fetch scan
+      (`:496-498`) also reads `board-commands.js`; the manifest falsifier messages (`:598-599`)
+      say 19 and 17 rows; last, `BASE_FENCE_BYTES` and `BASE_FENCE_SHA256` (`:130-131`) and
+      `BASE_FENCE_NODE_BRIDGE_BYTES` and `BASE_FENCE_NODE_BRIDGE_SHA256` (`:136-137`) re-pinned,
+      with the new figures recorded in the commit message. `EXPECTED_COMMAND_IDS` (`:318`)
+      unchanged. If a pinned board count moves (as in task 36), stop and report.
+      Proof: `SUITE treko/test_ui_commands.py treko/test_guards.py treko/test_ledger_page.py`; the
+      six board-loading modules pass unedited, the new pop-up's markup included; `SUITE treko`;
+      `grep -n reanalyze_failed treko/board-commands.js treko/Treko.dc.html` prints nothing.
+      Depends on: 17, 36. Board side before server side (ordering: my inference): with the server
+      side first, the board's button would answer `403` ("This page's token is stale") until this
+      task, and no test would notice.
+- [ ] 38 — **Take Re-analyze off the command route, so /command accepts only clear and handoff (A4).**
+      What: `ALLOWED_IDS` shrinks to `clear` and `handoff`; `LOCAL_COMMANDS`, `run_reanalyze`,
+      `_reanalyze_failed` and `_run_local` go (§5.3: task 29 removed their other caller); the
+      `--repo` help text (`server.py:694-696`) stops naming `reanalyze`.
+      Red: the edits below, rewritten to the new contract, run and seen failing where the server
+      still accepts `reanalyze` (A4; the partition test; `test_the_enum_and_the_status_table_cover_each_other`
+      once `REASON_STATUS` loses the entry). Green: implement.
+      Files: `treko/server.py`, `treko/test_server.py`, `treko/test_ui_commands.py`,
+      `treko/test_degraded.py`, `treko/test_store_writer.py`, `treko/test_ledger_jobs.py`,
+      `treko/server_harness.py`.
+      Owns: A4.
+      §12 edits: `test_server.py`: `REASON_STATUS` loses `"reanalyze_failed": 500` (`:69`);
+      `test_reanalyze_succeeds_without_invoking_cmux_at_all` (`:445`) becomes A4's `/command` test
+      (`403 unknown_id`, the cmux log unchanged); `test_a_hanging_analyzer_times_out_and_leaves_the_store_intact`
+      (`:732`) moves to `test_ledger_jobs.py` as a one-family `HANGING_ANALYZER` job failing
+      `analysis_failed` with `timedOut`, the store's bytes unchanged;
+      `test_the_token_never_leaves_the_served_page`'s precondition (`:300-302`) becomes "a Ledger
+      job completed"; the module docstring (`:7`); the section comment at `:608-610`.
+      `test_ui_commands.py`: `test_the_page_partition_matches_the_servers` (`:377-384`): the
+      page's send ids equal `server.SEND_COMMANDS` and `server.ALLOWED_IDS`, and its local ids are
+      exactly `["reanalyze"]`, not in `ALLOWED_IDS`. `test_degraded.py`:
+      `test_reanalyze_still_succeeds_on_a_degraded_server` (`:519-527`) becomes `POST /ledger`
+      `reanalyze` queuing the run on a degraded server. `test_store_writer.py`:
+      `test_reanalyze_writes_the_configured_store_and_never_the_tree` (`:47`) becomes a Ledger job
+      that writes the configured store and never the tree; its docstring (`:1-22`) rewritten.
+      `server_harness.py`: the docstring and comment naming `reanalyze` (`:14`, `:263`).
+      Proof: `SUITE treko/test_server.py treko/test_ui_commands.py treko/test_degraded.py
+      treko/test_store_writer.py treko/test_ledger_jobs.py`; `SUITE treko`;
+      `grep -rn reanalyze_failed treko/` prints nothing; `wc -l`: `treko/server.py` ≤ 780,
+      `treko/test_server.py` ≤ 800.
+      Depends on: 29, 37.
+- [ ] 39 — **Answer and log any request that crashes, on every route, and check every refusal in the table both ways (A8, A2).**
+      What: §3.8's request catch-all in `ControlHandler`, around the call to the `do_` method and
+      nothing else: `KeyboardInterrupt` and `SystemExit` pass through; a status line
+      `send_response` only buffered is dropped; `500` with the fixed body when nothing has gone
+      out, and nothing more when something has or the client is gone; exactly one audit line,
+      `failed id=- surface=- sent=<sent> status=500 reason=internal_error path=- errno=<name>`,
+      `sent=unknown` for a request `do_POST`'s decoded path hands to `_handle_command` and `no`
+      otherwise; `server: request internal_error <Class>`; the connection closed.
+      Red: A8, every case (the `/command` case in `test_server.py`, the rest in
+      `test_ledger_routes.py`); A2 closed: its `internal_error` row, its `item_running` row against
+      a real running job, every row driven server-level (`git_too_old` included), the table's
+      reasons compared with the code's both ways, the `id=` rules, and the unknown-op value ending
+      in `\n`. Green: implement.
+      Files: `treko/server.py`, `treko/test_ledger_routes.py`, `treko/test_server.py`.
+      Owns: A8, A2.
+      §12 edits: `test_server.py`: `REASON_STATUS` gains `"internal_error": 500`; one new test
+      drives `internal_error` through `POST /command`, recorded in `OBSERVED_REASONS` (`:82`).
+      Proof: `SUITE treko/test_ledger_routes.py treko/test_server.py`; `SUITE treko`; `wc -l`:
+      `treko/test_server.py` ≤ 800 (it has the room only after task 38 moves the hanging-analyzer
+      test out, as §12 relies on), `treko/server.py` ≤ 780.
+      Depends on: 38.
+- [ ] 40 — **Update the Treko skill so it describes the Ledger as built (criterion I).**
+      What: `skills/treko/SKILL.md` (read `skills/_standards/authoring-skills-and-agents.md`
+      first): the Ledger and its routes; `ledger.json` and `.treko-server.lock` in "Where the
+      survey is stored"; the new startup aborts (a corrupt, unreadable or wrong-version
+      `ledger.json`, a held or unopenable lock, a failed recovery write); first launch with an
+      empty store queues the launch repo on the Ledger; the auto-opened tab
+      `http://127.0.0.1:8422/ledger` (`:89-90`), the board at `/`, the icon back to the Ledger; the
+      sentence that `reanalyze` "is the only thing that writes `tracker-data.js`" dropped (`:100`);
+      the banner example (`:66`) unchanged; and (my call) the git 2.45 floor and its startup line
+      (decision D33).
+      Files: `skills/treko/SKILL.md`.
+      Owns: I.
+      §12 edits: none.
+      Proof: `SUITE treko/test_autolaunch.py` (`:401` reads every `SKILL.md` line naming
+      `server.py`: no `nohup`, `setsid`, stderr redirect or trailing `&`);
+      `grep -rn '127\.0\.0\.1:8422' treko skills/treko` shows `:66` unchanged and the `/ledger`
+      tab; `wc -l skills/treko/SKILL.md` ≤ 400.
+      Depends on: 39.
+- [ ] 41 — **Turn the file-size budgets into a test (Z2).**
+      What: new `treko/test_file_budgets.py` holding §1.1's table; it fails when a listed file
+      passes its budget, or when any file in `git diff --name-only origin/main...HEAD -- treko
+      skills/treko docs/decisions` passes 800 lines by `wc -l`. Falsifiers (my inference: §11
+      names none): one budget set below its file's size; a changed-file list holding an 801-line
+      file.
+      Files: `treko/test_file_budgets.py` (new).
+      Owns: Z2.
+      §12 edits: none.
+      Proof: `SUITE treko/test_file_budgets.py` green and both falsifiers seen failing; `SUITE treko`.
+      Depends on: 40.
+- [ ] 42 — **Run the whole suite once on the finished branch and record the result (§15).**
+      What: first confirm the tools, so nothing is skipped for a missing one (`node --version`
+      v26.5.0, Chrome 156.0.8078.79, `git --version` 2.50.1, `/usr/bin/python3 -V` 3.9.6); then
+      `SUITE treko`; record passed, failed, skipped and wall time for the card's `## Verification`,
+      beside §15's baseline (360 tests in 226 s at `d85eabd`).
+      Files: none changed (the record goes to `## Verification` at review).
+      Owns: none.
+      §12 edits: none.
+      Proof: the recorded output, with nothing skipped or deselected.
+      Depends on: 41.
+- [ ] 43 — **Have the finished change judged before the pull request (observability judge).**
+      What: `running-the-observability-judge` on the implementation (a pane; the verdict in this
+      worktree's ledger); relay its summary; `hooks/judge-guard.sh` refuses `gh pr create` until a
+      fresh implementation-stage verdict matches HEAD. Then the implementation → review
+      model-switch checkpoint.
+      Files: `coding-memory/observability-judge/verdicts.jsonl`.
+      Owns: none.
+      §12 edits: none.
+      Proof: a recorded verdict at the pull request's HEAD.
+      Depends on: 42.
+
+## Revised after the checklist review (2026-11-05)
+
+The checklist was drafted from this file and checked against an independent inventory of it. The
+user answered four questions, which the card records as D31–D34; the rest are the planning
+session's calls, tagged "(my call, 2026-11-05)" where they appear. No judge has read this revision
+(D27's waiver). No existing line of this file was removed or shortened: every change is an added
+line. In the card, the one replacement is ## Tasks' placeholder sentence, which the checklist
+replaces.
+
+**His answers (user, 2026-11-05).**
+
+- **D31, the gate's scope.** Only what a browser can reach waits for task 1d's verdict; the
+  splits, the analyzer's options, the scan, the merge, the state module and the job runner may
+  start after `gate confirmed`; the task that closes C8 also waits for task 1c. He chose this
+  against the planning session's recommendation that everything wait. Places changed: §2 (after
+  the task-1 paragraph), the gate rule and every "Depends on" above.
+- **D32, the ADR's judging.** One compliance round with the observability read alongside, its
+  fixes, then one list to him. Places changed: §2, task 1d.
+- **D33, git older than 2.45.** A new code, `503 git_too_old`, for `analyze`, `reanalyze` and
+  `retry`; the version read once at startup through the child registry; no runner then, and no
+  first-launch job; the board unchanged. Places changed: §2 default 3 (a paragraph after the
+  version floor), §3.4 step 8, §3.5's first table (a row), §5.3's first-launch bullet, §5.5,
+  §9.2's table (a row), §9.4 (the code stays in the board's "every other code" string), §15, a new
+  criterion A9 (the next free id in group A), and task 29a. Not a job failure code, so §5.4's list
+  is unchanged.
+- **D34, a task-1 finding that needs a spec change.** The builder stops and brings it to him.
+  Places changed: §2 default 3's "Outcomes" bullet, tasks 1c and 1d, the checklist's rules.
+
+**The planning session's calls (my call, 2026-11-05).** Each is written where the thing is
+defined.
+
+1. A git call in the scan that passes `GIT_TIMEOUT_SECS` is read as git refusing that path (§4;
+   C6 gains a case). Open since round 2.
+2. An unreadable `ledger.json` and an unopenable lock file abort startup like a corrupt file and a
+   held lock (§5.1; D5 gains a case). Open since round 2.
+3. Why §9.1 copies the board's token block rather than sharing it (§9.1). Open since round 2.
+4. A store run missing a field shows `—` for what that field feeds and is still listed (§8.3; G4
+   gains a case). Open since round 3.
+5. Z3's five forced edits share split 3's commit, as two steps (Z3). Open since round 3.
+6. The runtime check that git is at least 2.45, open since round 4, became D33.
+7. The window between split 3 and the Re-analyze commit, where criterion 17's external-fetch scan
+   reads only the page, is accepted (§12, the `test_guards.py` bullet).
+8. "Checked" in §2's config-key check means C12's "does not fire" (§2 default 3, "Outcomes").
+9. C12's candidate set is pinned to keys with an entry of their own plus the three driver keys;
+   keys read only in a group entry are stated as not checked one by one (§2 default 3).
+10. D27's waiver does not cover task 1's ADR (§2, beside D32); the ADR names ADR 0024 as well as
+    ADR 0034, and task 1 adds dated pointers in `tracking-feature-state.spec.md` (§2).
+11. §1's file table gains the nine new test modules, the ADR and the old spec's pointers.
+12. A1 names the Ledger file's own startup check, and `GET /ledger`'s `500 asset_unreadable` joins
+    it (A1).
+13. Where each criterion's test lives, including the two that have no module (end of §11).
+14. §12's `test_server.py` count is explained and its one unnamed line, the comment at
+    `:608-610`, placed; `server_harness.py`'s docstring (`:17-21`) and `TREKO_SCAN_SECS`
+    (`:273-274`) added.
+15. A §12 row for §1.1's fallback split, used only if that split happens.
+16. C9's LFS sentence describes; it asks for no test (C9; decision D20).
+17. D12 drives `store_write_failed`, a job-time `scan_failed` and the job-time scan outcomes,
+    which no criterion drove (D12; a note after §3.5's "Codes only a failed item carries").
+18. The checklist's rules say how a criterion id differs from a decision id, and that a pinned
+    board count that moves stops the task (tasks 36 and 37).
+
+Also added: a dated sentence in the header comment, a sentence in the introduction, a "Ground
+truth" entry, this section, and the task detail above.
+
+**Not changed by this revision**, left for the reviewer: who words the "Were repositories missed?"
+question. §7.2 heads it "Merge-level questions", while §7.1 lists the merge's own questions as
+failed families only, §4.4 prints `missed` apart from `questions`, `merge(request, parts,
+scan_questions)` takes no `missed`, and C6 tests the wording in the scan's module. Task 11 has the
+scan word it, marked as an inference, and the same reading covers "Which copy of `<card>` is
+current?".

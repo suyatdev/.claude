@@ -26,6 +26,10 @@ are D13-D15. The spec is being revised for round 3.
 **Update 2026-11-03 (compliance rounds 3 and 4):** round 3 failed with 2 new ids, answered by D16-D18;
 round 4 failed with 1 new id, answered by D19, alongside D20-D21 from the observability read. Per D22,
 round 5 is the last automatic round: its findings go to him as one list. §Tasks is still unwritten.
+**Update 2026-11-05:** rounds 5 and 6, D27's waiver, his spec review (D28, D29) and his
+confirmations (D30) are done, and the checklist is written: one line per task under §Tasks, with
+the detail in the spec's closing section "Tasks, in detail (2026-11-05)". His answers from the
+checklist review are D31–D34. Next: `gate confirmed`, then task 1.
 
 Every decision below is tagged **(user)** when he decided it in the brainstorm, or **(my call)** when
 the planning session settled it and he has not yet seen it written down. A builder must not promote a
@@ -180,6 +184,9 @@ card order is unchanged. (my call) Defaults the ADR starts from: accept only a d
 exists; status polling must not reset the idle timer (`server.py:650-652` resets it on every request
 today, so a polling tab would keep the server alive indefinitely); git runs in scanned repos with
 `core.fsmonitor` switched off, since a scanned repo's own config can name a program for git to run.
+*Correction (2026-11-05, my call):* `server.py:650-652` resets the idle timer once per accepted
+**connection**, not on every request; the spec corrected this at round 3 (its §2, default 2). The
+default itself is unchanged.
 
 **D11 — Which copy of a card counts.** (user, builder check 2026-11-02) Each worktree holds its own
 copy of every card, with its own phase and ticks, and today cards are read only from the folder the
@@ -327,6 +334,28 @@ The board's `analysis_failed` message and tone go with the `reanalyze_failed` en
 (`Treko.dc.html:428`, `:535`; nothing else reaches them). The "two new messages" of D28 are §9.2's
 request-answer row and §9.4's Re-analyze string, and OQ-1's confirmation covers its per-copy reading.
 
+**D31 — The gate holds back only what a browser can reach.** (user, 2026-11-05) Against my
+recommendation that every later task wait for task 1d's passing verdict, he chose "only the
+screens wait". My reading, flagged to him: everything a browser can reach waits for that verdict,
+meaning the new routes (`POST /ledger`, `GET /ledger`, `GET /ledger/status`), `/command`'s
+changes, the Ledger page and the board's changes. The three splits, the analyzer's options, the
+scan, the merge, the state module and the job runner may start right after `gate confirmed`,
+before or alongside task 1. Task 1c's outcome can still change the protective-settings table
+(D34), so the task that closes criterion C8 also waits for 1c.
+
+**D32 — The task-1 ADR gets one judge round, then his list.** (user, 2026-11-05) One compliance
+round, with the observability judge's architecting read alongside; the fixes it asks for; then
+anything still open goes to him as one list, with no further automatic round.
+
+**D33 — With git older than 2.45 the Ledger starts no analysis and says so.** (user, 2026-11-05)
+The Ledger refuses to start an analysis and shows a clear message ("git 2.45 or newer needed"); the
+board works exactly as today. The spec designs it in full: where and when the check runs, its
+code, its rows and its criterion (spec §2 default 3, §3.5, §9.2, criterion A9).
+
+**D34 — A task-1 finding that needs a spec change comes to him first.** (user, 2026-11-05) If task
+1c finds a config key that fires, or task 1d's judge asks for a spec change, the builder stops and
+brings it to him; the spec changes only with his OK.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
@@ -404,7 +433,60 @@ Split into [`treko-ledger.spec.md`](treko-ledger.spec.md): design, wire contract
 
 ## Tasks
 
-Not yet written. The checklist follows the spec and the compliance judge.
+One line per task. The detail of each (files, the criteria it owns, the existing-test edits it
+carries, its proof and what it waits for) is in the spec's closing section, "Tasks, in detail
+(2026-11-05)". The text before each em dash is the task's identity and must match the spec's list
+(`hooks/lib/feature_tasks.py`). In both lists a bare "D1"–"D15" or "F1"–"F3" is a criterion of
+spec §11; a card decision is written "decision D10", and a round-2 fix "fix F4".
+
+- [ ] 1 — Write the decision record (ADR) that lets the page send the server a directory (decision D10's gate)
+- [ ] 1a — Write the test that checks the ADR's config-key table covers git's documented list (C12, red)
+- [ ] 1b — Read every candidate config key once and sort it
+- [ ] 1c — Measure each remaining key in a scratch repository; stop and ask on any that fires (C12 green)
+- [ ] 1d — Have the ADR judged: one round, its fixes, then his list (decisions D32, D34)
+- [ ] 2 — Prove the analyzer unchanged with a byte-for-byte comparison, before anything moves (E2)
+- [ ] 3 — Move the analyzer's card-reading code into `cards.py`, changing nothing (split 1)
+- [ ] 4 — Move the server's keystroke-sending code into `channel.py`, changing nothing (split 2)
+- [ ] 5 — Move the board's button logic into `board-commands.js`, changing nothing (split 3; Z3)
+- [ ] 6 — Teach the analyzer to report each finished stage and to read a given list of cards (E1, E5)
+- [ ] 7 — Make the analyzer say "changes unknown" and "folder missing" instead of a false "clean" (E6, E8)
+- [ ] 8 — Make the analyzer say "diff unknown", and ask why only where the value shows (E7)
+- [ ] 9 — Give each run a stable id, a name and a list row computed from its own data (G1, G4)
+- [ ] 10 — Combine several repositories' results into one run (F1, F2, F3)
+- [ ] 11 — Find every repository in and around a typed directory, each counted once (C1, C2, C3, C6)
+- [ ] 12 — Narrow the scan by repo, branch or worktree, and pick each card's live copy (C4, C5)
+- [ ] 13 — Start every scan and analyzer one safe way: protected, in its own group, time-limited, stoppable (C7)
+- [ ] 14 — Serve the Ledger page and its status answer beside the unchanged board (A1, A7)
+- [ ] 15 — Keep the queue in a file that survives restarts, with one server per store folder (D5)
+- [ ] 16 — Refuse every bad request to POST /ledger before it touches the disk or git (A3)
+- [ ] 17 — Accept an analysis: scan at once, then queue it, or refuse it with a reason (A5, G7)
+- [ ] 18 — Remove a waiting item, retry a failed one, hide a run (G5)
+- [ ] 19 — Run queued analyses one at a time, with progress that moves only on real stages (E4, D7)
+- [ ] 20 — Give each way a job can fail its own code and reason (D12, D13)
+- [ ] 21 — Make sure no job can stay "running" for ever (D14, D15)
+- [ ] 22 — After a restart, mark the interrupted job and start the waiting ones; polling alone never keeps the server awake (D3, D4, B2)
+- [ ] 23 — Stop cleanly: no new work, every process killed, the job marked interrupted (D6)
+- [ ] 24 — Shut down as tidily on a stop request or a closed terminal as on Ctrl-C (B3)
+- [ ] 25 — Check that every way a job ends restarts the idle clock and keeps its reason (B1, D11)
+- [ ] 26 — Decide, case by case, what happens when the queue file cannot be written (D10)
+- [ ] 27 — Check the queue's order, its state changes, and two tabs racing (D1, D2, D9)
+- [ ] 28 — Hidden runs leave both pages and come back on re-analysis; old-style runs re-analyze (G2, G3, G6)
+- [ ] 29 — First launch queues the launch repository, and launching opens the Ledger (D8)
+- [ ] 29a — With git older than 2.45, start no analysis and say so (A9; decision D33)
+- [ ] 30 — Prove the protected environment cannot be bypassed (C8)
+- [ ] 31 — Prove the token never leaks, and that everything runs on Python 3.9.6 (A6, Z1)
+- [ ] 32 — Prove a scanned repository cannot make git run its programs or write into it (C9, C10, C11)
+- [ ] 33 — Write the Ledger page's messages and progress logic as small testable pieces (H1, H9, H11, E3)
+- [ ] 34 — Show the queue and the finished runs on the Ledger (H5, H8)
+- [ ] 35 — Let the user type a directory and press Analyze, with pop-ups and the no-server notice (H2, H3)
+- [ ] 36 — Link the board's Treko icons back to the Ledger, and size its graph to fit (H4, H7)
+- [ ] 37 — Move the board's Re-analyze onto the Ledger queue, then re-pin the fence (H6, H10)
+- [ ] 38 — Take Re-analyze off the command route (A4)
+- [ ] 39 — Answer and log any request that crashes, and check every refusal both ways (A8, A2)
+- [ ] 40 — Update the Treko skill to describe the Ledger as built (I)
+- [ ] 41 — Turn the file-size budgets into a test (Z2)
+- [ ] 42 — Run the whole suite once on the finished branch and record it
+- [ ] 43 — Have the finished change judged before the pull request
 
 ## Verification
 
