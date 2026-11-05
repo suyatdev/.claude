@@ -1,5 +1,9 @@
 """Acceptance tests for the analyzer's options (docs/features/treko-ledger.spec.md, §11 E).
 
+E1 (`--progress`) and E5 (`--card`) come after E2. Each is shown able to fail by §11's two-stub
+rule: stub analyzers, built in the test, that ignore the option, refuse, or batch the report at
+the end are run through the same checks the real analyzer runs through.
+
 This file starts with E2, "the analyzer is unchanged", as a differential: the analyzer as it
 was before the ledger card (blob 8b805d1f826cae5c22fdcb23de3a57e56049a734, taken out of git
 with `git cat-file -p`) and the analyzer in this working tree run over the same fixtures,
@@ -16,9 +20,13 @@ comparison on a copy of the analyzer with one default-path byte changed and must
 Run:  see §15 of the spec (the pinned `uv run ... pytest` command).
 """
 
+import json
 import os
 import re
+import shutil
 import subprocess
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -36,6 +44,11 @@ BASE_BRANCH = "main"
 # The one byte the falsifier changes: the directory the analyzer reads cards from, by default.
 DEFAULT_PATH_LITERAL = '"docs" / "features"'
 DEFAULT_PATH_MUTANT = '"docs" / "feature"'
+
+PROGRESS_STAGES = ("worktrees", "branches", "cards", "order")
+PROGRESS_STDERR = "".join("treko-progress %s\n" % stage for stage in PROGRESS_STAGES).encode()
+FOREACHREF_DELAY_SECONDS = 2
+MIN_LEAD_SECONDS = 1.5  # E1: the `worktrees` line is read at least this long before exit
 
 FIXTURE_NAMES = ("worktrees_chain_cycle", "not_a_repository", "idless_task")
 FIXTURE_ARGS = {"plain": [], "pretty": ["--pretty"]}
@@ -107,14 +120,15 @@ class Fixture:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text)
 
-    def card(self, name, branch, tasks, depends_on=(), phase="implementation", suffix=".md"):
+    def card(self, name, branch, tasks, depends_on=(), phase="implementation", suffix=".md",
+             cwd=None):
         lines = ["---", "phase: %s" % phase, "model_tier: high", "branch: %s" % branch, "---",
                  "", "# %s" % name, ""]
         if depends_on:
             lines += ["## Depends on", ""] + ["- %s — %s needs it" % (d, name) for d in depends_on]
             lines.append("")
         lines += ["## Tasks", ""] + tasks + [""]
-        self.write("docs/features/%s%s" % (name, suffix), "\n".join(lines))
+        self.write("docs/features/%s%s" % (name, suffix), "\n".join(lines), cwd=cwd)
 
     def commit_all(self, message, cwd=None):
         self.git("add", "-A", cwd=cwd)
@@ -167,7 +181,22 @@ def _fixture_idless_task(base):
     return fx.root
 
 
+def _fixture_other_worktree_copy(base):
+    """`alpha` twice: the primary has its halves disagree one way, the worktree the other way."""
+    fx = Fixture(base)
+    fx.init()
+    fx.card("alpha", "feat/alpha", ["- [ ] 1 — one", "- [ ] 2 — two"])
+    fx.card("alpha", "feat/alpha", ["- [ ] 1 — one", "- [ ] 2 — two", "- [ ] 9 — nine"],
+            suffix=".spec.md")
+    fx.commit_all("cards")
+    wt = fx.worktree("feat/alpha")
+    fx.card("alpha", "feat/alpha", ["- [ ] 1 — one", "- [ ] 2 — two", "- [ ] 3 — three"], cwd=wt)
+    fx.card("alpha", "feat/alpha", ["- [ ] 1 — one", "- [ ] 2 — two"], suffix=".spec.md", cwd=wt)
+    return fx.root
+
+
 BUILDERS = {
+    "other_worktree_copy": _fixture_other_worktree_copy,
     "worktrees_chain_cycle": _fixture_worktrees_chain_cycle,
     "not_a_repository": _fixture_not_a_repository,
     "idless_task": _fixture_idless_task,
@@ -335,3 +364,226 @@ def test_e2_falsifier_one_default_path_byte_fails_the_comparison(tmp_path, fixtu
     verdict = _mismatch(expected, actual)
     assert verdict is not None, "the comparison cannot see a changed default path"
     assert actual != expected
+
+
+# ------------------------------------------------------------------- stubs: the two-stub rule
+
+STUB_SOURCE = '''
+import subprocess, sys
+REAL, KIND, STAGES = %(real)r, %(kind)r, %(stages)r
+if KIND == "refuse":
+    sys.exit(2)
+argv, kept, progress, i = sys.argv[1:], [], False, 0
+while i < len(argv):
+    if argv[i] == "--progress":
+        progress = True
+    elif argv[i] == "--card":
+        i += 1
+    else:
+        kept.append(argv[i])
+    i += 1
+done = subprocess.run([sys.executable, REAL, *kept], capture_output=True)
+sys.stdout.buffer.write(done.stdout)
+sys.stderr.buffer.write(done.stderr)
+if progress and KIND == "batched":
+    for stage in STAGES:
+        sys.stderr.write("treko-progress %%s\\n" %% stage)
+        sys.stderr.flush()
+sys.exit(done.returncode)
+'''
+
+
+def _stub(dest, kind):
+    """A stand-in analyzer. refuse: exits 2. ignore: drops --progress and --card, delegates.
+    batched: as ignore, then prints the four lines only after the real run has ended."""
+    dest.mkdir(parents=True, exist_ok=True)
+    script = dest / ("stub_%s.py" % kind)
+    script.write_text(STUB_SOURCE % {"real": str(NEW_ANALYZER), "kind": kind,
+                                     "stages": PROGRESS_STAGES})
+    return script
+
+
+def _slow_git_dir(dest):
+    """A folder holding a `git` that sleeps before `for-each-ref`, then runs the real git."""
+    dest.mkdir(parents=True, exist_ok=True)
+    wrapper = dest / "git"
+    wrapper.write_text(
+        '#!/bin/sh\nfor a in "$@"; do\n  if [ "$a" = for-each-ref ]; then sleep %d; break; fi\n'
+        'done\nexec %s "$@"\n' % (FOREACHREF_DELAY_SECONDS, shutil.which("git")))
+    wrapper.chmod(0o755)
+    return dest
+
+
+# ---------------------------------------------------------------------------------- E1 checks
+
+
+def _check_progress_report(script, repo_root, base, extra):
+    """E1, first half: exactly the four lines, in order, and stdout as without the flag."""
+    plain = _run_analyzer(script, repo_root, extra, base)
+    flagged = _run_analyzer(script, repo_root, ["--progress", *extra], base)
+    assert flagged[2] == 0, "--progress run failed: %s" % flagged[1].decode(errors="replace")
+    assert flagged[1] == PROGRESS_STDERR, "stderr was %r" % flagged[1]
+    assert flagged[0] == plain[0], "stdout changed under --progress"
+
+
+def _run_timed(script, repo_root, extra_args, base, path_first):
+    """Run the analyzer, noting when each stderr line is read and when the process ended."""
+    env = _git_env(base / "home")
+    env["PATH"] = str(path_first) + os.pathsep + env["PATH"]
+    started = time.monotonic()
+    proc = subprocess.Popen([RUNTIME_PYTHON, str(script), str(repo_root), *extra_args],
+                            cwd=str(base), env=env, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+    killer = threading.Timer(RUN_TIMEOUT_SECONDS, proc.kill)
+    killer.start()
+    drained = []
+    drain = threading.Thread(target=lambda: drained.append(proc.stdout.read()))
+    drain.start()
+    arrivals = [(raw.decode(), time.monotonic()) for raw in iter(proc.stderr.readline, b"")]
+    status = proc.wait()
+    ended = time.monotonic()
+    killer.cancel()
+    drain.join()
+    return {"arrivals": arrivals, "status": status, "elapsed": ended - started,
+            "lead": ended - arrivals[0][1] if arrivals else None}
+
+
+def _check_lines_arrive_as_stages_end(script, repo_root, base, slow_git):
+    """E1, second half: with `for-each-ref` slowed by 2 s, `worktrees` is read early."""
+    run = _run_timed(script, repo_root, ["--progress"], base, slow_git)
+    assert run["status"] == 0, run
+    assert "".join(text for text, _ in run["arrivals"]).encode() == PROGRESS_STDERR
+    assert run["elapsed"] >= FOREACHREF_DELAY_SECONDS, "the git wrapper never delayed anything"
+    assert run["lead"] >= MIN_LEAD_SECONDS, "worktrees line came %.2f s before exit" % run["lead"]
+
+
+# ----------------------------------------------------------------------------------- E1 tests
+
+
+@pytest.mark.parametrize("mode", sorted(FIXTURE_ARGS))
+def test_e1_progress_prints_the_four_lines_in_order_and_leaves_stdout_alone(
+        tmp_path, fixture_for, mode):
+    repo_root, _ = fixture_for("worktrees_chain_cycle")
+    _check_progress_report(NEW_ANALYZER, repo_root, tmp_path / "worktrees_chain_cycle",
+                           FIXTURE_ARGS[mode])
+
+
+def test_e1_each_line_arrives_as_its_stage_ends(tmp_path, fixture_for):
+    repo_root, _ = fixture_for("worktrees_chain_cycle")
+    _check_lines_arrive_as_stages_end(NEW_ANALYZER, repo_root, tmp_path / "worktrees_chain_cycle",
+                                      _slow_git_dir(tmp_path / "slow"))
+
+
+@pytest.mark.parametrize("kind", ["refuse", "ignore"])
+def test_e1_falsifier_a_stub_that_prints_no_lines_fails_the_line_check(tmp_path, fixture_for, kind):
+    repo_root, _ = fixture_for("worktrees_chain_cycle")
+    with pytest.raises(AssertionError):
+        _check_progress_report(_stub(tmp_path / "stub", kind), repo_root,
+                               tmp_path / "worktrees_chain_cycle", [])
+
+
+def test_e1_falsifier_a_stub_that_batches_the_lines_fails_only_the_timing_check(
+        tmp_path, fixture_for):
+    repo_root, _ = fixture_for("worktrees_chain_cycle")
+    base = tmp_path / "worktrees_chain_cycle"
+    batched = _stub(tmp_path / "stub", "batched")
+    _check_progress_report(batched, repo_root, base, [])  # the line check can be satisfied
+    with pytest.raises(AssertionError, match="before exit"):
+        _check_lines_arrive_as_stages_end(batched, repo_root, base,
+                                          _slow_git_dir(tmp_path / "slow"))
+
+
+# ---------------------------------------------------------------------------------- E5 checks
+
+
+def _default_card_paths(repo_root):
+    features = repo_root / "docs" / "features"
+    return sorted(p for p in features.glob("*.md") if not p.name.endswith(".spec.md"))
+
+
+def _card_args(paths):
+    return [arg for path in paths for arg in ("--card", str(path))]
+
+
+def _feature_names(stdout):
+    return [feature["name"] for feature in json.loads(stdout)["features"]]
+
+
+def _check_every_default_path_is_the_same_as_none(script, repo_root, base):
+    paths = _default_card_paths(repo_root)
+    assert len(paths) > 2, "the fixture needs several cards for order to matter"
+    expected = _run_analyzer(script, repo_root, [], base)
+    assert expected[2] == 0
+    for given in (paths, list(reversed(paths))):
+        actual = _run_analyzer(script, repo_root, _card_args(given), base)
+        assert actual[2] == 0, "--card run failed: %s" % actual[1].decode(errors="replace")
+        assert actual == expected, "differs from a run without --card"
+
+
+def _check_a_subset_is_exactly_that_subset(script, repo_root, base):
+    kept = [repo_root / "docs" / "features" / ("%s.md" % n) for n in ("beta", "alpha")]
+    assert len(kept) < len(_default_card_paths(repo_root))
+    stdout, stderr, status = _run_analyzer(script, repo_root, _card_args(kept), base)
+    assert status == 0, stderr.decode(errors="replace")
+    assert _feature_names(stdout) == ["alpha", "beta"]  # by file name, not the order given
+
+
+def _check_another_worktrees_copy_meets_its_own_spec_half(script, repo_root, base):
+    primary = repo_root / "docs" / "features" / "alpha.md"
+    other = base / "wt" / "feat-alpha" / "docs" / "features" / "alpha.md"
+    assert primary.is_file() and other.is_file() and primary != other
+    heading = "alpha.md and alpha.spec.md list different tasks:\n  in "
+    expected = {
+        other: heading + "alpha.md but missing from alpha.spec.md: 3",
+        primary: heading + "alpha.spec.md but missing from alpha.md: 9",
+    }
+    for copy, context in expected.items():
+        stdout, stderr, status = _run_analyzer(script, repo_root, _card_args([copy]), base)
+        assert status == 0, stderr.decode(errors="replace")
+        assert _feature_names(stdout) == ["alpha"]
+        halves = [q["ctx"] for q in json.loads(stdout)["questions"]
+                  if q["q"] == "Which half of `alpha` is right?"]
+        assert halves == [context], "for %s: %r" % (copy, halves)
+
+
+# ----------------------------------------------------------------------------------- E5 tests
+
+
+def test_e5_every_default_path_given_is_the_same_as_none(tmp_path, fixture_for):
+    repo_root, _ = fixture_for("worktrees_chain_cycle")
+    _check_every_default_path_is_the_same_as_none(NEW_ANALYZER, repo_root,
+                                                  tmp_path / "worktrees_chain_cycle")
+
+
+def test_e5_a_subset_gives_exactly_that_subset_by_file_name(tmp_path, fixture_for):
+    repo_root, _ = fixture_for("worktrees_chain_cycle")
+    _check_a_subset_is_exactly_that_subset(NEW_ANALYZER, repo_root,
+                                           tmp_path / "worktrees_chain_cycle")
+
+
+def test_e5_another_worktrees_copy_is_compared_with_its_own_spec_half(tmp_path, fixture_for):
+    repo_root, _ = fixture_for("other_worktree_copy")
+    _check_another_worktrees_copy_meets_its_own_spec_half(NEW_ANALYZER, repo_root,
+                                                          tmp_path / "other_worktree_copy")
+
+
+def test_e5_falsifier_stubs_that_refuse_or_ignore_the_option_fail_the_checks(
+        tmp_path, fixture_for):
+    chain, _ = fixture_for("worktrees_chain_cycle")
+    copies, _ = fixture_for("other_worktree_copy")
+    chain_base, copies_base = tmp_path / "worktrees_chain_cycle", tmp_path / "other_worktree_copy"
+    ignore, refuse = _stub(tmp_path / "stub", "ignore"), _stub(tmp_path / "stub", "refuse")
+    # An analyzer that drops --card satisfies "all default paths" (it reads them anyway) ...
+    _check_every_default_path_is_the_same_as_none(ignore, chain, chain_base)
+    # ... but not the two checks that need the option to select something.
+    with pytest.raises(AssertionError):
+        _check_a_subset_is_exactly_that_subset(ignore, chain, chain_base)
+    with pytest.raises(AssertionError):
+        _check_another_worktrees_copy_meets_its_own_spec_half(ignore, copies, copies_base)
+    # One that refuses fails all three.
+    with pytest.raises(AssertionError):
+        _check_every_default_path_is_the_same_as_none(refuse, chain, chain_base)
+    with pytest.raises(AssertionError):
+        _check_a_subset_is_exactly_that_subset(refuse, chain, chain_base)
+    with pytest.raises(AssertionError):
+        _check_another_worktrees_copy_meets_its_own_spec_half(refuse, copies, copies_base)
