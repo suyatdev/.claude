@@ -84,6 +84,7 @@ ALLOWED_IDS = frozenset(SEND_COMMANDS) | frozenset(LOCAL_COMMANDS)
 STATIC_MANIFEST = (
     "vendor-resources.js",
     "support.js",
+    "board-commands.js",
     "_ds/nocturne-73641b21-c7ad-488a-8264-a28262dfe83e/styles.css",
     "_ds/nocturne-73641b21-c7ad-488a-8264-a28262dfe83e/_ds_bundle.js",
     "tracker-data.js",

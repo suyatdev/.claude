@@ -106,6 +106,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TREKO_DIR = REPO_ROOT / "treko"
 HTML_PATH = TREKO_DIR / "Treko.dc.html"
+BOARD_COMMANDS_PATH = TREKO_DIR / "board-commands.js"
 NOCTURNE_PATH = TREKO_DIR / "nocturne.css"
 VENDOR_DIR = TREKO_DIR / "vendor"
 INTER_CSS_PATH = VENDOR_DIR / "inter" / "inter.css"
@@ -198,7 +199,7 @@ def test_criterion15_fence_region_byte_identical_to_base_commit():
 
     Does NOT prove the slice is *correct* — see the module docstring.
     """
-    current_bytes, current_digest = _fence_measurements(HTML_PATH.read_bytes())
+    current_bytes, current_digest = _fence_measurements(BOARD_COMMANDS_PATH.read_bytes())
     assert (current_bytes, current_digest) == (BASE_FENCE_BYTES, BASE_FENCE_SHA256), (
         "node-loadable fence (marker-inclusive) drifted from base commit %s: "
         "expected %d bytes / %s, got %d bytes / %s" % (
@@ -211,7 +212,7 @@ def test_criterion15_node_bridge_span_also_matches_base_commit_secondary():
     15 covers beyond the primary (inclusive) test above -- it is retained because it is the
     span the running system depends on, and a future change could in principle touch it while
     leaving the inclusive digest agreeing only by accident of where the marker lines fall."""
-    current_bytes, current_digest = _fence_measurements_node_bridge(HTML_PATH.read_bytes())
+    current_bytes, current_digest = _fence_measurements_node_bridge(BOARD_COMMANDS_PATH.read_bytes())
     assert (current_bytes, current_digest) == (
         BASE_FENCE_NODE_BRIDGE_BYTES, BASE_FENCE_NODE_BRIDGE_SHA256), (
         "node-loadable fence (NODE_BRIDGE span) drifted from base commit %s: "
@@ -254,7 +255,7 @@ def test_criterion15_falsifiers_are_caught(mutate, label):
     (inclusive) fence check must then disagree with the recorded base-commit measurement. A
     falsifier that silently no-ops, or a check that still agrees after mutation, means the
     guard cannot fail."""
-    base = HTML_PATH.read_bytes()
+    base = BOARD_COMMANDS_PATH.read_bytes()
     mutated = mutate(base)
     assert mutated != base, "falsifier %r produced no change to the bytes" % (label,)
     mutated_measurements = _fence_measurements(mutated)
@@ -283,7 +284,7 @@ def test_criterion15_marker_text_mutation_is_reported_honestly():
     a corrupted marker breaks detection for both equally, which is reported as observed
     rather than engineered into the anticipated asymmetric shape.
     """
-    base = HTML_PATH.read_bytes()
+    base = BOARD_COMMANDS_PATH.read_bytes()
     mutated = _rename_marker_word(base)
     assert mutated != base, "marker-word falsifier produced no change to the bytes"
 
@@ -334,7 +335,7 @@ def test_criterion16_command_ids_unchanged():
     """Criterion 16, first half. `TRACKER_COMMAND_IDS` is still exactly the three ids the card
     pins. Does not prove anything about what the ids render to on screen -- that is the
     second half, below."""
-    ids = extract_command_ids(HTML_PATH.read_text())
+    ids = extract_command_ids(BOARD_COMMANDS_PATH.read_text())
     assert ids == EXPECTED_COMMAND_IDS, (
         "TRACKER_COMMAND_IDS is %r, expected %r" % (ids, EXPECTED_COMMAND_IDS))
 
@@ -350,7 +351,7 @@ def test_criterion16_cmdButtons_and_cmdCopies_map_the_same_three_ids():
     Does NOT prove the rendered pixels are unchanged (no style/markup byte comparison here);
     only that the two render sites still draw from the one pinned array.
     """
-    text = HTML_PATH.read_text()
+    text = BOARD_COMMANDS_PATH.read_text() + HTML_PATH.read_text()
     assert CMD_BUTTONS_RE.search(text), (
         "cmdButtons no longer maps TRACKER_COMMAND_IDS the same way -- source snippet: %r"
         % (text[text.find("cmdButtons:"):text.find("cmdButtons:") + 80],))
@@ -381,7 +382,7 @@ ID_FALSIFIERS = [
 
 @pytest.mark.parametrize("mutate,label", ID_FALSIFIERS, ids=[l for _, l in ID_FALSIFIERS])
 def test_criterion16_falsifiers_are_caught(mutate, label):
-    text = HTML_PATH.read_text()
+    text = BOARD_COMMANDS_PATH.read_text()
     mutated = mutate(text)
     assert mutated != text, "falsifier %r produced no change" % (label,)
     ids = extract_command_ids(mutated)
@@ -424,7 +425,7 @@ def test_criterion16_cmdButtons_render_site_falsifiers_are_caught(mutate, label)
     array untouched, so `test_criterion16_falsifiers_are_caught` (which judges through the
     array alone) cannot see any of them. Asserting the ids are unchanged below is what pins
     that reason in place -- if it ever stops being true, this test belongs merged back."""
-    text = HTML_PATH.read_text()
+    text = BOARD_COMMANDS_PATH.read_text() + HTML_PATH.read_text()
     assert CMD_BUTTONS_RE.search(text), "precondition: the unmutated page must match"
     mutated = mutate(text)
     assert mutated != text, "falsifier %r produced no change" % (label,)
@@ -557,7 +558,7 @@ def test_criterion17_falsifiers_are_caught(mutate, label):
 
 # --- CSP and STATIC_MANIFEST, both named explicitly by criterion 17 -----------------------
 
-EXPECTED_MANIFEST_ROWS = 17
+EXPECTED_MANIFEST_ROWS = 18
 
 
 def _csp_has_self_default(csp_text):

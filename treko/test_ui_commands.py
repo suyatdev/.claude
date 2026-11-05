@@ -35,7 +35,7 @@ import server  # noqa: E402
 import server_harness as harness  # noqa: E402
 
 NODE = shutil.which("node")
-HTML = Path(__file__).resolve().parent / "Treko.dc.html"
+HTML = Path(__file__).resolve().parent / "board-commands.js"
 
 # Every row of §Design 3's "What the page does with a failure" table, by the outcome name
 # the handler is required to resolve it to. The mapping is the contract; `test_zz_...`
