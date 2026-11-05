@@ -356,6 +356,12 @@ code, its rows and its criterion (spec §2 default 3, §3.5, §9.2, criterion A9
 1c finds a config key that fires, or task 1d's judge asks for a spec change, the builder stops and
 brings it to him; the spec changes only with his OK.
 
+**D35 — Split 1 edits `treko/test_analyze_options.py`, once.** (user, 2026-11-05, asked during task 3)
+The spec said split 1 needs no test edit. That was wrong: E2's falsifier reads the `"docs" / "features"`
+literal from `analyze.py`, and the move put it in `cards.py`, so two falsifier tests failed. He chose to
+edit that one test (it now reads the literal from `cards.py` and writes a mutant `cards.py` beside the
+real `analyze.py`). Task 3 and Z3 are amended in the spec by a dated note; no other test changed.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**

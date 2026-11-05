@@ -4111,7 +4111,10 @@ session. Rules that hold for every task:
       clause (Z3 is owned by task 5).
       Files: `treko/analyze.py`, `treko/cards.py` (new).
       Owns: none.
-      §12 edits: none (Z3: "For splits 1 and 2 there are none").
+      §12 edits: none (Z3: "For splits 1 and 2 there are none"). **Amended 2026-11-05 (card D35):**
+      one edit after all — `treko/test_analyze_options.py`'s falsifier now reads the literal from
+      `cards.py` and writes a mutant `cards.py` beside the real `analyze.py`; `test_analyze.py`
+      stays unchanged.
       Proof: `SUITE treko/test_analyze.py treko/test_analyze_options.py` green with
       `test_analyze.py` unchanged and E2 passing; `SUITE treko`; `git show --stat HEAD` lists only
       those two files; `wc -l`: `cards.py` ≤ 200, `analyze.py` near §1.1's estimate of 682

@@ -26,6 +26,7 @@ import pytest
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent
 NEW_ANALYZER = HERE / "analyze.py"
+NEW_CARDS = HERE / "cards.py"  # where the default card path lives since split 1
 
 BASELINE_BLOB = "8b805d1f826cae5c22fdcb23de3a57e56049a734"
 RUNTIME_PYTHON = "/usr/bin/python3"
@@ -202,14 +203,15 @@ def _link_hooks(dest):
 
 
 def _materialize_mutant(dest):
-    """A copy of the working tree's analyzer with one byte of the default card path changed."""
-    source = NEW_ANALYZER.read_bytes()
+    """The working tree's analyzer beside a `cards.py` whose default card path has one byte changed."""
+    source = NEW_CARDS.read_bytes()
     old, new = DEFAULT_PATH_LITERAL.encode(), DEFAULT_PATH_MUTANT.encode()
     assert source.count(old) == 1, "the default card path is no longer spelled once as %r" % old
     assert len(new) == len(old) - 1, "the mutant must differ by exactly one byte"
     treko = dest / "treko"
     treko.mkdir(parents=True)
-    (treko / "analyze.py").write_bytes(source.replace(old, new))
+    (treko / "analyze.py").write_bytes(NEW_ANALYZER.read_bytes())
+    (treko / "cards.py").write_bytes(source.replace(old, new))
     _link_hooks(dest)
     return treko / "analyze.py"
 
