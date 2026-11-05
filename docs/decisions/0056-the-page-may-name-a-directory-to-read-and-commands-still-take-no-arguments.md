@@ -493,6 +493,271 @@ section 9 or the user's decision accepting the risk; a `not measured` row names 
 
 | Key | Verdict | Evidence: the quoted sentence, the probe, or the measurement | Setting or decision |
 |---|---|---|---|
+| `alias.*` | unreachable | A leading `!` makes an alias a shell command, but "aliases that hide existing Git commands are ignored"; every command the scan and the analyzer run (rev-parse, worktree, for-each-ref, rev-list, diff, log, status) is an existing git command. |  |
+| `am.keepcr` | does not name a program | "If true, git-am will call git-mailsplit for patches in mbox format with parameter --keep-cr." |  |
+| `am.threeWay` | does not name a program | "When set to true, this setting tells git am to fall back on 3-way merge" |  |
+| `attr.tree` | does not name a program | "A reference to a tree in the repository from which to read attributes" |  |
+| `blame.ignoreRevsFile` | does not name a program | "Ignore revisions listed in the file, one unabbreviated object name per line" |  |
+| `branch.<name>.rebase` | does not name a program | `"When true, rebase the branch <name> on top of the fetched branch"` |  |
+| `browser.<tool>.cmd` | unreachable | Names a program: "Specify the command to invoke the specified browser." The entry sends the reader to "(See git-web--browse(1).)", which is neither a scan command nor one of the analyzer's. |  |
+| `browser.<tool>.path` | unreachable | Names a program path, for commands the text names: "that may be used to browse HTML help (see -w option in git-help(1)) or a working repository in gitweb (see git-instaweb(1))". Neither git help -w nor git instaweb is run. |  |
+| `bundle.heuristic` | does not name a program | "The only value currently understood is creationToken." |  |
+| `checkout.defaultRemote` | does not name a program | "This setting allows for setting the name of a preferred remote that should always win when it comes to disambiguation." |  |
+| `checkout.thresholdForParallelism` | does not name a program | "This setting allows you to define the minimum number of files for which parallel checkout should be attempted." |  |
+| `checkout.workers` | does not name a program | "The number of parallel workers to use when updating the working tree." |  |
+| `clone.defaultRemoteName` | does not name a program | "The name of the remote to create when cloning a repository." |  |
+| `clone.rejectShallow` | does not name a program | "Reject cloning a repository if it is a shallow one" |  |
+| `color.diff` | does not name a program | "Whether to use ANSI escape sequences to add color to patches." |  |
+| `color.pager` | does not name a program | "A boolean to specify whether auto color modes should colorize output going to the pager." |  |
+| `color.ui` | does not name a program | "This variable determines the default value for variables such as color.diff and color.grep" |  |
+| `column.ui` | does not name a program | "Specify whether supported commands should output in columns." |  |
+| `commit.status` | does not name a program | "A boolean to enable/disable inclusion of status information in the commit message template" |  |
+| `completion.commands` | does not name a program | "This is only used by git-completion.bash to add or remove commands from the list of completed commands." |  |
+| `core.alternateRefsCommand` | to measure | Names a program: "When advertising tips of available history from an alternate, use the shell to execute the specified command". The text names no command that reads it, and a fetch advertises and reads alternates; the analyzer's diff and log can start a lazy fetch (probes 21-26). |  |
+| `core.askPass` | to measure | Names a program: "Some commands (e.g. svn and http interfaces) that interactively ask for a password can be told to use an external program given via the value of this variable." An http fetch is one the analyzer's diff and log can start by lazy fetch (probes 21-26). |  |
+| `core.bare` | does not name a program | "If true this repository is assumed to be bare and has no working directory associated with it." |  |
+| `core.bigFileThreshold` | does not name a program | "The size of files considered "big"" |  |
+| `core.commentChar` | does not name a program | "consider a line that begins with this character commented" |  |
+| `core.commentString` | does not name a program | "consider a line that begins with this character commented" |  |
+| `core.editor` | unreachable | Names a program, for commands the text names: "Commands such as commit and tag that let you edit messages by launching an editor use the value of this variable". Neither commit nor tag is run. |  |
+| `core.fileMode` | does not name a program | "Tells Git if the executable bit of files in the working tree is to be honored." |  |
+| `core.fsmonitor` | fires | Probes 1-7: "Otherwise, this variable contains the pathname of the "fsmonitor" hook command." Baseline probe 1: a plain `git status --porcelain` ran the script; probe 2: with the pair it did not (probes 6 and 14 agree). | `core.fsmonitor` set to `false` (section 9) |
+| `core.fsmonitorHookVersion` | does not name a program | "Sets the protocol version to be used when invoking the "fsmonitor" hook." A version number; the program itself is `core.fsmonitor`'s (probes 1-7). |  |
+| `core.fsync` | does not name a program | "A comma-separated list of components of the repository that should be hardened via the core.fsyncMethod" |  |
+| `core.gitProxy` | to measure | Names a program: "A "proxy command" to execute (as command host port) instead of establishing direct connection to the remote server when using the Git protocol for fetching." A fetch is one the analyzer's diff and log can start by lazy fetch (probes 21-26). |  |
+| `core.hooksPath` | fires | Probes 8-14: "Set this to different path, e.g. /etc/git/hooks, and Git will try to find your hooks in that directory". Baseline probe 8: the hook ran and the index was rewritten; probe 10 (the pair alone): the hook did not run, the index was rewritten; probe 9 (`GIT_OPTIONAL_LOCKS=0` alone) and probes 11 and 14 (both): neither. | `core.hooksPath` set to `/dev/null`, with `GIT_OPTIONAL_LOCKS` (section 9) |
+| `core.pager` | to measure | Names a program: "The value is meant to be interpreted by the shell." The text names no command; the neighbouring `pager.<cmd>` entry says pagination happens "when writing to a tty" (the `pager.<cmd>` entry), and the scan's and the analyzer's output goes to a pipe, so the trigger is a terminal. |  |
+| `core.preferSymlinkRefs` | does not name a program | "Instead of the default "symref" format for HEAD and other symbolic reference files, use symbolic links." |  |
+| `core.quotePath` | does not name a program | "will quote "unusual" characters in the pathname" |  |
+| `core.restrictinheritedhandles` | does not name a program | "Windows-only: override whether spawned processes inherit only standard file handles" |  |
+| `core.safecrlf` | does not name a program | "If true, makes Git check if converting CRLF is reversible when end-of-line conversion is active." |  |
+| `core.sshCommand` | to measure | Names a program: "git fetch and git push will use the specified command instead of ssh when they need to connect to a remote system." A fetch is one the analyzer's diff and log can start by lazy fetch (probes 21-26). |  |
+| `core.unsetenvvars` | does not name a program | "Windows-only: comma-separated list of environment variables" |  |
+| `core.useReplaceRefs` | does not name a program | "If set to false, behave as if the --no-replace-objects option was given on the command line." |  |
+| `core.worktree` | does not name a program | "Set the path to the root of the working tree." |  |
+| `credential.helper` | to measure | Names a program: "Specify an external helper to be called when a username or password credential is needed". The text names no command; a credential is needed on a network fetch, which the analyzer's diff and log can start by lazy fetch (probes 21-26). |  |
+| `credential.interactive` | does not name a program | "To avoid the possibility of user interactivity from Git, set credential.interactive=false." |  |
+| `credential.protectProtocol` | does not name a program | "By default, Carriage Return characters are not allowed in the protocol that is used when Git talks to a credential helper." |  |
+| `diff.<driver>.algorithm` | does not name a program | gitattributes(5): `"Then, define a "diff.<name>.algorithm" configuration to specify the diff algorithm, choosing from myers, patience, minimal, or histogram."` |  |
+| `diff.<driver>.binary` | does not name a program | "Set this option to true to make the diff driver treat files as binary." |  |
+| `diff.<driver>.cachetextconv` | does not name a program | "Set this option to true to make the diff driver cache the text conversion outputs." A boolean about the output of `diff.<driver>.textconv` (probes 29 and 30); it names no program. |  |
+| `diff.<driver>.command` | to measure | Names a program: "The custom diff driver command." `"If diff.<name>.command is defined for path with the diff=<name> attribute, it is executed as an external diff driver"` (gitattributes(5)). Probes 27 and 28 measured `diff.external`, and 29 and 30 `diff.<driver>.textconv`; none set this key. |  |
+| `diff.<driver>.textconv` | does not fire | Probes 29-30: "The command that the diff driver should call to generate the text-converted version of a file." Baseline probe 29: `.gitattributes` `diff=x` and `diff.x.textconv` a marker script, plain `git diff main...feat` ran it; probe 30: the analyzer's form `git diff --shortstat main...feat` under the round-2 settings did not. |  |
+| `diff.<driver>.trustExitCode` | does not name a program | `"If this boolean value is set to true then the diff.<driver>.command command is expected to return exit code 0 if it considers the input files to be equal"` A boolean about an exit code; the program is `diff.<driver>.command`'s. |  |
+| `diff.<driver>.wordRegex` | does not name a program | "The regular expression that the diff driver should use to split words in a line." |  |
+| `diff.<driver>.xfuncname` | does not name a program | "The regular expression that the diff driver should use to recognize the hunk header." |  |
+| `diff.autoRefreshIndex` | does not name a program | "When using git diff to compare with work tree files, do not consider stat-only changes as changed." |  |
+| `diff.dirstat` | does not name a program | "A comma separated list of --dirstat parameters" |  |
+| `diff.external` | does not fire | Probes 27-28: "If this config variable is set, diff generation is not performed using the internal diff machinery, but using the given command." Baseline probe 27: a plain `git diff main...feat` ran the script; probe 28: the analyzer's form `git diff --shortstat main...feat` under the round-2 settings did not. |  |
+| `diff.guitool` | unreachable | Names a program through `difftool.<guitool>.cmd`, for the command the text names: "Controls which diff tool is used by git-difftool(1) when the -g/--gui flag is specified." git difftool is not run. |  |
+| `diff.ignoreSubmodules` | does not name a program | "Sets the default value of --ignore-submodules." |  |
+| `diff.interHunkContext` | does not name a program | "Show the context between diff hunks, up to the specified number of lines" |  |
+| `diff.renames` | does not name a program | "Whether and how Git detects renames." |  |
+| `diff.statGraphWidth` | does not name a program | "Limit the width of the graph part in --stat output." |  |
+| `diff.statNameWidth` | does not name a program | "Limit the width of the filename part in --stat output." |  |
+| `diff.tool` | unreachable | Names a program through `difftool.<tool>.cmd`, for the command the text names: "Controls which diff tool is used by git-difftool(1)." git difftool is not run. |  |
+| `diff.trustExitCode` | does not name a program | "If this boolean value is set to true then the diff.external command is expected to return exit code 0 if it considers the input files to be equal" A boolean about an exit code; the program is `diff.external`'s (probes 27 and 28). |  |
+| `diff.wsErrorHighlight` | does not name a program | "Highlight whitespace errors in the context, old or new lines of the diff." |  |
+| `difftool.<tool>.cmd` | unreachable | Names a program, for the command the text names: "Specify the command to invoke the specified diff tool." `"See the --tool=<tool> option in git-difftool(1) for more details."` git difftool is not run. |  |
+| `difftool.<tool>.path` | unreachable | Names a program path but no command: "Override the path for the given tool." It overrides the tool that `difftool.<tool>.cmd` runs, whose entry names git-difftool(1); git difftool is not run. Judged from that pairing, not from a command this entry names. |  |
+| `difftool.guiDefault` | does not name a program | "Set true to use the diff.guitool by default (equivalent to specifying the --gui argument)" |  |
+| `difftool.prompt` | does not name a program | "Prompt before each invocation of the diff tool." |  |
+| `difftool.trustExitCode` | does not name a program | "Exit difftool if the invoked diff tool returns a non-zero exit status." |  |
+| `feature.manyFiles` | does not name a program | "Enable config options that optimize for repos with many files in the working directory." |  |
+| `fetch.parallel` | does not name a program | "Specifies the maximal number of fetch operations to be run in parallel at a time" |  |
+| `fetch.prune` | does not name a program | "If true, fetch will automatically behave as if the --prune option was given on the command line." |  |
+| `fetch.showForcedUpdates` | does not name a program | "Set to false to enable --no-show-forced-updates in git-fetch(1) and git-pull(1) commands." |  |
+| `fetch.writeCommitGraph` | does not name a program | "Set to true to write a commit-graph after every git fetch command that downloads a pack-file from a remote." |  |
+| `filter.<driver>.clean` | fires | Probes 31-32: "The command which is used to convert the content of a worktree file to a blob upon checkin." Probe 31: `filter.x.clean` a marker script, `.gitattributes` `filter=x`, a stat-dirty tracked file, `git status --porcelain` with all settings: ran, so no setting in section 9 stops a filter. Probe 32 (not adopted): emptying `.clean`, `.smudge` and `.process` and setting `.required=false` stopped it. | the user's accepted risk, decision D20 (section 11) |
+| `filter.<driver>.process` | to measure | Names a program, gitattributes(5): `"If the filter command (a string value) is defined via filter.<driver>.process then Git can process all blobs with a single filter invocation for the entire life of a single Git command."` No numbered probe ran it as the only driver key (probe 32 emptied it together with `.clean` and `.smudge`); section 11 reports a working `.process` driver running once, in prose. If it fires it falls under the accepted filter risk, decision D20, which the user must confirm for this key. |  |
+| `filter.<driver>.required` | does not name a program | gitattributes(5): `"You can declare that a filter turns a content that by itself is unusable into a usable content by setting the filter.<driver>.required configuration variable to true."` |  |
+| `filter.<driver>.smudge` | to measure | Names a program: "The command which is used to convert the content of a blob object to a worktree file upon checkout." Probe 31 ran `.clean`, not `.smudge`, and probe 32 emptied it together with the others, so no probe showed `.smudge` alone; the text names checkout, which neither the scan nor the analyzer runs. |  |
+| `format.coverLetter` | does not name a program | "A boolean that controls whether to generate a cover-letter when format-patch is invoked" |  |
+| `format.filenameMaxLength` | does not name a program | "The maximum length of the output filenames generated by the format-patch command" |  |
+| `format.pretty` | does not name a program | "The default pretty format for log/show/whatchanged command." |  |
+| `fsck.skipList` | does not name a program | "The path to a list of object names (i.e. one unabbreviated SHA-1 per line)" |  |
+| `fsmonitor.socketDir` | does not name a program | "specifies the directory in which to create the Unix domain socket used for communication between the fsmonitor daemon and various Git commands" "Only respected when core.fsmonitor is set to true." |  |
+| `gc.auto` | does not name a program | "When there are approximately more than this many loose objects in the repository, git gc --auto will pack them." |  |
+| `gc.autoDetach` | does not name a program | "Make git gc --auto return immediately and run in the background if the system supports it." |  |
+| `gc.bigPackThreshold` | does not name a program | "If non-zero, all non-cruft packs larger than this limit are kept when git gc is run." |  |
+| `gc.logExpiry` | does not name a program | "unless that file is more than gc.logExpiry old." |  |
+| `gc.maxCruftSize` | does not name a program | "Limit the size of new cruft packs when repacking." |  |
+| `gc.packRefs` | does not name a program | "This variable determines whether git gc runs git pack-refs." |  |
+| `gc.pruneExpire` | does not name a program | "Override the grace period with this config variable." |  |
+| `gc.recentObjectsHook` | unreachable | Names a program: "When considering whether or not to remove an object (either when generating a cruft pack or storing unreachable objects as loose), use the shell to execute the specified command(s)." Only gc and repack remove objects or write cruft packs; neither is run, and the scan and the analyzer write no objects. |  |
+| `gc.rerereResolved` | does not name a program | "Records of conflicted merge you resolved earlier are kept for this many days when git rerere gc is run." |  |
+| `gc.rerereUnresolved` | does not name a program | "Records of conflicted merge you have not resolved are kept for this many days when git rerere gc is run." |  |
+| `gc.worktreePruneExpire` | does not name a program | "This config variable can be used to set a different grace period." |  |
+| `gc.writeCommitGraph` | does not name a program | "If true, then gc will rewrite the commit-graph file when git-gc(1) is run." |  |
+| `gitcvs.dbDriver` | unreachable | Names a Perl module, for the command the text names: "Used Perl DBI driver." "See git-cvsserver(1)." git cvsserver is not run. |  |
+| `gitcvs.dbName` | does not name a program | "Database used by git-cvsserver to cache revision information derived from the Git repository." |  |
+| `gpg.<format>.program` | to measure | Names a program: "Use this to customize the program used for the signing format you chose." "The default value for gpg.x509.program is "gpgsm" and gpg.ssh.program is "ssh-keygen"." Probes 17-20 measured `gpg.program`, which this entry calls a legacy synonym for `gpg.openpgp.program`; the `x509` and `ssh` formats were not measured. A signed branch tip is the trigger, as in probe 17. |  |
+| `gpg.program` | fires | Probes 17-20, with `log.showSignature`, which only switches the program on and is judged here: "Pathname of the program to use instead of "gpg" when making or verifying a PGP signature." Baseline probe 17: a tip with a `gpgsig` header, `log.showSignature=true`, `gpg.program` a marker script, plain `git log -1 --format=%cr feat` ran it once; probe 18: the analyzer under the round-2 settings ran it twice; probe 19: all settings, did not run; probe 20: all settings except the `log.showSignature` pair, ran twice. | `log.showSignature` set to `false` (section 9) |
+| `gpg.ssh.defaultKeyCommand` | to measure | Names a program: "This command will be run when user.signingkey is not set and a ssh signature is requested." The text names no command that reads it, so it is not placed outside the scan's and the analyzer's. |  |
+| `grep.fallbackToNoIndex` | does not name a program | "If set to true, fall back to git grep --no-index if git grep is executed outside of a git repository." |  |
+| `gui.blamehistoryctx` | does not name a program | "Specifies the radius of history context in days to show in gitk(1) for the selected commit" |  |
+| `gui.encoding` | does not name a program | "Specifies the default character encoding to use for displaying of file contents in git-gui(1) and gitk(1)." |  |
+| `guitool.<name>.argPrompt` | does not name a program | "Request a string argument from the user, and pass it to the tool through the ARGS environment variable." |  |
+| `guitool.<name>.cmd` | unreachable | Names a program, for the command the text names: "Specifies the shell command line to execute when the corresponding item of the git-gui(1) Tools menu is invoked." git gui is not run. |  |
+| `guitool.<name>.confirm` | does not name a program | "Show a confirmation dialog before actually running the tool." |  |
+| `guitool.<name>.needsFile` | does not name a program | "Run the tool only if a diff is selected in the GUI." |  |
+| `guitool.<name>.noConsole` | does not name a program | "Run the command silently, without creating a window to display its output." |  |
+| `guitool.<name>.noRescan` | does not name a program | "rescan the working directory for changes after the tool finishes execution." |  |
+| `guitool.<name>.prompt` | does not name a program | "Specifies the general prompt string to display at the top of the dialog" |  |
+| `guitool.<name>.revUnmerged` | does not name a program | "Show only unmerged branches in the revPrompt subdialog." |  |
+| `guitool.<name>.title` | does not name a program | "Specifies the title to use for the prompt dialog." |  |
+| `help.autoCorrect` | does not name a program | "If git detects typos and can identify exactly one valid command similar to the error, git will try to suggest the correct command or even run the suggestion automatically." The value is a number or a word, and the command run is a git command, not one the value names. |  |
+| `http.<url>.*` | does not name a program | `"Any of the http.* options above can be applied selectively to some URLs."` |  |
+| `http.minSessions` | does not name a program | "The number of curl sessions (counted across slots) to be kept across requests." |  |
+| `http.noEPSV` | does not name a program | "A boolean which disables using of EPSV ftp command by curl." |  |
+| `http.proactiveAuth` | does not name a program | "Attempt authentication without first making an unauthenticated attempt and receiving a 401 response." |  |
+| `http.schannelCheckRevoke` | does not name a program | "Used to enforce or disable certificate revocation checks in cURL when http.sslBackend is set to "schannel"." |  |
+| `http.sslBackend` | does not name a program | "Name of the SSL backend to use (e.g. "openssl" or "schannel")." |  |
+| `i18n.logOutputEncoding` | does not name a program | "Character encoding the commit messages are converted to when running git log and friends." |  |
+| `imap.authMethod` | does not name a program | "Specify the authentication method for authenticating with the IMAP server." |  |
+| `imap.tunnel` | unreachable | Names a program but no command: "Command used to set up a tunnel to the IMAP server". An IMAP server is only reached by the command the sibling entry names, "If this is not set then git imap-send uses the basic IMAP plaintext LOGIN command." (the `imap.authMethod` entry) git imap-send is not run. Judged from that pairing, not from a command this entry names. |  |
+| `index.skipHash` | does not name a program | "When enabled, do not compute the trailing hash for the index file." |  |
+| `index.threads` | does not name a program | "Specifies the number of threads to spawn when loading the index." |  |
+| `init.defaultObjectFormat` | does not name a program | "Allows overriding the default object format for new repositories." |  |
+| `init.defaultRefFormat` | does not name a program | "Allows overriding the default ref storage format for new repositories." |  |
+| `instaweb.browser` | unreachable | Names a program, for the command the text names: "Specify the program that will be used to browse your working repository in gitweb. See git-instaweb(1)." git instaweb is not run. |  |
+| `instaweb.httpd` | unreachable | Names a program, for the command the text names: "The HTTP daemon command-line to start gitweb on your working repository. See git-instaweb(1)." git instaweb is not run. |  |
+| `interactive.diffFilter` | unreachable | Names a program, for the commands the text names: "When an interactive command (such as git add --patch) shows a colorized diff, git will pipe the diff through the shell command defined by this configuration variable." No interactive command is run. |  |
+| `interactive.singleKey` | does not name a program | "When set to true, allow the user to provide one-letter input with a single key" |  |
+| `log.date` | does not name a program | "Set the default date-time mode for the log command." |  |
+| `log.decorate` | does not name a program | "Print out the ref names of any commits that are shown by the log command." |  |
+| `log.excludeDecoration` | does not name a program | "Exclude the specified patterns from the log decorations." |  |
+| `log.showRoot` | does not name a program | "If true, the initial commit will be shown as a big creation event." |  |
+| `mailinfo.scissors` | does not name a program | "If true, makes git-mailinfo(1) (and therefore git-am(1)) act by default as if the --scissors option was provided on the command-line." |  |
+| `maintenance.<task>.enabled` | does not name a program | `"This boolean config option controls whether the maintenance task with name <task> is run when no --task option is specified to git maintenance run."` |  |
+| `maintenance.<task>.schedule` | does not name a program | "The value must be one of "hourly", "daily", or "weekly"." |  |
+| `maintenance.auto` | does not name a program | "This boolean config option controls whether some commands run git maintenance run --auto after doing their normal work." |  |
+| `maintenance.autoDetach` | does not name a program | "This boolean config option controls whether this automatic maintenance shall happen in the foreground or whether the maintenance process shall detach and continue to run in the background." |  |
+| `maintenance.commit-graph.auto` | does not name a program | "This integer config option controls how often the commit-graph task should be run as part of git maintenance run --auto." |  |
+| `maintenance.incremental-repack.auto` | does not name a program | "This integer config option controls how often the incremental-repack task should be run as part of git maintenance run --auto." |  |
+| `maintenance.loose-objects.auto` | does not name a program | "This integer config option controls how often the loose-objects task should be run as part of git maintenance run --auto." |  |
+| `maintenance.reflog-expire.auto` | does not name a program | "This integer config option controls how often the reflog-expire task should be run as part of git maintenance run --auto." |  |
+| `maintenance.rerere-gc.auto` | does not name a program | "This integer config option controls how often the rerere-gc task should be run as part of git maintenance run --auto." |  |
+| `maintenance.strategy` | does not name a program | "This string config option provides a way to specify one of a few recommended schedules for background maintenance." |  |
+| `maintenance.worktree-prune.auto` | does not name a program | "This integer config option controls how often the worktree-prune task should be run as part of git maintenance run --auto." |  |
+| `man.<tool>.cmd` | unreachable | Names a program, for the command the text names: "Specify the command to invoke the specified man viewer." "(See git-help(1).)" git help is not run. |  |
+| `man.<tool>.path` | unreachable | Names a program path, for the command the text names: "Override the path for the given tool that may be used to display help in the man format. See git-help(1)." git help is not run. |  |
+| `man.viewer` | unreachable | Names programs, for the command the text names: "Specify the programs that may be used to display help in the man format. See git-help(1)." git help is not run. |  |
+| `merge.<driver>.driver` | unreachable | Names a program but no command: "Defines the command that implements a custom low-level merge driver. See gitattributes(5) for details." A merge driver runs when git merges; none of the scan's or the analyzer's commands merges (the analyzer's `diff A...B` reads a merge base only). Judged from the command list, not from a sentence naming a command. |  |
+| `merge.<driver>.name` | does not name a program | "Defines a human-readable name for a custom low-level merge driver." |  |
+| `merge.<driver>.recursive` | unreachable | Only names another driver, so it is judged with `merge.<driver>.driver` (see that row): "Names a low-level merge driver to be used when performing an internal merge between common ancestors." |  |
+| `merge.autoStash` | does not name a program | "When set to true, automatically create a temporary stash entry before the operation begins, and apply it after the operation ends." |  |
+| `merge.ff` | does not name a program | "When set to only, only such fast-forward merges are allowed" |  |
+| `merge.guitool` | unreachable | Names a program through `mergetool.<guitool>.cmd`, for the command the text names: "Controls which merge tool is used by git-mergetool(1) when the -g/--gui flag is specified." git mergetool is not run. |  |
+| `merge.tool` | unreachable | Names a program through `mergetool.<tool>.cmd`, for the command the text names: "Controls which merge tool is used by git-mergetool(1)." git mergetool is not run. |  |
+| `merge.verifySignatures` | unreachable | Only switches on signature checking, whose program is `gpg.program`'s (see that row), for the command the text names: "If true, this is equivalent to the --verify-signatures command line option. See git-merge(1) for details." git merge is not run. |  |
+| `mergetool.<tool>.cmd` | unreachable | Names a program but no command: "Specify the command to invoke the specified merge tool." The sibling entry names the command: "Controls which merge tool is used by git-mergetool(1)." (the `merge.tool` entry) git mergetool is not run. Judged from that pairing, not from a command this entry names. |  |
+| `mergetool.<tool>.hideResolved` | does not name a program | "Allows the user to override the global mergetool.hideResolved value for a specific tool." |  |
+| `mergetool.<tool>.path` | unreachable | Names a program path but no command: "Override the path for the given tool. This is useful in case your tool is not in the $PATH." It overrides the tool that `mergetool.<tool>.cmd` runs, whose sibling entry names git-mergetool(1); git mergetool is not run. Judged from that pairing, not from a command this entry names. |  |
+| `mergetool.<tool>.trustExitCode` | does not name a program | "specify whether the exit code of the merge command can be used to determine whether the merge was successful." |  |
+| `mergetool.<variant>.layout` | does not name a program | "which is any of vimdiff, nvimdiff, gvimdiff." |  |
+| `mergetool.guiDefault` | does not name a program | "Set true to use the merge.guitool by default (equivalent to specifying the --gui argument)" |  |
+| `mergetool.hideResolved` | does not name a program | "This flag causes $LOCAL and $REMOTE to be overwritten so that only the unresolved conflicts are presented to the merge tool." |  |
+| `mergetool.keepTemporaries` | does not name a program | "If the tool returns an error and this variable is set to true, then these temporary files will be preserved" |  |
+| `mergetool.prompt` | does not name a program | "Prompt before each invocation of the merge resolution program." |  |
+| `notes.displayRef` | does not name a program | "Which ref (or refs, if a glob or specified more than once), in addition to the default set by core.notesRef or GIT_NOTES_REF, to read notes from" |  |
+| `notes.rewrite.<command>` | does not name a program | "if this variable is false, git will not copy notes from the original to the rewritten commit." |  |
+| `notes.rewriteMode` | does not name a program | "Must be one of overwrite, concatenate, cat_sort_uniq, or ignore." |  |
+| `notes.rewriteRef` | does not name a program | "specifies the (fully qualified) ref whose notes should be copied." |  |
+| `pack.depth` | does not name a program | "The maximum delta depth used by git-pack-objects(1)" |  |
+| `pack.packSizeLimit` | does not name a program | "The maximum size of a pack." |  |
+| `pack.threads` | does not name a program | "Specifies the number of threads to spawn when searching for best delta matches." |  |
+| `pack.window` | does not name a program | "The size of the window used by git-pack-objects(1)" |  |
+| `pack.windowMemory` | does not name a program | "The maximum size of memory that is consumed by each thread in git-pack-objects(1) for pack window memory" |  |
+| `pager.<cmd>` | to measure | Names a program: `"Otherwise, turns on pagination for the subcommand using the pager specified by the value of pager.<cmd>."` The text limits it to "when writing to a tty", and the scan's and the analyzer's output goes to a pipe, so the trigger is a terminal; judged together with `core.pager`. |  |
+| `pretty.<name>` | does not name a program | "Alias for a --pretty= format string, as specified in git-log(1)." |  |
+| `protocol.<name>.allow` | does not name a program | `"Set a policy to be used by protocol <name> with clone/fetch/push commands."` |  |
+| `protocol.allow` | does not name a program | "If set, provide a user defined default policy for all protocols" |  |
+| `pull.ff` | does not name a program | "This setting overrides merge.ff when pulling." |  |
+| `pull.rebase` | does not name a program | "When true, rebase branches on top of the fetched branch" |  |
+| `push.default` | does not name a program | "Defines the action git push should take if no refspec is given" |  |
+| `push.gpgSign` | unreachable | Only switches on signing, whose program is `gpg.program`'s (see that row), for the command the text names: "A true value causes all pushes to be GPG signed, as if --signed is passed to git-push(1)." git push is not run. |  |
+| `push.pushOption` | does not name a program | `"When no --push-option=<option> argument is given from the command line, git push behaves as if each <value> of this variable is given as --push-option=<value>."` |  |
+| `push.useForceIfIncludes` | does not name a program | "If set to "true", it is equivalent to specifying --force-if-includes as an option to git-push(1) in the command line." |  |
+| `rebase.abbreviateCommands` | does not name a program | "If set to true, git rebase will use abbreviated command names in the todo list" |  |
+| `rebase.autoStash` | does not name a program | "When set to true, automatically create a temporary stash entry before the operation begins, and apply it after the operation ends." |  |
+| `rebase.missingCommitsCheck` | does not name a program | "If set to "warn", git rebase -i will print a warning if some commits are removed" |  |
+| `rebase.rebaseMerges` | does not name a program | "Whether and how to set the --rebase-merges option by default." |  |
+| `rebase.rescheduleFailedExec` | does not name a program | "Automatically reschedule exec commands that failed." |  |
+| `receive.autogc` | does not name a program | "By default, git-receive-pack will run "git maintenance run --auto" after receiving data from git-push and updating refs." |  |
+| `receive.certNonceSlop` | does not name a program | "When a git push --signed sends a push certificate with a "nonce" that was issued by a receive-pack serving the same repository within this many seconds" |  |
+| `receive.denyCurrentBranch` | does not name a program | "If set to true or "refuse", git-receive-pack will deny a ref update to the currently checked out branch of a non-bare repository." |  |
+| `receive.procReceiveRefs` | unreachable | Names reference prefixes, and through them a hook, for the command the text names: "This is a multi-valued variable that defines reference prefixes to match the commands in receive-pack." "Commands matching the prefixes will be executed by an external hook "proc-receive"" git receive-pack is not run. |  |
+| `receive.updateServerInfo` | does not name a program | "If set to true, git-receive-pack will run git-update-server-info after receiving data from git-push and updating refs." |  |
+| `remote.<name>.mirror` | does not name a program | "If true, pushing to this remote will automatically behave as if the --mirror option was given on the command line." |  |
+| `remote.<name>.prune` | does not name a program | "When set to true, fetching from this remote by default will also remove any remote-tracking references that no longer exist on the remote" |  |
+| `remote.<name>.receivepack` | unreachable | Names a program, for the command the text names: "The default program to execute on the remote side when pushing. See option --receive-pack of git-push(1)." git push is not run. |  |
+| `remote.<name>.serverOption` | does not name a program | "The default set of server options used when fetching from this remote." |  |
+| `remote.<name>.uploadpack` | fires | Probes 21-26: "The default program to execute on the remote side when fetching. See option --upload-pack of git-fetch-pack(1)." Baseline probe 21: a `--filter=blob:none` clone, a local `feat` with missing blobs, plain `git diff --shortstat main...feat`: the marker ran, exit 128; probe 22: the analyzer under the round-2 settings, ran; probe 23: all settings, did not run; probe 24: all settings except `GIT_NO_LAZY_FETCH`, ran. | `GIT_NO_LAZY_FETCH` set to `1` (section 9) |
+| `remote.<name>.vcs` | to measure | Names a program through the value: `"Setting this to a value <vcs> will cause Git to interact with the remote with the git-remote-<vcs> helper."` The text names no command; interacting with a remote is a fetch, which the analyzer's diff and log can start by lazy fetch (probes 21-26). |  |
+| `repack.cruftDepth` | does not name a program | "Parameters used by git-pack-objects(1) when generating a cruft pack and the respective parameters are not given over the command line." |  |
+| `repack.cruftThreads` | does not name a program | "Parameters used by git-pack-objects(1) when generating a cruft pack and the respective parameters are not given over the command line." |  |
+| `repack.cruftWindow` | does not name a program | "Parameters used by git-pack-objects(1) when generating a cruft pack and the respective parameters are not given over the command line." |  |
+| `repack.cruftWindowMemory` | does not name a program | "Parameters used by git-pack-objects(1) when generating a cruft pack and the respective parameters are not given over the command line." |  |
+| `repack.updateServerInfo` | does not name a program | "If set to false, git-repack(1) will not run git-update-server-info(1)." |  |
+| `repack.writeBitmaps` | does not name a program | "When true, git will write a bitmap index when packing all objects to disk" |  |
+| `safe.bareRepository` | does not name a program | "Specifies which bare repositories Git will work with." |  |
+| `safe.directory` | does not name a program | "These config entries specify Git-tracked directories that are considered safe even if they are owned by someone other than the current user." |  |
+| `sendemail.<identity>.*` | unreachable | Names no command itself: `"Identity-specific versions of the sendemail.* parameters found below"`. The parameters' entries say "These configuration variables all provide a default for git-send-email(1) command-line options." (the `sendemail.annotate` entry) git send-email is not run. |  |
+| `sendemail.aliasFileType` | does not name a program | "Format of the file(s) specified in sendemail.aliasesFile. Must be one of mutt, mailrc, pine, elm, gnus, or sendmail." |  |
+| `sendemail.annotate` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.bcc` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.cc` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.ccCmd` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.chainReplyTo` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.envelopeSender` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.from` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.headerCmd` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.multiEdit` | does not name a program | "If true (default), a single editor instance will be spawned to edit files you have to edit" |  |
+| `sendemail.signedOffByCc` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.smtpDomain` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.smtpPass` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.smtpServer` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.smtpServerOption` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.smtpServerPort` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.smtpUser` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.suppressCc` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.suppressFrom` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.thread` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.to` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.toCmd` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.transferEncoding` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.validate` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sendemail.xmailer` | unreachable | Names no command itself; its text is "These configuration variables all provide a default for git-send-email(1) command-line options." Only git send-email reads it, and it is not run. |  |
+| `sequence.editor` | unreachable | Names a program, for the command the text names: "Text editor used by git rebase -i for editing the rebase instruction file." git rebase is not run. |  |
+| `ssh.variant` | does not name a program | "The config variable ssh.variant can be set to override this detection. Valid values are ssh (to use OpenSSH options), plink, putty, tortoiseplink, simple" A variant name; the ssh command itself is `core.sshCommand`'s (see that row). |  |
+| `stash.showIncludeUntracked` | does not name a program | "If this is set to true, the git stash show command will show the untracked files of a stash entry." |  |
+| `stash.showPatch` | does not name a program | "If this is set to true, the git stash show command without an option will show the stash entry in patch form." |  |
+| `stash.showStat` | does not name a program | "If this is set to true, the git stash show command without an option will show a diffstat of the stash entry." |  |
+| `status.showUntrackedFiles` | does not name a program | "So, this variable controls how the commands display the untracked files." |  |
+| `status.submoduleSummary` | does not name a program | "If this is set to a non-zero number or true (identical to -1 or an unlimited number), the submodule summary will be enabled" |  |
+| `submodule.<name>.active` | does not name a program | "Boolean value indicating if the submodule is of interest to git commands." |  |
+| `submodule.<name>.fetchRecurseSubmodules` | does not name a program | "This option can be used to control recursive fetching of this submodule." |  |
+| `submodule.<name>.ignore` | does not name a program | "Defines under what circumstances "git status" and the diff family show a submodule as modified." |  |
+| `submodule.<name>.update` | unreachable | Names a method, for the command the text names: "The method by which a submodule is updated by git submodule update, which is the only affected command". git submodule update is not run. |  |
+| `submodule.<name>.url` | does not name a program | "The URL for a submodule." |  |
+| `submodule.active` | does not name a program | "A repeated field which contains a pathspec" |  |
+| `submodule.propagateBranches` | does not name a program | "A boolean that enables branching support when using --recurse-submodules or submodule.recurse=true." |  |
+| `submodule.recurse` | does not name a program | "A boolean indicating if commands should enable the --recurse-submodules option by default." |  |
+| `tag.forceSignAnnotated` | unreachable | Only switches on signing, whose program is `gpg.program`'s (see that row), for the operation the text names: "A boolean to specify whether annotated tags created should be GPG signed." Creating a tag is not something the scan or the analyzer does. |  |
+| `tag.gpgSign` | unreachable | Only switches on signing, whose program is `gpg.program`'s (see that row), for the operation the text names: "A boolean to specify whether all tags should be GPG signed." Creating a tag is not something the scan or the analyzer does. |  |
+| `trailer.<keyAlias>.cmd` | unreachable | Names a program, for the command the text names: `"This option can be used to specify a shell command that will be called once to automatically add a trailer with the specified <keyAlias>"` "at the beginning of the "git interpret-trailers" command" git interpret-trailers is not run. |  |
+| `trailer.<keyAlias>.command` | unreachable | Names a program, for the command its sibling's text names: `"Deprecated in favor of trailer.<keyAlias>.cmd."` "at the beginning of the "git interpret-trailers" command" (the `trailer.<keyAlias>.cmd` entry) git interpret-trailers is not run. |  |
+| `trailer.<keyAlias>.key` | does not name a program | `"Defines a <keyAlias> for the <key>."` |  |
+| `trailer.separators` | does not name a program | "This option tells which characters are recognized as trailer separators." |  |
+| `transfer.bundleURI` | does not name a program | "When true, local git clone commands will request bundle information from the remote server (if advertised)" |  |
+| `transfer.credentialsInUrl` | does not name a program | "allow (default): Git will proceed with its activity without warning." |  |
+| `transfer.fsckObjects` | does not name a program | "When fetch.fsckObjects or receive.fsckObjects are not set, the value of this variable is used instead." |  |
+| `transfer.hideRefs` | does not name a program | "String(s) receive-pack and upload-pack use to decide which refs to omit from their initial advertisements." |  |
+| `uploadpack.allowRefInWant` | does not name a program | "If this option is set, upload-pack will support the ref-in-want feature of the protocol version 2 fetch command." |  |
+| `uploadpack.packObjectsHook` | unreachable | Names a program, for the command the text names, and limits where it is read: "If this option is set, when upload-pack would run git pack-objects to create a packfile for a client, it will run this shell command instead." "Note that this configuration variable is only respected when it is specified in protected configuration". A scanned repository's own config is not protected configuration, and git upload-pack is not run. |  |
+| `url.<base>.insteadOf` | does not name a program | `"Any URL that starts with this value will be rewritten to start, instead, with <base>."` |  |
+| `web.browser` | unreachable | Names a program, for the commands the text names: "Specify a web browser that may be used by some commands. Currently only git-instaweb(1) and git-help(1) may use it." Neither is run. |  |
 
 ## Alternatives considered
 
