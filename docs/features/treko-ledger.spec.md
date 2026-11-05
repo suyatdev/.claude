@@ -3806,3 +3806,9 @@ paragraph explains the D28 confirmation tag; "Ground truth" records this revisio
 **Not changed by his review:** the probe scripts, now also `config_keys.py`, `attr_keys.py`,
 `signal_probe.py` and `signal_probe_server.py`, live in session scratch folders, not in the
 repository.
+
+**Confirmed after this revision (user, D30, 2026-11-04).** Every "(my call)" this revision added
+for D28 and D29 was put to the user and confirmed as recommended: the `default_int_handler` route,
+the ignore step for a second signal, respecting an inherited ignore, C12's strict pin, deleting the
+board's `analysis_failed` message and tone, and the two readings (the two messages; OQ-1's per-copy
+reading). The tags in the body keep their "(my call)" wording; the card's D30 is the record.

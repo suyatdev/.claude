@@ -316,6 +316,17 @@ orphan in its own process group. He chose both signals over SIGTERM alone. D29 i
 after D27's waiver; asked, he chose no extra judge pass on it (user, 2026-11-04): D27's waiver covers
 it, and its own criteria test it at build.
 
+**D30 — The six calls made while folding D28 and D29, confirmed.** (user, 2026-11-04, each as
+recommended) SIGTERM and SIGHUP get `signal.default_int_handler`, so they raise exactly what `Ctrl-C`
+raises (measured 0.01 s to a tidy exit; the `httpd.shutdown()` thread route took 0.26 s, 1.8 s
+before `serve_forever`). A second signal during shutdown, `Ctrl-C` included, is ignored, so a double
+`Ctrl-C` no longer force-quits (measured: without it the item stays `running`). An inherited ignore
+is respected, so under `nohup` SIGHUP does nothing and the parent-death check ends the server. C12
+stays strict: it fails when git leaves its pin, until task 1's check is re-run, like the Chrome pin.
+The board's `analysis_failed` message and tone go with the `reanalyze_failed` entry
+(`Treko.dc.html:428`, `:535`; nothing else reaches them). The "two new messages" of D28 are §9.2's
+request-answer row and §9.4's Re-analyze string, and OQ-1's confirmation covers its per-copy reading.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
