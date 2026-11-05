@@ -37,10 +37,11 @@ import store_location  # noqa: E402  (D1, D2 and D4 live there; see D5 for why)
 from store_location import StartupAbort  # noqa: E402  (moved out per D5, both modules import it)
 from channel import (  # noqa: E402  (D6: the cmux control channel and its closed reason set)
     CHANNEL_OK,
-    CMUX_BIN,
-    CMUX_TIMEOUT_SECS,
+    CONFIRM_REFUSAL_REASONS,
     SurfaceUnavailable,
     bind_surface,
+    confirm_surface,
+    send_keys,
 )
 
 # ----------------------------------------------------------------- pinned constants
@@ -258,57 +259,6 @@ def probe_listener(port, timeout=PORT_PROBE_TIMEOUT_SECS):
 
 
 # ----------------------------------------------------------------- send path
-
-
-# The two unconfirmable states refuse identically on the wire -- 502 send_failed, nothing
-# sent -- so the audit reason is the only place an operator can tell "cmux hung" from "cmux
-# errored", and a stuck control channel needs a different response from a broken one. Keyed
-# by state so task 9 can drive every value from the mapping rather than a hand-listed pair.
-CONFIRM_REFUSAL_REASONS = {"unrunnable": "confirm_failed", "timeout": "confirm_timeout"}
-
-
-def confirm_surface(surface, timeout=CMUX_TIMEOUT_SECS):
-    """Re-resolve the bound UUID before any send.
-
-    Returns 'present'|'absent'|'unrunnable'|'timeout'. "Could not confirm" is not
-    "confirmed absent" and must never be read as "probably fine" -- the last two outcomes
-    refuse, and they are the ones that are silent when wrong. They are separate states
-    only so the audit stream keeps them apart; see CONFIRM_REFUSAL_REASONS.
-    """
-    try:
-        tree = subprocess.run(
-            [CMUX_BIN, "tree", "--id-format", "both"],
-            capture_output=True, text=True, timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        return "timeout"
-    except OSError:
-        return "unrunnable"
-    if tree.returncode != 0:
-        return "unrunnable"
-    return "present" if surface in tree.stdout else "absent"
-
-
-def send_keys(surface, payload, timeout=CMUX_TIMEOUT_SECS):
-    """Invoke `cmux send`. Returns (ok, sent) where sent is 'yes' or 'unknown'.
-
-    `unknown` is the honest answer whenever send was invoked and did not exit 0: a timeout
-    kill may still have typed. A log that resolved this to "failed" would be a lie in the
-    direction that loses the operator's trust.
-    """
-    try:
-        result = subprocess.run(
-            [CMUX_BIN, "send", "--surface", surface, "--", payload],
-            capture_output=True, text=True, timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        return False, "unknown"
-    except OSError:
-        return False, "unknown"
-    if result.returncode != 0:
-        sys.stderr.write("server: cmux send exited %d\n" % result.returncode)
-        return False, "unknown"
-    return True, "yes"
 
 
 def run_reanalyze(repo_root, store_path, timeout):

@@ -7,6 +7,9 @@ has one home: a caller that must tell "no surface" apart from "the store is unre
 `SurfaceUnavailable.reason`, and the reason set is closed by design -- a fifth member is a spec
 change, not a code change.
 
+`CONFIRM_REFUSAL_REASONS`, `confirm_surface` and `send_keys` moved here verbatim from
+`server.py` too (the send path), so the whole cmux channel lives in this one file.
+
 `StartupAbort` is imported from `store_location`, the module that owns it (§D5), never from
 `server.py`: `server.py` imports *this* module, so importing back would be a cycle.
 """
@@ -93,3 +96,57 @@ def bind_surface(environ=None, timeout=CMUX_TIMEOUT_SECS):
             "for this target (an agent-session surface is not a terminal)"
             % (CMUX_BIN, surface, probe.returncode))
     return surface
+
+
+# ----------------------------------------------------------------- send path
+
+
+# The two unconfirmable states refuse identically on the wire -- 502 send_failed, nothing
+# sent -- so the audit reason is the only place an operator can tell "cmux hung" from "cmux
+# errored", and a stuck control channel needs a different response from a broken one. Keyed
+# by state so task 9 can drive every value from the mapping rather than a hand-listed pair.
+CONFIRM_REFUSAL_REASONS = {"unrunnable": "confirm_failed", "timeout": "confirm_timeout"}
+
+
+def confirm_surface(surface, timeout=CMUX_TIMEOUT_SECS):
+    """Re-resolve the bound UUID before any send.
+
+    Returns 'present'|'absent'|'unrunnable'|'timeout'. "Could not confirm" is not
+    "confirmed absent" and must never be read as "probably fine" -- the last two outcomes
+    refuse, and they are the ones that are silent when wrong. They are separate states
+    only so the audit stream keeps them apart; see CONFIRM_REFUSAL_REASONS.
+    """
+    try:
+        tree = subprocess.run(
+            [CMUX_BIN, "tree", "--id-format", "both"],
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return "timeout"
+    except OSError:
+        return "unrunnable"
+    if tree.returncode != 0:
+        return "unrunnable"
+    return "present" if surface in tree.stdout else "absent"
+
+
+def send_keys(surface, payload, timeout=CMUX_TIMEOUT_SECS):
+    """Invoke `cmux send`. Returns (ok, sent) where sent is 'yes' or 'unknown'.
+
+    `unknown` is the honest answer whenever send was invoked and did not exit 0: a timeout
+    kill may still have typed. A log that resolved this to "failed" would be a lie in the
+    direction that loses the operator's trust.
+    """
+    try:
+        result = subprocess.run(
+            [CMUX_BIN, "send", "--surface", surface, "--", payload],
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "unknown"
+    except OSError:
+        return False, "unknown"
+    if result.returncode != 0:
+        sys.stderr.write("server: cmux send exited %d\n" % result.returncode)
+        return False, "unknown"
+    return True, "yes"
