@@ -345,8 +345,14 @@ def _named_for(card_name, branches):
 # ------------------------------------------------------------------------------- public
 
 
-def analyze(repo_root, run_id=None, name=None, base_branch=None):
-    """Return one schema-conforming `run` object for `repo_root`. Read-only."""
+def analyze(repo_root, run_id=None, name=None, base_branch=None, progress=None, card_paths=None):
+    """Return one schema-conforming `run` object for `repo_root`. Read-only.
+
+    `progress`, when given, is called with a stage name as each stage finishes (worktrees,
+    branches, cards, order, in that order). `card_paths`, when given, replaces `<root>/docs/features/*.md`: exactly
+    those files, ordered by file name and then path.
+    """
+    report = progress or (lambda stage: None)
     root = Path(repo_root).resolve()
     if not root.is_dir():
         raise ValueError("not a directory: %s" % root)
@@ -355,6 +361,7 @@ def analyze(repo_root, run_id=None, name=None, base_branch=None):
     repo_name = root.name
     questions = Questions()
     worktrees = _worktrees(root)
+    report("worktrees")
     base = _base_branch(root, base_branch)
     if base is None:
         questions.add(
@@ -364,11 +371,15 @@ def analyze(repo_root, run_id=None, name=None, base_branch=None):
         )
     branch_facts = _collect_branch_facts(root, base, worktrees)
     all_branches = set(branch_facts)
+    report("branches")
 
-    cards = [Card(path) for path in _card_paths(root)]
+    chosen = _card_paths(root) if card_paths is None else sorted(
+        (Path(p) for p in card_paths), key=lambda p: (p.name, str(p)))
+    cards = [Card(path) for path in chosen]
     by_name = {card.name: card for card in cards}
 
     _ask_about_cards(questions, cards, all_branches)
+    report("cards")
     edges = _declared_edges(questions, cards, by_name)
     layers, cycle = _layer([c.name for c in cards], edges)
     if cycle:
@@ -384,6 +395,8 @@ def analyze(repo_root, run_id=None, name=None, base_branch=None):
     waves = _build_waves(layers, cycle)
     constraints = _build_constraints(edges, by_name)
     graph = _build_graph(layers, cycle, by_name, blocked)
+    kanban = _build_kanban(cards, repo_name, blocked)
+    report("order")
 
     return {
         "id": run_id or repo_name.lstrip(".") or "run",
@@ -398,7 +411,7 @@ def analyze(repo_root, run_id=None, name=None, base_branch=None):
         "constraints": constraints,
         "branches": _branch_entries(root, repo_name, branch_facts),
         "graph": graph,
-        "kanban": _build_kanban(cards, repo_name, blocked),
+        "kanban": kanban,
         "questions": questions.emit(),
     }
 
@@ -660,6 +673,12 @@ def _build_kanban(cards, repo_name, blocked):
     ]
 
 
+def _write_progress(stage):
+    """One finished stage, on stderr and flushed at once: a reader sees it while later ones run."""
+    sys.stderr.write("treko-progress %s\n" % stage)
+    sys.stderr.flush()
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Derive one Treko run object.")
     parser.add_argument("repo_root", nargs="?", default=".")
@@ -667,9 +686,12 @@ def main(argv=None):
     parser.add_argument("--name", default=None)
     parser.add_argument("--base", dest="base_branch", default=None)
     parser.add_argument("--pretty", action="store_true")
+    parser.add_argument("--progress", action="store_true")
+    parser.add_argument("--card", dest="cards", action="append", default=None, metavar="PATH")
     args = parser.parse_args(argv)
     try:
-        run = analyze(args.repo_root, args.run_id, args.name, args.base_branch)
+        run = analyze(args.repo_root, args.run_id, args.name, args.base_branch,
+                      _write_progress if args.progress else None, args.cards)
     except (GitError, ValueError) as exc:
         sys.stderr.write("analyze: %s\n" % exc)
         return 1
