@@ -409,6 +409,8 @@ X-Tracker-Token: <token>
   round-1 verdict raised: the wire carries an allowlist *id* and nothing else, so no untrusted text
   ever reaches the session. Parameterising a command is a spec change and a new judge round, never
   an implementation decision.
+  ⚠️ **Amended 2026-11-05 by ADR 0056** (`docs/decisions/0056-the-page-may-name-a-directory-to-read-and-commands-still-take-no-arguments.md`):
+  still true of `POST /command`; arguments are allowed only on the new `POST /ledger`, which never reaches the session.
 
 Success is `200` with `{"ok": true, "id": "<id>"}`. Every failure is
 `{"ok": false, "error": "<code>"}` with these codes, and **no failure echoes any request content
@@ -544,6 +546,9 @@ filesystem path, which would leak the serving root into a log the operator may p
   say whether anything was typed.** A log that recorded only the resolved ref would show this case as
   a clean send to a valid surface. Reconstruction is the reason the log exists; `unknown` is the value
   that keeps it honest.
+  ⚠️ **Amended 2026-11-05 by ADR 0056** (`docs/decisions/0056-the-page-may-name-a-directory-to-read-and-commands-still-take-no-arguments.md`):
+  `unknown` is widened. `/command`'s request catch-all also writes `sent=unknown`, because it cannot
+  tell whether `cmux send` ran before the exception. `no` keeps its meaning.
 - **Never log request headers, request bodies, or the token — in whole or in part**, and never log at
   a level that captures them incidentally. §Out of scope bans persisting the token to a file, an
   environment variable, or argv; a log file is none of those three, which is exactly why this
@@ -701,6 +706,10 @@ this repo has ever exposed, so it is default-deny:
   The wire carries the *id*; the command text never crosses the network and is never assembled from
   request data. An endpoint accepting an arbitrary string is a remote shell and is out of scope
   permanently, not just for v1.
+
+  ⚠️ **Amended 2026-11-05 by ADR 0056** (`docs/decisions/0056-the-page-may-name-a-directory-to-read-and-commands-still-take-no-arguments.md`):
+  the allowlist is now two rows, `clear` and `handoff`. `reanalyze` leaves `/command`; the queue's
+  `reanalyze` op on `POST /ledger` replaces it.
 - **Per-launch bearer token that never touches disk.** Generated with `secrets.token_urlsafe(32)`
   at startup, held in process memory only, and injected into the `GET /` response as a `<meta>` tag.
   Required on every POST, compared with `hmac.compare_digest`. It is **not** written into
@@ -1062,6 +1071,9 @@ and nothing above would notice.
     The 2026-08-11 run saw four `chrome-extension://…` rows. They are observer artefacts, not page
     requests, and not `http` requests to any host — **exclude them from the observed set before
     scoring, and do not read them as the manifest widening.**
+
+    ⚠️ **Amended 2026-11-05 by ADR 0056** (`docs/decisions/0056-the-page-may-name-a-directory-to-read-and-commands-still-take-no-arguments.md`):
+    the board stays at `/`, and both runs' expected request sets now also contain `/board-commands.js`.
 14. **Given** a server launched as §Security specifies — a non-detached child of the session process
     with `stderr` inherited — **when** its parent exits, **then** the server exits within
     `TASK_TRACKER_POLL_SECS` + one second and its port is free; **and when** it instead sits idle with
@@ -1095,10 +1107,16 @@ and nothing above would notice.
     "Shows an error" and "does not also show success" are two assertions, not one. A handler that
     sets both states passes the first, and the operator reads the second.
 
+    ⚠️ **Amended 2026-11-05 by ADR 0056** (`docs/decisions/0056-the-page-may-name-a-directory-to-read-and-commands-still-take-no-arguments.md`):
+    `reanalyze` has left `/command`, so the `500` row and the board's reload after a successful
+    Re-analyze are retired; after a `200` the board goes to the Ledger.
+
 ## Out of scope
 
 - An endpoint that accepts arbitrary command text. Permanently, not just v1.
 - Command arguments of any kind. The wire carries an allowlist id and nothing else.
+  ⚠️ **Amended 2026-11-05 by ADR 0056** (`docs/decisions/0056-the-page-may-name-a-directory-to-read-and-commands-still-take-no-arguments.md`):
+  still true of `POST /command`; arguments are allowed only on the new `POST /ledger`, which never reaches the session.
 - Serving any path that resolves outside `task-tracker/`, **or any path inside it that is not on the
   §Design 3 manifest** — `store.py`, `analyze.py`, `tracker-data.json` and the tests are not servable.
   The server is not a repo file browser, and "inside the directory" was never the boundary.
