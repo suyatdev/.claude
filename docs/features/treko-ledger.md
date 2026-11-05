@@ -362,6 +362,15 @@ literal from `analyze.py`, and the move put it in `cards.py`, so two falsifier t
 edit that one test (it now reads the literal from `cards.py` and writes a mutant `cards.py` beside the
 real `analyze.py`). Task 3 and Z3 are amended in the spec by a dated note; no other test changed.
 
+**D36 — `filter.<driver>.process` is covered by the accepted risk D20.** (user, 2026-11-05, asked
+during task 1c) Task 1c measured that this key still runs a program from a scanned repository under
+every section 9 setting (the analyzer ran it once per checkout; the scan's three commands did not).
+He accepted it as the same class as `filter.<driver>.clean`, which D20 already accepts. No new
+protective setting. ADR 0056's row for the key records this.
+
+**D37 — ADR 0056 may exceed the 800-line cap.** (user, 2026-11-05, asked after task 1b) The 265-row
+config-key table makes it 813 lines. Task 41's budget test must name this one file as an exception.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
