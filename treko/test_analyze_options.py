@@ -587,3 +587,164 @@ def test_e5_falsifier_stubs_that_refuse_or_ignore_the_option_fail_the_checks(
         _check_a_subset_is_exactly_that_subset(refuse, chain, chain_base)
     with pytest.raises(AssertionError):
         _check_another_worktrees_copy_meets_its_own_spec_half(refuse, copies, copies_base)
+
+
+# ----------------------------------------------------------------------- E6 and E8 fixtures
+
+TARGET_BRANCH = "feat/alpha"  # the branch whose worktree is damaged; it stays level with main
+INDEX_JUNK = b"not an index"
+GIT_INDEX_MESSAGE = "index file smaller than expected"
+
+
+def _two_branch_repo(tmp_path, name):
+    """main plus `feat/alpha` in a second worktree, level with main, named by one card."""
+    base = tmp_path / name
+    (base / "home").mkdir(parents=True)
+    fx = Fixture(base)
+    fx.init()
+    fx.card("alpha", TARGET_BRANCH, ["- [ ] 1 — only"])
+    fx.commit_all("cards")
+    return fx, fx.worktree(TARGET_BRANCH), base
+
+
+def _listed_worktree(fx, wt):
+    """(path as git lists it, that entry's lines) from `git worktree list --porcelain`."""
+    for block in fx.git("worktree", "list", "--porcelain").split("\n\n"):
+        lines = block.splitlines()
+        if lines and lines[0].startswith("worktree ") and Path(lines[0][9:]).name == wt.name:
+            return lines[0][9:], lines
+    raise AssertionError("git does not list a worktree named %s" % wt.name)
+
+
+def _break_index(fx, wt):
+    """Overwrite the worktree's index with junk; return (index file, the original bytes)."""
+    index = Path(fx.git("rev-parse", "--absolute-git-dir", cwd=wt).strip()) / "index"
+    original = index.read_bytes()
+    index.write_bytes(INDEX_JUNK)
+    return index, original
+
+
+def _assert_status_fails(fx, wt):
+    status = _run(["git", "-C", str(wt), "status", "--porcelain"], fx.env, fx.base, check=False)
+    assert status.returncode != 0, "git status still works in %s" % wt
+    assert GIT_INDEX_MESSAGE in status.stderr.decode(), status.stderr
+
+
+def _run_both(tmp_path, repo_root, base):
+    dest = tmp_path / "baseline"
+    baseline = dest / "treko" / "analyze.py" if dest.exists() else _materialize_baseline(dest)
+    return (_run_analyzer(NEW_ANALYZER, repo_root, [], base),
+            _run_analyzer(baseline, repo_root, [], base))
+
+
+def _target(run):
+    return next(b for b in run["branches"] if b["branch"] == TARGET_BRANCH)
+
+
+def _everything_else(run, questions):
+    """The run as bytes, minus the damaged branch's entry and with the given questions."""
+    rest = dict(run, questions=questions)
+    rest["branches"] = [b for b in run["branches"] if b["branch"] != TARGET_BRANCH]
+    return json.dumps(rest)
+
+
+def _check_branch_keeps_its_facts(new, old):
+    for key in ("ahead", "behind", "last"):
+        assert _target(new)[key] == _target(old)[key], key
+
+
+def _check_changes_unknown(new_out, old_out, wt):
+    """E6: the damaged worktree reads "changes unknown" and costs exactly one question."""
+    assert new_out[2] == 0 and old_out[2] == 0, (new_out[1], old_out[1])
+    new, old = json.loads(new_out[0]), json.loads(old_out[0])
+    got = _target(new)
+    assert got["dirty"] is False
+    assert got["note"] == "changes unknown"
+    assert got["tone"] == "neutral"
+    _check_branch_keeps_its_facts(new, old)
+    assert len(old["questions"]) > 0, "the baseline should have questions to come after"
+    assert len(new["questions"]) == len(old["questions"]) + 1
+    extra = new["questions"][-1]
+    assert wt.name in extra["q"], extra
+    assert GIT_INDEX_MESSAGE in extra["ctx"], extra
+    assert _everything_else(new, new["questions"][:-1]) == _everything_else(old, old["questions"])
+
+
+def _check_folder_missing(new_out, old_out, listed_path):
+    """E8: the gone folder reads "folder missing", keeps its path, and asks nothing."""
+    assert new_out[2] == 0 and old_out[2] == 0, (new_out[1], old_out[1])
+    new, old = json.loads(new_out[0]), json.loads(old_out[0])
+    got = _target(new)
+    assert got["dirty"] is False
+    assert got["note"] == "folder missing"
+    assert got["tone"] == "neutral"
+    assert got["wt"] == listed_path  # not under the fixture's $HOME, so collapsing changes nothing
+    _check_branch_keeps_its_facts(new, old)
+    assert new["questions"] == old["questions"]
+    assert _everything_else(new, new["questions"]) == _everything_else(old, old["questions"])
+
+
+# ------------------------------------------------------------------------------ E6 and E8 tests
+
+
+def test_e6_a_failing_git_status_shows_changes_unknown(tmp_path):
+    fx, wt, base = _two_branch_repo(tmp_path, "e6")
+    _break_index(fx, wt)
+    _assert_status_fails(fx, wt)
+    new_out, old_out = _run_both(tmp_path, fx.root, base)
+    _check_changes_unknown(new_out, old_out, wt)
+
+
+def test_e6_falsifier_the_baseline_reports_that_branch_as_clean(tmp_path):
+    fx, wt, base = _two_branch_repo(tmp_path, "e6")
+    _break_index(fx, wt)
+    _assert_status_fails(fx, wt)
+    _, old_out = _run_both(tmp_path, fx.root, base)
+    assert _target(json.loads(old_out[0]))["note"] == "clean"  # what the check must catch
+    with pytest.raises(AssertionError, match="'clean' == 'changes unknown'"):
+        _check_changes_unknown(old_out, old_out, wt)
+
+
+def test_e6_before_the_damage_and_after_the_repair_the_analyzers_agree(tmp_path):
+    fx, wt, base = _two_branch_repo(tmp_path, "e6")
+    _assert_in_scope(fx.root, fx.env)
+    new_out, old_out = _run_both(tmp_path, fx.root, base)
+    assert new_out == old_out and new_out[2] == 0
+    index, original = _break_index(fx, wt)
+    _assert_status_fails(fx, wt)
+    index.write_bytes(original)
+    _assert_in_scope(fx.root, fx.env)
+    new_out, old_out = _run_both(tmp_path, fx.root, base)
+    assert new_out == old_out and new_out[2] == 0
+
+
+def _remove_folder_leaving_it_listed(fx, wt):
+    """rm -rf, not `git worktree remove`, then assert git still lists it as prunable."""
+    shutil.rmtree(wt)
+    listed, lines = _listed_worktree(fx, wt)
+    assert any(line.startswith("prunable") for line in lines), lines
+    assert not Path(listed).exists()
+    return listed
+
+
+def test_e8_a_worktree_whose_folder_is_gone_shows_folder_missing(tmp_path):
+    fx, wt, base = _two_branch_repo(tmp_path, "e8")
+    listed = _remove_folder_leaving_it_listed(fx, wt)
+    new_out, old_out = _run_both(tmp_path, fx.root, base)
+    _check_folder_missing(new_out, old_out, listed)
+
+
+def test_e8_falsifier_the_baseline_reports_that_branch_as_clean(tmp_path):
+    fx, wt, base = _two_branch_repo(tmp_path, "e8")
+    listed = _remove_folder_leaving_it_listed(fx, wt)
+    _, old_out = _run_both(tmp_path, fx.root, base)
+    assert _target(json.loads(old_out[0]))["tone"] == "ok"  # what the check must catch
+    with pytest.raises(AssertionError, match="'clean' == 'folder missing'"):
+        _check_folder_missing(old_out, old_out, listed)
+
+
+def test_e8_before_the_folder_is_deleted_the_analyzers_agree(tmp_path):
+    fx, wt, base = _two_branch_repo(tmp_path, "e8")
+    _assert_in_scope(fx.root, fx.env)
+    new_out, old_out = _run_both(tmp_path, fx.root, base)
+    assert new_out == old_out and new_out[2] == 0
