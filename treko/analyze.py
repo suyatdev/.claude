@@ -294,7 +294,11 @@ def _branch_entries(root, repo_name, branch_facts):
     for branch in _local_branches(root):
         facts = branch_facts[branch]
         dirty_count = facts["dirty_count"]
-        if dirty_count:
+        if facts["folder_missing"]:
+            note, tone = "folder missing", "neutral"
+        elif facts["status_error"]:
+            note, tone = "changes unknown", "neutral"
+        elif dirty_count:
             note, tone = "%d uncommitted" % dirty_count, "bad"
         elif facts["behind"]:
             note, tone = "needs rebase", "warn"
@@ -324,9 +328,14 @@ def _collect_branch_facts(root, base, worktrees):
         worktree = worktrees.get(branch)
         ahead, behind = _ahead_behind(root, base, branch)
         dirty_count = 0
-        if worktree and Path(worktree).is_dir():
-            status = _git(worktree, "status", "--porcelain", allow_failure=True)
-            dirty_count = len([line for line in status.splitlines() if line.strip()])
+        status_error = ""
+        folder_missing = bool(worktree) and not Path(worktree).is_dir()
+        if worktree and not folder_missing:
+            try:
+                status = _git(worktree, "status", "--porcelain")
+                dirty_count = len([line for line in status.splitlines() if line.strip()])
+            except GitError as error:
+                status_error = str(error)
         last = _compress_relative(
             _git(
                 root, "log", "-1", "--format=%cr", END_OF_OPTIONS, branch, allow_failure=True,
@@ -337,6 +346,8 @@ def _collect_branch_facts(root, base, worktrees):
             "ahead": ahead,
             "behind": behind,
             "dirty_count": dirty_count,
+            "status_error": status_error,
+            "folder_missing": folder_missing,
             "last": last,
             "last_ago": "%s ago" % last if last != NO_VALUE else NO_VALUE,
             "diff": _diffstat(root, base, branch),
@@ -397,6 +408,7 @@ def analyze(repo_root, run_id=None, name=None, base_branch=None, progress=None, 
             "derived. They are grouped in a final wave marked undetermined.",
         )
     _ask_about_readiness(questions, layers, by_name, branch_facts, base)
+    _ask_about_unknown_changes(questions, branch_facts)
 
     blocked = _blocked_cards(edges, by_name)
     features = _build_features(cards, repo_name, branch_facts, edges, blocked)
@@ -504,6 +516,16 @@ def _ask_about_readiness(questions, layers, by_name, branch_facts, base):
                 "Should `%s` rebase before it merges first?" % name,
                 "It heads the order but its branch is %d behind %s."
                 % (branch_facts[card.branch]["behind"], base),
+            )
+
+
+def _ask_about_unknown_changes(questions, branch_facts):
+    for facts in branch_facts.values():
+        if facts["status_error"]:
+            questions.add(
+                "Why can't git report the changes in the worktree at %s?" % facts["wt"],
+                "Its `git status` failed, so the branch is shown as \"changes unknown\" "
+                "rather than clean. Git said: %s" % facts["status_error"],
             )
 
 
