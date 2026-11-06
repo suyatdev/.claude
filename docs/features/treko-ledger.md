@@ -378,8 +378,13 @@ asked after task 1d) Both judges found that `analyze.py` passed branch names to 
 arguments, so a branch named `--output=<file>` overwrote that file (reproduced by hand). He chose to
 fix it now: `--end-of-options` before every repository-sourced ref in the analyzer's four such
 calls (commit `de5d087`, test `treko/test_analyze_refs.py` red at `25fbe00`), ADR 0056 section 10
-records it, and the spec gains criterion C13. Browser-reachable work stays held until his review of
-task 1d's list.
+records it, and the spec gains criterion C13.
+
+**D39 — File filters stay on (D20 re-confirmed).** (user, 2026-11-06, asked after task 1d) The
+observability judge reported that the filter does run for a repository unpacked from an archive
+(0 runs in the original checkout, 1 after a `tar` round trip; not re-run by the builder). He kept the
+risk accepted. ADR 0056 section 11 records it. This was the last item on task 1d's list, so task 1d
+is closed on his answers and browser-reachable work (D31) may proceed.
 
 ## Decisions carried to the relations card (user, 2026-11-02)
 
@@ -468,7 +473,7 @@ spec §11; a card decision is written "decision D10", and a round-2 fix "fix F4"
 - [x] 1a — Write the test that checks the ADR's config-key table covers git's documented list (C12, red) (done, a331275)
 - [x] 1b — Read every candidate config key once and sort it (done, 11ce571)
 - [x] 1c — Measure each remaining key in a scratch repository; stop and ask on any that fires (C12 green) (done, b96ffa0)
-- [ ] 1d — Have the ADR judged: one round, its fixes, then his list (decisions D32, D34)
+- [x] 1d — Have the ADR judged: one round, its fixes, then his list (decisions D32, D34) (done, his answers D38 and D39)
 - [x] 2 — Prove the analyzer unchanged with a byte-for-byte comparison, before anything moves (E2) (done, 9fcc4c4)
 - [x] 3 — Move the analyzer's card-reading code into `cards.py`, changing nothing (split 1) (done, 4df4a97)
 - [x] 4 — Move the server's keystroke-sending code into `channel.py`, changing nothing (split 2) (done, ec50497)

@@ -2,6 +2,9 @@
 
 - **Status:** Proposed (2026-11-05). Becomes Accepted when task 1d's judge round passes
   (decision D32 of the card); no browser-reachable Ledger work starts before then (D31).
+  **Task 1d, 2026-11-06:** the round failed (compliance: 4 violations; observability: risk high).
+  Its fixes are in this record and in `analyze.py`, and the user answered the open list (decisions
+  D38, D39). Task 1d is closed on his answers; this status stays Proposed until he says to change it.
 - **Context:** `treko/server.py`, `treko/ledger_jobs.py` (new), `treko/Ledger.dc.html` (new),
   `treko/Treko.dc.html`. Full design, scenarios, acceptance criteria and measurements:
   `docs/features/treko-ledger.md` (the card) and `docs/features/treko-ledger.spec.md` (the spec;
@@ -443,6 +446,13 @@ is stat-clean and runs none, and `GIT_OPTIONAL_LOCKS=0` means the analyzer never
 state itself. **Filters stay on, decided by the user (decision D20, 2026-11-03), and remain his
 accepted risk**: his own `git status` in a terminal runs the same filters on the same repositories.
 Repositories that use Git LFS are never skipped.
+
+**Re-confirmed after task 1d (user, 2026-11-06, decision D39).** The observability judge reported
+that the "fresh clone runs no filters" premise above is the safe case, not the hostile one: in a
+repository unpacked from an archive (a `tar` round trip) the filter ran once through the real
+analyzer, where the original checkout ran it 0 times. That is the judge's measurement; it was not
+re-run for this record. Shown that result, the user kept filters on, on the same ground as before
+(his own `git status` runs the same filters on the same folders).
 
 Why it was decided without a test. The task had been to try switching filter drivers off by name on
 a real Git LFS repository (decisions D15, D17). The observability judge's round-4 read showed the
