@@ -454,16 +454,16 @@ carries, its proof and what it waits for) is in the spec's closing section, "Tas
 (`hooks/lib/feature_tasks.py`). In both lists a bare "D1"–"D15" or "F1"–"F3" is a criterion of
 spec §11; a card decision is written "decision D10", and a round-2 fix "fix F4".
 
-- [ ] 1 — Write the decision record (ADR) that lets the page send the server a directory (decision D10's gate)
-- [ ] 1a — Write the test that checks the ADR's config-key table covers git's documented list (C12, red)
-- [ ] 1b — Read every candidate config key once and sort it
-- [ ] 1c — Measure each remaining key in a scratch repository; stop and ask on any that fires (C12 green)
+- [x] 1 — Write the decision record (ADR) that lets the page send the server a directory (decision D10's gate) (done, 055f367)
+- [x] 1a — Write the test that checks the ADR's config-key table covers git's documented list (C12, red) (done, a331275)
+- [x] 1b — Read every candidate config key once and sort it (done, 11ce571)
+- [x] 1c — Measure each remaining key in a scratch repository; stop and ask on any that fires (C12 green) (done, b96ffa0)
 - [ ] 1d — Have the ADR judged: one round, its fixes, then his list (decisions D32, D34)
-- [ ] 2 — Prove the analyzer unchanged with a byte-for-byte comparison, before anything moves (E2)
-- [ ] 3 — Move the analyzer's card-reading code into `cards.py`, changing nothing (split 1)
-- [ ] 4 — Move the server's keystroke-sending code into `channel.py`, changing nothing (split 2)
-- [ ] 5 — Move the board's button logic into `board-commands.js`, changing nothing (split 3; Z3)
-- [ ] 6 — Teach the analyzer to report each finished stage and to read a given list of cards (E1, E5)
+- [x] 2 — Prove the analyzer unchanged with a byte-for-byte comparison, before anything moves (E2) (done, 9fcc4c4)
+- [x] 3 — Move the analyzer's card-reading code into `cards.py`, changing nothing (split 1) (done, 4df4a97)
+- [x] 4 — Move the server's keystroke-sending code into `channel.py`, changing nothing (split 2) (done, ec50497)
+- [x] 5 — Move the board's button logic into `board-commands.js`, changing nothing (split 3; Z3) (done, b36c4fd)
+- [x] 6 — Teach the analyzer to report each finished stage and to read a given list of cards (E1, E5) (done, cff838d)
 - [ ] 7 — Make the analyzer say "changes unknown" and "folder missing" instead of a false "clean" (E6, E8)
 - [ ] 8 — Make the analyzer say "diff unknown", and ask why only where the value shows (E7)
 - [ ] 9 — Give each run a stable id, a name and a list row computed from its own data (G1, G4)
