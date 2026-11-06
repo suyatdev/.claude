@@ -56,6 +56,9 @@ STATE_BY_PHASE = {
 
 TASK_NAME_MAX_CHARS = 72
 MAX_COMMITS_PER_TASK = 5
+# Goes before every ref taken from a repository: a branch named `--output=<file>` is a valid ref, and
+# git reads a bare one as that option and writes the file. ADR 0056 section 10.
+END_OF_OPTIONS = "--end-of-options"
 GRAPH_X0, GRAPH_DX = 8, 250
 GRAPH_Y0, GRAPH_DY = 8, 88
 
@@ -136,7 +139,7 @@ def _ahead_behind(root, base, branch):
     if base is None or branch == base:
         return 0, 0
     out = _git(
-        root, "rev-list", "--left-right", "--count", "%s...%s" % (base, branch),
+        root, "rev-list", "--left-right", "--count", END_OF_OPTIONS, "%s...%s" % (base, branch),
         allow_failure=True,
     ).split()
     if len(out) != 2:
@@ -148,7 +151,10 @@ def _ahead_behind(root, base, branch):
 def _diffstat(root, base, branch):
     if base is None or branch == base:
         return ""
-    out = _git(root, "diff", "--shortstat", "%s...%s" % (base, branch), allow_failure=True)
+    out = _git(
+        root, "diff", "--shortstat", END_OF_OPTIONS, "%s...%s" % (base, branch),
+        allow_failure=True,
+    )
     inserted = SHORTSTAT_INSERT_RE.search(out)
     deleted = SHORTSTAT_DELETE_RE.search(out)
     if not inserted and not deleted:
@@ -163,7 +169,7 @@ def _diffstat(root, base, branch):
 def _commits(root, base, branch):
     span = branch if base is None or branch == base else "%s..%s" % (base, branch)
     out = _git(
-        root, "log", "-n", str(MAX_COMMITS_PER_TASK), "--format=%h\t%s", span,
+        root, "log", "-n", str(MAX_COMMITS_PER_TASK), "--format=%h\t%s", END_OF_OPTIONS, span,
         allow_failure=True,
     )
     commits = []
@@ -322,7 +328,9 @@ def _collect_branch_facts(root, base, worktrees):
             status = _git(worktree, "status", "--porcelain", allow_failure=True)
             dirty_count = len([line for line in status.splitlines() if line.strip()])
         last = _compress_relative(
-            _git(root, "log", "-1", "--format=%cr", branch, allow_failure=True).strip()
+            _git(
+                root, "log", "-1", "--format=%cr", END_OF_OPTIONS, branch, allow_failure=True,
+            ).strip()
         )
         facts[branch] = {
             "wt": _home_collapse(worktree) if worktree else NO_VALUE,
