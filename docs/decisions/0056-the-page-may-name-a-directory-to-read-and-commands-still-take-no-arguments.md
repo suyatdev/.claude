@@ -1,4 +1,4 @@
-# 0056 — The page may name a directory for the server to read, `/command` still takes no arguments, and git runs in scanned repositories with its program routes switched off
+# 0056 — The page may name a directory for the server to read, `/command` still takes no arguments, and git runs in scanned repositories with the program routes this record measured switched off
 
 - **Status:** Proposed (2026-11-05). Becomes Accepted when task 1d's judge round passes
   (decision D32 of the card); no browser-reachable Ledger work starts before then (D31).
@@ -23,7 +23,9 @@
   numbers *before* this record's own six pointers were added to that file (they now sit at lines 412,
   549, 710, 1075, 1110 and 1118), so they match the file at `e75b3df`. Citations into
   `treko/server.py`, `treko/analyze.py` and `treko/test_server.py` were re-opened on this branch,
-  also at `e75b3df`, when this was written.
+  also at `e75b3df`, when this was written. The task 1d fix (`de5d087`) added a constant and four
+  arguments to `treko/analyze.py`, so its line numbers cited below (`:92`, `:126`, `:143`, `:150`,
+  `:163`, `:177`, `:437`, `:440`, `:468`) are the `e75b3df` ones and now sit a few lines lower.
 
 ## Context
 
@@ -45,7 +47,10 @@ reads and runs git in**. That is the whole risk, and most of this record is abou
 that keep it small: the arguments go to one new route that never reaches the terminal session; the
 server reads the named directory and writes nowhere but its own store; and every git command that
 touches a scanned repository runs with the ways a repository can make git run a program switched
-off, so a hostile `.git/config` cannot turn a "scan this folder" request into code execution.
+off, so a hostile `.git/config` cannot, by any route this record measured, turn a "scan this folder"
+request into code execution. Two things are outside that sentence and are said where they belong: file
+filters stay on, the user's accepted risk (section 11), and the names of a repository's branches are
+a route of their own, closed in code and recorded in section 10.
 
 ## Decision
 
@@ -141,7 +146,7 @@ Checks run in this order. Each failure answers once and writes one audit line.
 | `retry` | `item` | puts a failed or interrupted item back to waiting, unless another item for the same run is waiting or running |
 | `delete` | `run` | adds the run to the hide list; nothing on disk is erased |
 
-| Field | Rule, checked before anything touches the filesystem or git |
+| Field | Rule. The string rules (length, characters, UTF-8) run before anything touches the filesystem or git; `directory`'s own `expanduser`, `realpath` and directory test read the filesystem, and run before any git command |
 |---|---|
 | `directory` | at most 1024 UTF-8 bytes. No U+0000-U+001F or U+007F (`422 invalid_input`). After `os.path.expanduser` (a leading `~` only, the rule `store_location` uses) it is absolute (`422 relative_path`). Its `os.path.realpath` is an existing directory (`422 no_such_directory`). That real path is the canonical directory. Nothing is created |
 | `repo` | `""` means absent. At most 255 bytes, no control characters, no `/` (`422 invalid_input`). Only ever compared with folder names |
@@ -162,7 +167,9 @@ rule that error escaped with no code and no audit line, and the client saw the c
 **No value reaches a shell.** `repo`, `branch`, `worktree`, `item` and `run` never reach git at
 all. The canonical directory reaches git only as `git -C <absolute path>`, which cannot begin with
 `-`. The scan subprocess receives the request as one JSON object on stdin, never as argv, so no
-value can be read as a flag.
+value *the request carries* can be read as a flag. Values the request does not carry are a different
+case: a scanned repository's own branch names reach git, and one named like a flag was read as one
+until task 1d; section 10 says what closed it.
 
 Success bodies: `analyze` and `reanalyze` return `{"ok": true, "op": "<op>", "item": "<id>",
 "started": <bool>}`, where `started` is true when no other item was running or waiting; `remove`,
@@ -305,7 +312,7 @@ protective settings" means exactly these rows.
 | `GIT_CONFIG_KEY_1`, `GIT_CONFIG_VALUE_1` | `core.hooksPath`, `/dev/null` | a repo-named hook |
 | `GIT_CONFIG_KEY_2`, `GIT_CONFIG_VALUE_2` | `log.showSignature`, `false` | a repo-named `gpg.program`, which `git log` runs to check a signed commit when the repo sets `log.showSignature=true` (probes 17-20) |
 | `GIT_OPTIONAL_LOCKS` | `0` | `git status`'s optional index write, and the `post-index-change` hook it fires |
-| `GIT_NO_LAZY_FETCH` | `1` | a lazy fetch from a promisor remote, which runs the repo-named `remote.<name>.uploadpack` and downloads objects into the scanned repo (probes 21-26) |
+| `GIT_NO_LAZY_FETCH` | `1` | a lazy fetch from a promisor remote, which runs the repo-named `remote.<name>.uploadpack` and downloads objects into the scanned repo (probes 21-26). Task 1c found six more keys that run a program only by way of that fetch, all stopped by this same variable: `core.alternateRefsCommand`, `core.askPass`, `core.gitProxy`, `core.sshCommand`, `credential.helper` and `remote.<name>.vcs` (their rows in section 12) |
 
 **The builder.** One function in `ledger_jobs.py` builds the child environment, and every scan and
 analyzer launch goes through it, the submit-time scan included. Its base is the server's own
@@ -400,12 +407,32 @@ lazy fetch through `remote.<name>.uploadpack` (21-26); `diff.external` and `diff
 (27-30; neither runs on the analyzer's `--shortstat`); and file filters (31-32, which the table does
 not stop, and which stay on: section 11).
 
-**The routes closed here are a lower bound until the config-key check below has run.** Before the
-user's spec review (2026-11-04) the spec said that git's other config keys that can name a program
-had not been checked one by one, and that each review round so far had found more (fsmonitor first,
-hooks at round 2, `gpg.program` and the lazy fetch at round 3). That statement stands until the
-table in section 12 is complete. Afterwards the routes closed cover one documented list of keys at
-the pinned git, not everything git can do.
+**The routes closed here are a lower bound, not a proof.** Before the user's spec review
+(2026-11-04) the spec said that git's other config keys that can name a program had not been checked
+one by one, and that each review round so far had found more (fsmonitor first, hooks at round 2,
+`gpg.program` and the lazy fetch at round 3). The table in section 12 is now complete (task 1c: 265
+rows, the 262 candidates and the three driver keys), so the config routes closed cover one documented
+list of keys at the pinned git, not everything git can do. Task 1d found one more route, and it is
+not a config key:
+
+**Branch names (found by both judges at task 1d, 2026-11-06).** The analyzer passed each branch name
+read from the scanned repository to git as a bare argument. A branch called `--output=<file>` is a
+valid ref, and git read it as the option and wrote that file. Reproduced by hand in a scratch
+repository on git 2.50.1: `git log -1 --format=%cr --output=<file>` replaced the file's contents,
+and the same call with `--end-of-options` before the name left it alone. The judges reported more:
+a branch called `--show-signature` ran the repository's `gpg.program` under every section 9 setting,
+and a plain `git clone` of a repository whose default branch is named `--output=<name>` brought the
+name along (tested over `file://` only). None of the protective settings touches this, because the
+settings control git's configuration and a branch name is an argument. It was already in `analyze.py`
+before this record; the Ledger would have exposed it to any directory the user types.
+**Closed in code at `de5d087`:** `END_OF_OPTIONS` (`--end-of-options`) now precedes the ref in the
+four git calls that take a repository-sourced ref (`rev-list`, `diff --shortstat`, and `log` twice;
+`grep -n END_OF_OPTIONS treko/analyze.py` lists them), and `treko/test_analyze_refs.py` plants
+flag-shaped branch names, calls each helper and requires that nothing in the sandbox changes. The
+test was red on five cases before the fix and is green after it. **Not measured:** other git flags
+beyond `--output` and `--show-signature`, any git call added to the analyzer later, and whether a
+hosting service accepts such a branch name. A new git call that takes a repository-sourced ref
+must follow the same rule.
 
 ### 11. File filters stay on, and are the user's accepted risk
 
@@ -432,8 +459,7 @@ run is installed. Probe 32 stays as a measurement, not a plan.
 
 Decided at the user's spec review (decision D28); the procedure is the spec author's. One pass over
 one documented list, at the pinned git (2.50.1), recorded as the table below. The table is filled by
-tasks 1b (reading and sorting) and 1c (measuring); this record is written with the heading and
-column headers only.
+tasks 1b (reading and sorting) and 1c (measuring); both are done, and the table below is complete.
 
 - **Source.** The keys `git help --config` prints, each read in the `git-config(1)` page installed
   with that git, `$(git --man-path)/man1/git-config.1`, where each key has its own entry; a key
@@ -768,26 +794,30 @@ section 9 or the user's decision accepting the risk; a `not measured` row names 
 | Keep `reanalyze` on `/command` beside the queue | Rejected | It would be a second writer of the store racing the job runner, still minting folder-name ids. The board's Re-analyze needs a run id, which `/command` cannot carry. |
 | Serve the Ledger at `/` and move the board to `/board` | Rejected (the user chose, round 2) | It forced edits to five test modules that load the board at `/`, one of them 1,054 lines. The board keeps `/`, the Ledger gets `/ledger`, and launch opens the Ledger. |
 | Audit every status poll | Rejected | Up to 1,800 lines an hour from one open tab, burying the state-changing lines in the only record. Refused polls are still audited. |
-| Reset the idle timer on every request, as today | Rejected | A tab polling every 2 seconds would keep the server alive for ever. |
+| Reset the idle timer on every request | Rejected | Today it resets once per accepted connection (section 8); resetting on every request, polls included, would let a tab polling every 2 seconds keep the server alive for ever. |
 | Switch file filters off by blanking drivers by name | Rejected (D20) | Makes a stat-dirty LFS file read as modified, and `.clean` is ignored while `.process` is set. |
 | Skip repositories that use Git LFS | Rejected (the user: never skipped) | Recorded as his decision with filters kept on (section 11). |
 | Set only `core.fsmonitor=false` | Rejected | Probe 13: with the fsmonitor pair alone, a repo-set hook still ran and the index was still rewritten. Probes 18 and 22: with the round-2 settings, a signature program and a lazy fetch still ran. |
-| Claim the closed routes are complete | Rejected | Each review round up to round 3 found another route (fsmonitor, then hooks, then `gpg.program` and the lazy fetch). Section 10 says "lower bound" until section 12 is filled. |
+| Claim the closed routes are complete | Rejected | Each review round up to round 3 found another route (fsmonitor, then hooks, then `gpg.program` and the lazy fetch), and task 1d found a fifth, branch names. Section 12 is now filled; section 10 still calls the result a lower bound. |
 
 ## Consequences
 
 - **The server reads what the page names.** A page the server itself served, holding the token, can
   make the server read any directory the user can read and show repo, card and branch names and
-  paths. The token limits this to those pages; inputs are validated before any syscall; reads are
-  bounded in depth and time. The server writes only inside the store directory: the store,
-  `ledger.json` and its lock.
-- **Git writes nothing in a scanned repository**, on the evidence of probe 14 (the analyzer's
-  commands, one fixture) and probe 26 (the lazy fetch, closed by `GIT_NO_LAZY_FETCH`). The scan's own
-  git calls are `rev-parse` and `worktree list`; that they write nothing is reasoned, not measured,
-  until criterion C9's whole-job check covers them.
+  paths. The token limits this to those pages; the request's string rules run before any filesystem
+  read and every field rule before any git command (section 4); reads are bounded in depth and time.
+  The server's own code writes only inside the store directory: the store, `ledger.json` and its
+  lock. What git, run by that code, can write is the next bullet.
+- **Git writes nothing in a scanned repository, by the routes measured here**, on the evidence of
+  probe 14 (the analyzer's commands, one fixture), probe 26 (the lazy fetch, closed by
+  `GIT_NO_LAZY_FETCH`) and the branch-name test (section 10). The scan's own git calls are
+  `rev-parse` and `worktree list`; that they write nothing is reasoned, not measured, until
+  criterion C9's whole-job check covers them. A file filter is outside this claim: a program the
+  user's accepted risk (section 11) lets run can write anything.
 - **Not covered:** a file filter (section 11); any config route outside the section 12 list; the 255
-  keys with no entry of their own; `GIT_EXEC_PATH`, `GIT_DIR` and other environment variables the
-  launcher sets; another git version.
+  keys with no entry of their own; git flags other than the two tried through a branch name
+  (section 10); `GIT_EXEC_PATH`, `GIT_DIR` and other environment variables the launcher sets;
+  another git version.
 - **A hostile repository's text is rendered as text only.** Status and run data come partly from
   scanned repositories; both pages render them without markup.
 - **Nothing new reaches the session.** `/command` shrinks; `/ledger` never invokes cmux.

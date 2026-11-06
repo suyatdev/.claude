@@ -2656,6 +2656,12 @@ assertions that tell the two apart.
   review (2026-11-04) this criterion said: "**Other routes are named, not claimed (U4, round
   3).** Not a test: the ADR task 1 writes lists the config routes tried (§2 default 3, "Which
   config routes were tried") and says that git's other config keys were not enumerated."
+- C13. **A branch name read from a scanned repository is never read by git as an option (user,
+  D38; found by both judges at task 1d).** `treko/test_analyze_refs.py` plants branches named
+  `--output=<absolute path>` and `--output=<relative path>`, calls each analyzer helper that hands a
+  repository-sourced ref to git (as the compared branch and as the base), and requires that every
+  file under the sandbox except `.git` is byte-for-byte what it was. Falsifier: the analyzer
+  without `--end-of-options` before the ref; 5 cases fail on it (`25fbe00`).
 
 **D. Queue and jobs** (`test_ledger_jobs.py`, with fake analyzers dropped into the harness tree the
 way `HANGING_ANALYZER` is, `server_harness.py:77`)

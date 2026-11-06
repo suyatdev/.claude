@@ -370,6 +370,16 @@ protective setting. ADR 0056's row for the key records this.
 
 **D37 — ADR 0056 may exceed the 800-line cap.** (user, 2026-11-05, asked after task 1b) The 265-row
 config-key table makes it 813 lines. Task 41's budget test must name this one file as an exception.
+**Update 2026-11-06:** after task 1d's corrections the ADR is 843 lines (a new paragraph on branch
+names in section 10 and wording corrections); task 41's exception names the file, not a size.
+
+**D38 — Branch names from a scanned repository are never read as git options.** (user, 2026-11-06,
+asked after task 1d) Both judges found that `analyze.py` passed branch names to git as bare
+arguments, so a branch named `--output=<file>` overwrote that file (reproduced by hand). He chose to
+fix it now: `--end-of-options` before every repository-sourced ref in the analyzer's four such
+calls (commit `de5d087`, test `treko/test_analyze_refs.py` red at `25fbe00`), ADR 0056 section 10
+records it, and the spec gains criterion C13. Browser-reachable work stays held until his review of
+task 1d's list.
 
 ## Decisions carried to the relations card (user, 2026-11-02)
 
