@@ -485,7 +485,7 @@ spec §11; a card decision is written "decision D10", and a round-2 fix "fix F4"
 - [x] 5 — Move the board's button logic into `board-commands.js`, changing nothing (split 3; Z3) (done, b36c4fd)
 - [x] 6 — Teach the analyzer to report each finished stage and to read a given list of cards (E1, E5) (done, cff838d)
 - [x] 7 — Make the analyzer say "changes unknown" and "folder missing" instead of a false "clean" (E6, E8) (done, red 3e1b0db, green dd6607e)
-- [ ] 8 — Make the analyzer say "diff unknown", and ask why only where the value shows (E7)
+- [x] 8 — Make the analyzer say "diff unknown", and ask why only where the value shows (E7) (done, red cc87e18, green 12fafb9)
 - [ ] 9 — Give each run a stable id, a name and a list row computed from its own data (G1, G4)
 - [ ] 10 — Combine several repositories' results into one run (F1, F2, F3)
 - [ ] 11 — Find every repository in and around a typed directory, each counted once (C1, C2, C3, C6)
