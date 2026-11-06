@@ -37,6 +37,7 @@ from cards import (  # noqa: E402  — what a card is lives in cards.py
 )
 
 MINUS = "−"  # U+2212, as the shipped sample data uses
+DIFF_UNKNOWN = "diff unknown"
 
 # Card phase -> the UI's task phase pill and its sort index.
 PHASE_MAP = {
@@ -149,21 +150,23 @@ def _ahead_behind(root, base, branch):
 
 
 def _diffstat(root, base, branch):
+    """(the diff fact, git's message when it could not compute the diff). A diff git cannot
+    compute is "diff unknown", never an empty one: empty reads as "no changes"."""
     if base is None or branch == base:
-        return ""
-    out = _git(
-        root, "diff", "--shortstat", END_OF_OPTIONS, "%s...%s" % (base, branch),
-        allow_failure=True,
-    )
+        return "", ""
+    try:
+        out = _git(root, "diff", "--shortstat", END_OF_OPTIONS, "%s...%s" % (base, branch))
+    except GitError as error:
+        return DIFF_UNKNOWN, str(error)
     inserted = SHORTSTAT_INSERT_RE.search(out)
     deleted = SHORTSTAT_DELETE_RE.search(out)
     if not inserted and not deleted:
-        return ""
+        return "", ""
     return "+%s %s%s" % (
         inserted.group(1) if inserted else "0",
         MINUS,
         deleted.group(1) if deleted else "0",
-    )
+    ), ""
 
 
 def _commits(root, base, branch):
@@ -336,6 +339,7 @@ def _collect_branch_facts(root, base, worktrees):
                 dirty_count = len([line for line in status.splitlines() if line.strip()])
             except GitError as error:
                 status_error = str(error)
+        diff, diff_error = _diffstat(root, base, branch)
         last = _compress_relative(
             _git(
                 root, "log", "-1", "--format=%cr", END_OF_OPTIONS, branch, allow_failure=True,
@@ -350,7 +354,8 @@ def _collect_branch_facts(root, base, worktrees):
             "folder_missing": folder_missing,
             "last": last,
             "last_ago": "%s ago" % last if last != NO_VALUE else NO_VALUE,
-            "diff": _diffstat(root, base, branch),
+            "diff": diff,
+            "diff_error": diff_error,
             "commits": _commits(root, base, branch),
         }
     return facts
@@ -409,6 +414,7 @@ def analyze(repo_root, run_id=None, name=None, base_branch=None, progress=None, 
         )
     _ask_about_readiness(questions, layers, by_name, branch_facts, base)
     _ask_about_unknown_changes(questions, branch_facts)
+    _ask_about_unknown_diffs(questions, cards, branch_facts)
 
     blocked = _blocked_cards(edges, by_name)
     features = _build_features(cards, repo_name, branch_facts, edges, blocked)
@@ -526,6 +532,18 @@ def _ask_about_unknown_changes(questions, branch_facts):
                 "Why can't git report the changes in the worktree at %s?" % facts["wt"],
                 "Its `git status` failed, so the branch is shown as \"changes unknown\" "
                 "rather than clean. Git said: %s" % facts["status_error"],
+            )
+
+
+def _ask_about_unknown_diffs(questions, cards, branch_facts):
+    # Only where "diff unknown" shows: on a branch that a card with at least one task names.
+    shown_on = {card.branch for card in cards if card.items}
+    for branch, facts in branch_facts.items():
+        if facts["diff_error"] and branch in shown_on:
+            questions.add(
+                "Why could git not compute the diff of `%s`?" % branch,
+                "Its `git diff` failed, so the diff is shown as \"diff unknown\" "
+                "rather than empty. Git said: %s" % facts["diff_error"],
             )
 
 
