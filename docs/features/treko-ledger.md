@@ -386,6 +386,11 @@ observability judge reported that the filter does run for a repository unpacked 
 risk accepted. ADR 0056 section 11 records it. This was the last item on task 1d's list, so task 1d
 is closed on his answers and browser-reachable work (D31) may proceed.
 
+**D40 — E7 lives in a new file.** (user, 2026-11-06, asked before task 8) `treko/test_analyze_options.py`
+is 750 lines after task 7 (cap 800) and E7 needs about 150. He chose a new file,
+`treko/test_analyze_diff_unknown.py`, reusing the old file's helpers by import, instead of the file
+name the spec's task 8 gives (`test_analyze_options.py`). Criterion E7 and task 8 are otherwise as written.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
