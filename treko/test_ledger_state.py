@@ -3,8 +3,10 @@ run ids (section 8.1) and the list rows it shows (sections 3.3 and 8.3), in `led
 
 Names are fixed by card decision D41: `run_id(directory, repo, branch, worktree)` and
 `run_rows(runs, hidden)`. Directory canonicalising (`expanduser`, then `realpath`, section 3.4)
-stays with the caller, so `run_id` takes canonical strings and the id tests canonicalise the
-spellings themselves, on a real symlink under `tmp_path`.
+stays with the caller, so `run_id` takes a canonical directory and the id tests canonicalise those
+spellings themselves, on a real symlink under `tmp_path`. A worktree is the exception: section 8.1
+has `run_id` canonicalise it the same way when it contains `/` or starts with `~`, and use it as
+given otherwise. The name, dir and label formulas of section 8.1 are in `test_ledger_names.py`.
 
 A row figure is derived from one key of the run. When the run lacks that key the figure is the string
 "—", never None and never 0 (D41, section 8.3); a key that is present but empty gives a real 0.
@@ -38,7 +40,9 @@ PINNED_IDS = (
     (("/Users/x/dev", "memsearch", "", ""), "re768e05cbfa1af82"),
     (("/Users/x/dev", "", "", ""), "r5617c2701fd6955f"),
     (("/Users/x/café", "", "", ""), "r6824773012d9ec13"),
+    (("/Users/x/dev", "", "", "wt-a"), "r3b556264279d94c8"),  # a bare worktree name, as given
 )
+DIR = "/Users/x/dev"  # a directory already canonical: run_id does not touch it
 
 
 def recipe_digest(fields, ensure_ascii):
@@ -103,13 +107,44 @@ def test_the_same_folder_name_in_two_places_gives_two_ids(tmp_path, monkeypatch)
     assert rid(dev) != rid(work)
 
 
-def test_each_narrowing_changes_the_id():
-    base = "/Users/x/dev"
+def test_directory_is_hashed_as_given_because_the_caller_canonicalises_it():
+    assert rid("~/x") == recipe_digest(("~/x", "", "", ""), ensure_ascii=False)  # no expanduser
+
+
+def test_a_worktree_typed_three_ways_gives_one_id(tmp_path, monkeypatch):
+    real = tmp_path / "x" / "wt"
+    real.mkdir(parents=True)
+    os.symlink(real, tmp_path / "link")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    typed = ["~/x/wt", str(real), str(tmp_path / "link")]
+    assert len(set(typed)) == 3
+    assert len({recipe_digest((DIR, "", "", text), False) for text in typed}) == 3  # raw: three ids
+    one_id = recipe_digest((DIR, "", "", canonical(str(real))), False)
+    assert {rid(DIR, worktree=text) for text in typed} == {one_id}
+
+
+def test_a_worktree_starting_with_a_tilde_is_canonicalised_though_it_has_no_slash(
+        tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert canonical("~") != "~"
+    expected = recipe_digest((DIR, "", "", canonical("~")), False)
+    assert rid(DIR, worktree="~") == expected  # a test for "/" alone would hash "~" as given
+
+
+def test_a_bare_worktree_name_is_used_as_given():
+    assert canonical("wt-a") != "wt-a"  # realpath would turn it into <cwd>/wt-a
+    assert rid(DIR, worktree="wt-a") == "r3b556264279d94c8"  # pinned outside Python (PINNED_IDS)
+    assert rid(DIR, worktree="wt-a") != recipe_digest((DIR, "", "", canonical("wt-a")), False)
+
+
+def test_each_narrowing_changes_the_id(tmp_path):
+    base = DIR
+    (tmp_path / "wt").mkdir()
     ids = {
         "none": rid(base),
         "repo": rid(base, repo="memsearch"),
         "branch": rid(base, branch="main"),
-        "worktree": rid(base, worktree="/Users/x/dev/wt"),
+        "worktree": rid(base, worktree=str(tmp_path / "wt")),
     }
     assert len(set(ids.values())) == 4, ids
     assert rid(base, "memsearch", "main") != ids["repo"]  # narrowing a narrowed request, too
