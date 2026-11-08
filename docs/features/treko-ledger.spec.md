@@ -4227,6 +4227,12 @@ session. Rules that hold for every task:
       empty run, a `folder missing` branch and a run holding only `id` and `name`, each with its
       falsifier). Green: implement.
       Names: decision D41 fixes the public functions and the `"—"` string (2026-11-08).
+      Added 2026-11-08 (builder's call, not the user's): `run_name(directory, repo, branch, worktree)`,
+      `run_dir(directory)` and `queue_label(directory, repo, branch, worktree)` take the same inputs as
+      `run_id`; `run_id` canonicalises `worktree` (not `directory`) per §8.1; the name, dir and label
+      tests live in a second new file, `treko/test_ledger_names.py`, because `test_ledger_state.py`
+      would pass 400 lines. `analyze._home_collapse` (`analyze.py:116-119`) matches a bare prefix and
+      must not be reused for `run_dir`.
       Files: `treko/ledger_state.py` (new), `treko/test_ledger_state.py` (new).
       Owns: G1, G4.
       §12 edits: none.
