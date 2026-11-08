@@ -391,6 +391,14 @@ is 750 lines after task 7 (cap 800) and E7 needs about 150. He chose a new file,
 `treko/test_analyze_diff_unknown.py`, reusing the old file's helpers by import, instead of the file
 name the spec's task 8 gives (`test_analyze_options.py`). Criterion E7 and task 8 are otherwise as written.
 
+**D41 — Task 9 names its public functions.** (user, 2026-11-08, asked before task 9) The spec named
+`ledger_state.py` and the shapes it holds but no function a test could call. He approved:
+`run_id(directory, repo, branch, worktree)` (the §8.1 recipe), `run_name`, `run_dir`, `queue_label`
+and `run_rows(runs, hidden)`; a figure whose key a run lacks is the string `"—"`, never `None`
+or `0`; `canDelete` is true when more than one run is visible, hidden runs excluded first; ties and a
+missing `analyzedAt` sort as §8.3 already says. Directory canonicalising (`expanduser`, then
+`realpath`, §3.4) stays with the caller. Criteria G1, G4 and task 9 are otherwise as written.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**

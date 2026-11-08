@@ -4226,6 +4226,7 @@ session. Rules that hold for every task:
       narrowing changes the id) and G4 (row fields from fixture runs, including `?/?`, `—`, an
       empty run, a `folder missing` branch and a run holding only `id` and `name`, each with its
       falsifier). Green: implement.
+      Names: decision D41 fixes the public functions and the `"—"` string (2026-11-08).
       Files: `treko/ledger_state.py` (new), `treko/test_ledger_state.py` (new).
       Owns: G1, G4.
       §12 edits: none.
