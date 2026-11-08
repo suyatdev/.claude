@@ -494,7 +494,7 @@ spec §11; a card decision is written "decision D10", and a round-2 fix "fix F4"
 - [x] 6 — Teach the analyzer to report each finished stage and to read a given list of cards (E1, E5) (done, cff838d)
 - [x] 7 — Make the analyzer say "changes unknown" and "folder missing" instead of a false "clean" (E6, E8) (done, red 3e1b0db, green dd6607e)
 - [x] 8 — Make the analyzer say "diff unknown", and ask why only where the value shows (E7) (done, red cc87e18, green 12fafb9)
-- [ ] 9 — Give each run a stable id, a name and a list row computed from its own data (G1, G4)
+- [x] 9 — Give each run a stable id, a name and a list row computed from its own data (G1, G4) (done, red 780f7ad and e9e3f3c, green 24f3a1b, Ledger tests a8241d3)
 - [ ] 10 — Combine several repositories' results into one run (F1, F2, F3)
 - [ ] 11 — Find every repository in and around a typed directory, each counted once (C1, C2, C3, C6)
 - [ ] 12 — Narrow the scan by repo, branch or worktree, and pick each card's live copy (C4, C5)
