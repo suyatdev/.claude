@@ -4248,6 +4248,7 @@ session. Rules that hold for every task:
       per column); §7.2's failed-family question; OQ-3's path labels when folder names collide.
       Red: F1, F2 (with `CYCLE_NOTE` pinned to the real analyzer's cycle note), F3. Green:
       implement.
+      Shapes: decision D42 fixes a part's keys, the graph spacing and four smaller readings (2026-11-09).
       Files: `treko/ledger_merge.py` (new), `treko/test_ledger_merge.py` (new).
       Owns: F1, F2, F3.
       §12 edits: none.

@@ -1,6 +1,6 @@
 ---
-phase: implementation
-model_tier: low
+phase: planning
+model_tier: high
 branch: feat/treko-ledger
 ---
 
@@ -398,6 +398,30 @@ and `run_rows(runs, hidden)`; a figure whose key a run lacks is the string `"—
 or `0`; `canDelete` is true when more than one run is visible, hidden runs excluded first; ties and a
 missing `analyzedAt` sort as §8.3 already says. Directory canonicalising (`expanduser`, then
 `realpath`, §3.4) stays with the caller. Criteria G1, G4 and task 9 are otherwise as written.
+
+**D42 — Task 10 fixes what the merge is handed, and five small readings of §7.** (user,
+2026-11-09, asked before task 10; recorded on Opus 5.5 max) §7 said only that a part is "one
+family's analyzer run and root, or that family's failure". He approved, as recommended:
+1. **A part** is `{"root", "label", "questions", "run"}` for a family the analyzer finished, and
+   `{"root", "label", "questions", "failure": {"exit", "timedOut", "stderr"}}` for one it did not.
+   `root` is the family's canonical primary checkout, `label` its folder name (§4.4's family label),
+   `questions` §4.4's per-family scan questions as `{"q", "ctx"}`, `run` the analyzer's run, `exit`
+   the exit status or `null`, `timedOut` a boolean, `stderr` the analyzer's last stderr line.
+   `request` is §5.1's `{"directory", "repo", "branch", "worktree"}`; `scan_questions` is §4.4's
+   list of `{"q", "ctx"}`, already worded by the scan.
+2. **Graph spacing.** A family's top row sits one empty row below the previous family's bottom
+   row: its first `y` is the previous family's largest `y` plus `2 * analyze.GRAPH_DY`. A family
+   with no nodes, a failed one included, takes no space.
+3. **The overlap check** (F2) pins that no two nodes share an `(x, y)` and the spacing in item 2.
+   It pins no box size, since §7.4 says 188 and the board's CSS says 180.
+4. **Colliding folder names** (OQ-3) change only the three places §7.1 lists, `tasks[].repo`,
+   `branches[].repo` and the kanban `m` prefix, plus the `<label>` in §7.2's failed-family question.
+   Question text the analyzer wrote keeps the folder name.
+5. **The merged cycle wave** is numbered one past the longest family's layered waves, or `"1"`
+   when no family has a layered wave.
+6. **Question order** is §7.1's, with each family's `questions` placed just before that family's
+   analyzer questions; then all are renumbered `q1…qN`.
+Criteria F1-F3 and task 10 are otherwise as written.
 
 ## Decisions carried to the relations card (user, 2026-11-02)
 
