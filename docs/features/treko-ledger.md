@@ -423,6 +423,22 @@ family's analyzer run and root, or that family's failure". He approved, as recom
    analyzer questions; then all are renumbered `q1…qN`.
 Criteria F1-F3 and task 10 are otherwise as written.
 
+**D43 — Task 13 names its public functions; tasks 11-13 keep their tests in new files.** (user,
+2026-11-11, asked after task 13's red tests were written, b4e4b82, which is later than D41 and D42 were
+asked) The spec fixed what `ledger_jobs.py` does but no name a test could call. He approved the names
+the tests use, as the test file's header and calls record them: `REAP_WAIT_SECS = 5`;
+`build_child_env(base)` (a new dict, never touching `base`); the exception `RegistryClosed`, raised by a
+refused launch; `ChildRegistry(base_env, build_env=build_child_env, reap_wait=None, log=None)` with
+`.lock`, `.closed`, `.launch(argv, **popen_kwargs)`, `.children()`, `.close()`, `.kill_all()` and
+`.kill_and_reap(proc, label)` (the reap-timeout line is `server: <label> reap timeout <pid>`, `label`
+being `"scan"` or `"job <item>"`); `kill_process_group(proc)`; and
+`run_scan(registry, request, scan_secs, *, label="scan", program=None)` returning an object with
+`.code` (`"ok"` or `"scan_timeout"`) and `.stdout`. He also confirmed that the tests of tasks 11, 12
+and 13 stay in `test_ledger_scan_more.py`, `test_ledger_scan_narrow.py` and `test_ledger_jobs.py`, not in
+the 375-line `test_ledger_scan.py` the spec names, and that the Chrome re-pin (installed build ...50,
+pinned ...79, which fails 51 browser tests) is its own task after task 13. Criterion C7, C8's unit row
+and task 13 are otherwise as written.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
