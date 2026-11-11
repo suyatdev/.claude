@@ -521,7 +521,7 @@ spec §11; a card decision is written "decision D10", and a round-2 fix "fix F4"
 - [x] 9 — Give each run a stable id, a name and a list row computed from its own data (G1, G4) (done, red 780f7ad and e9e3f3c, green 24f3a1b, Ledger tests a8241d3)
 - [x] 10 — Combine several repositories' results into one run (F1, F2, F3) (done, red a1bdcab, green f657f5e)
 - [x] 11 — Find every repository in and around a typed directory, each counted once (C1, C2, C3, C6) (done, red 5d78199, green e44336c; tests in treko/test_ledger_scan_more.py)
-- [ ] 12 — Narrow the scan by repo, branch or worktree, and pick each card's live copy (C4, C5)
+- [x] 12 — Narrow the scan by repo, branch or worktree, and pick each card's live copy (C4, C5) (done, red 4c773c1, green 5eca0a6; tests in treko/test_ledger_scan_narrow.py)
 - [ ] 13 — Start every scan and analyzer one safe way: protected, in its own group, time-limited, stoppable (C7)
 - [ ] 14 — Serve the Ledger page and its status answer beside the unchanged board (A1, A7)
 - [ ] 15 — Keep the queue in a file that survives restarts, with one server per store folder (D5)
