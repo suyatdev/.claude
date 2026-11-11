@@ -4271,6 +4271,10 @@ session. Rules that hold for every task:
       `ledger_merge.merge`, ordering: my inference), C2, C3, C6 (its timeout case included).
       Green: implement.
       Files: `treko/ledger_scan.py` (new), `treko/test_ledger_scan.py`.
+      Added 2026-11-10 (builder's call, to be confirmed by the user): `treko/test_ledger_scan.py` is
+      task 1a's C12 file (375 lines), so task 11's tests are in a new `treko/test_ledger_scan_more.py`
+      (504 lines); both together would pass the 800-line cap. Tasks 12 and 17 name `test_ledger_scan.py`
+      too, so where their tests go is still open.
       Owns: C1, C2, C3, C6.
       §12 edits: none.
       Proof: `SUITE treko/test_ledger_scan.py`; `SUITE treko`; `wc -l` ≤ 400.
