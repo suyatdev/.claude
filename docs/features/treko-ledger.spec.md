@@ -4289,6 +4289,15 @@ session. Rules that hold for every task:
       `families[].cards`. `no_such_directory` as a job-time outcome.
       Red: C4, C5. Green: implement.
       Files: `treko/ledger_scan.py`, `treko/test_ledger_scan.py`.
+      Added 2026-11-11 (builder's calls, to be confirmed by the user): the red tests are in a new
+      `treko/test_ledger_scan_narrow.py` (519 lines, 45 tests), not `test_ledger_scan.py`, for task 11's
+      800-line reason. Where §4.2 and §4.3 are silent the tests read them this way: `<card>` in the question
+      is the card's name without `.md`; the "Which copy of" question sits in `families[].questions`, its context
+      naming the disagreeing worktrees by folder name; with no narrowing a family with no cards stays, with
+      `cards: []`; worktree narrowing keys on the branch the chosen copy names, not on where the file sits;
+      "kept whole" is tested on family questions and the scan-level `questions` and `missed` (the scan has no
+      `branches[]`), so a "Which copy of" question about a card that narrowing dropped is kept. Not pinned:
+      branch `none`, the primary named as the worktree, a non-matching repo with a missing worktree.
       Owns: C4, C5.
       §12 edits: none.
       Proof: as task 11.
