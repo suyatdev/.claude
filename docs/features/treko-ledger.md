@@ -439,6 +439,23 @@ the 375-line `test_ledger_scan.py` the spec names, and that the Chrome re-pin (i
 pinned ...79, which fails 51 browser tests) is its own task after task 13. Criterion C7, C8's unit row
 and task 13 are otherwise as written.
 
+**D44 — Build order 15, 19, 14; task 15 names its public functions.** (user, 2026-11-12, asked before
+task 15's red tests were written, which D43's lateness called for.) Two things. First, the order: task 14's
+"Depends on" names task 19 (the status route reads the runner's in-memory stage record), and task 19's names
+task 15 (the saved queue), so the order those lines allow is 15, then 19, then 14, not the checklist's
+numbering. He chose "go straight to task 14" over the Chrome re-pin, then approved this order once the
+dependency was shown. No task text is edited; only the build order differs from the numbers. Second, the
+names the task 15 tests use, all in `treko/ledger_state.py`: `load_ledger(store_dir)` (an absent file is an
+empty ledger; an unparseable, unreadable, wrong-version or rule-breaking file raises `LedgerStartupError`
+naming the file); `write_ledger(store_dir, state)` (temp file, `fsync`, `os.replace`, mode `0o600`; a failed
+write leaves the old file whole, removes its temp file, writes `server: ledger write failed: <errno name>`
+and raises `LedgerWriteError`); `acquire_store_lock(store_dir)` (the `flock` of section 5.1, returns the open
+lock file for the server to hold; a held lock or an unopenable lock file raises `LedgerStartupError`);
+the exceptions `LedgerStartupError` and `LedgerWriteError`; and `Ledger(state=None, store_dir=None)`, which with
+a `store_dir` writes the new state before replacing the in-memory one (section 5.6's request-side rule), and
+without one behaves as task 9 left it. Its tests live in a new `treko/test_ledger_store.py`, not
+`test_ledger_jobs.py`, which task 13 created and which holds 589 lines. Task 15 is otherwise as written.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
