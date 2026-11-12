@@ -34,6 +34,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import store  # noqa: E402  (sibling module; the path insert above is what makes it importable)
 import store_location  # noqa: E402  (D1, D2 and D4 live there; see D5 for why)
+from ledger_state import (  # noqa: E402  (D44: the saved queue and the one-server-per-folder lock)
+    Ledger, LedgerStartupError, acquire_store_lock, load_ledger)
 from store_location import StartupAbort  # noqa: E402  (moved out per D5, both modules import it)
 from channel import (  # noqa: E402  (D6: the cmux control channel and its closed reason set)
     CHANNEL_OK,
@@ -699,6 +701,17 @@ def main(argv=None):
         else:
             sys.stderr.write("server: cannot bind %s:%d: %s\n"
                              % (HOST, port, errno.errorcode.get(exc.errno, exc.strerror)))
+        return 2
+
+    # After the bind, so a busy port keeps its own message. Lock first, then load: a second server
+    # reports the lock even when the file is corrupt. The lock file is held in `config` because a
+    # collected file object drops the flock.
+    try:
+        config["store_lock"] = acquire_store_lock(store_dir)
+        config["ledger"] = Ledger(state=load_ledger(store_dir), store_dir=store_dir)
+    except LedgerStartupError as exc:
+        sys.stderr.write("server: %s\n" % exc)
+        httpd.server_close()
         return 2
 
     # Both steps below are auto-launch only (--open); a plain `server.py` start must not
