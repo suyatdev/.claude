@@ -456,6 +456,25 @@ a `store_dir` writes the new state before replacing the in-memory one (section 5
 without one behaves as task 9 left it. Its tests live in a new `treko/test_ledger_store.py`, not
 `test_ledger_jobs.py`, which task 13 created and which holds 589 lines. Task 15 is otherwise as written.
 
+**D45 — Task 19 names its public functions; its tests go in a new file.** (user, 2026-11-12, asked before
+task 19's red tests were written.) The spec fixes what the runner does (section 5.4 steps 1 to 6, section
+6.2's stage list) but no name a test could call. He approved, all in `treko/ledger_jobs.py`:
+`JobRunner(ledger, registry, store_path, analyze_secs, scan_secs, report=None, scan_program=None,
+analyze_program=None)`, where `ledger` is a `Ledger`, `registry` a `ChildRegistry`, `store_path` the file
+`store.emit_run` writes, and the two `*_program` arguments swap in a fake scan or fake analyzer for tests;
+`.run_next()`, which runs the oldest waiting item on the calling thread from step 1 to its end and returns
+the item's id, or `None` when nothing is waiting or the registry is closed; `.start()`, which starts the
+runner thread, and `.wake()`, which tells it an item was queued (the thread leaves its loop once the registry
+is closed and it is woken); `.progress()`, the in-memory stage record the status route reads, `None` when
+nothing runs, else `{"done": int, "total": int or None, "label": str}` as section 3.3 shows it, with `total`
+`None` until the scan has ended and then `4N + 3`; `.last_job_end`, the time the last job ended, `None`
+before any; and `report`, the one handler that receives each `treko-progress <stage>` line as `report(stage)`
+and by default records it. Task 19's tests cover step 1's write and order, the success path, E4, and D7
+(a two-repo job whose second analyzer fails, and a job whose analyzers all fail, `analysis_failed`); the
+other failure codes are task 20's and the stop and restart cases are tasks 22 and 23, as the checklist has
+them. The tests live in a new `treko/test_ledger_runner.py`, not in `test_ledger_jobs.py` (589 lines).
+Task 19 is otherwise as written.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
