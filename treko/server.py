@@ -36,6 +36,7 @@ import store  # noqa: E402  (sibling module; the path insert above is what makes
 import store_location  # noqa: E402  (D1, D2 and D4 live there; see D5 for why)
 from ledger_state import (  # noqa: E402  (D44: the saved queue and the one-server-per-folder lock)
     Ledger, LedgerStartupError, acquire_store_lock, load_ledger)
+from ledger_jobs import ChildRegistry, JobRunner  # noqa: E402  (D45: the job runner and its child registry)
 from store_location import StartupAbort  # noqa: E402  (moved out per D5, both modules import it)
 from channel import (  # noqa: E402  (D6: the cmux control channel and its closed reason set)
     CHANNEL_OK,
@@ -57,6 +58,7 @@ PORT_ENV = "TREKO_PORT"
 IDLE_SECS = (1800, 60, "TREKO_IDLE_SECS")
 POLL_SECS = (5, 1, "TREKO_POLL_SECS")
 ANALYZE_SECS = (60, 5, "TREKO_ANALYZE_SECS")
+SCAN_SECS = (30, 5, "TREKO_SCAN_SECS")  # spec section 4: the job-time scan's bound
 
 # Repo resolution and the busy-port probe are both startup-time, unattended subprocess/network
 # calls on an attacker-controllable path (§"Auto-launch"); each gets its own bound rather than
@@ -658,6 +660,7 @@ def main(argv=None):
         idle_secs = read_timeout(IDLE_SECS)
         poll_secs = read_timeout(POLL_SECS)
         analyze_secs = read_timeout(ANALYZE_SECS)
+        scan_secs = read_timeout(SCAN_SECS)
         check_manifest_types()
         check_index_injectable()
         repo_root = resolve_repo(args.repo)
@@ -713,6 +716,10 @@ def main(argv=None):
         sys.stderr.write("server: %s\n" % exc)
         httpd.server_close()
         return 2
+    # The one place the real environment is read for children (a copy). No wake here: restart is task 22's.
+    config["registry"] = ChildRegistry(dict(os.environ))
+    config["runner"] = JobRunner(config["ledger"], config["registry"], config["store_path"], analyze_secs, scan_secs)
+    config["runner"].start()
 
     # Both steps below are auto-launch only (--open); a plain `server.py` start must not
     # gain a side effect it never had -- other tests start the server against a deliberately

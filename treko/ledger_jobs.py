@@ -1,6 +1,6 @@
 """Start every scan and analyzer one safe way (docs/features/treko-ledger.spec.md sections 2 default 3, 4, 5.4).
 
-Four parts, all in the standard library:
+Five parts, all in the standard library:
   * `build_child_env(base)`: the environment every child gets. It reads only the base it is given, never the
     process environment, so the one place that reads the real environment is the server's `main()`.
   * `ChildRegistry`: the set of running children, under its own lock (never the ledger lock). Its one `launch`
@@ -10,6 +10,8 @@ Four parts, all in the standard library:
     line and leaves the process registered, so shutdown's sweep kills its group again.
   * `run_scan`: the scan launcher. The request goes in as JSON on stdin, the bound is passed in, and at the
     bound the whole process group is killed.
+  * `JobRunner`: one job at a time, section 5.4 steps 1 to 6, on a thread of its own, and the in-memory stage
+    record the status route reads (section 6.2).
 
 The builder is the only protection a child gets, so every process this package starts goes through `launch`.
 """
@@ -21,14 +23,28 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from collections import namedtuple
 from pathlib import Path
+
+import ledger_state
+import store
 
 REAP_WAIT_SECS = 5  # section 5.4: the longest any one reap waits after a group kill
 SCAN_OK = "ok"
 SCAN_TIMEOUT = "scan_timeout"
 SCAN_PROGRAM = Path(__file__).resolve().with_name("ledger_scan.py")
+ANALYZE_PROGRAM = Path(__file__).resolve().with_name("analyze.py")
 SHUTDOWN_LABEL = "shutdown"  # names the sweep's reap-timeout lines: `server: shutdown reap timeout <pid>`
+
+# Sections 5.4 and 6.2: a job over N families has 4N + 3 stages (the scan, 4 per family, the merge, the write).
+RUN_KEYS = frozenset({"id", "name", "dir", "analyzedAt", "features", "waves", "constraints", "branches", "graph",
+                      "kanban", "questions"})  # ADR 0023's schema; test_analyze.py pins the same set
+STAGE_LABELS = ("reading worktrees", "reading branches", "reading cards", "deriving merge order")  # section 6.1
+MERGE_LABEL, WRITE_LABEL = "merging the runs", "writing the store"
+PROGRESS_PREFIX = "treko-progress "
+ANALYSIS_FAILED = "analysis_failed"
+SCAN_FAILED = "scan_failed"
 
 # Section 2 default 3's table. The variables of the git config family the builder owns end to end: the base's
 # own values for any of these are dropped, whatever the number in KEY_<n> / VALUE_<n>.
@@ -170,3 +186,205 @@ def run_scan(registry, request, scan_secs, *, label="scan", program=None):
         raise
     finally:
         _close_streams(proc)
+
+
+# ------------------------------------------------------------------------------------------ the job runner
+
+def _scan_error(result):
+    """(error code or None, the scan's object or None) for a finished scan process."""
+    if result.code != SCAN_OK:
+        return result.code, None
+    try:
+        scan = json.loads(result.stdout)
+        outcome = scan["outcome"]
+        scan["families"], scan["questions"]
+    except (ValueError, KeyError, TypeError):
+        return SCAN_FAILED, None
+    if result.returncode != 0:
+        return SCAN_FAILED, None
+    return (None if outcome == SCAN_OK else outcome), scan
+
+
+def _read_run(stdout):
+    """The analyzer's run, or None when stdout is not a JSON object holding every run key."""
+    try:
+        run = json.loads(stdout)
+    except ValueError:
+        return None
+    return run if isinstance(run, dict) and RUN_KEYS <= set(run) else None
+
+
+class JobRunner:
+    """Runs the oldest waiting item, one at a time (section 5.4). `report(stage)` receives each analyzer
+    `treko-progress <stage>` line; the default moves the stage record on. `progress()` is that record: None when
+    nothing runs, else {"done", "total" (None until the scan ends), "label"}. `last_job_end` is `time.monotonic()`
+    at the last job end, the clock the idle watchdog uses. `scan_program` and `analyze_program` swap the scripts."""
+
+    def __init__(self, ledger, registry, store_path, analyze_secs, scan_secs, report=None, scan_program=None,
+                 analyze_program=None):
+        self._ledger, self._registry, self._store_path = ledger, registry, store_path
+        self._analyze_secs, self._scan_secs = analyze_secs, scan_secs
+        self._scan_program = scan_program
+        self._analyze_program = str(ANALYZE_PROGRAM if analyze_program is None else analyze_program)
+        self.report = report if report is not None else self._record
+        self.last_job_end = None
+        self._lock = threading.Lock()  # guards the stage record and last_job_end; never held across a call out
+        self._stage = None
+        self._labels = []  # the families' labels, known once the scan has ended
+        self._wake = threading.Event()
+
+    # ------------------------------------------------------------------------------ stage record (section 6.2)
+
+    def progress(self):
+        with self._lock:
+            return None if self._stage is None else dict(self._stage)
+
+    def _label_for(self, done):
+        """The stage now running: the one after `done - 1` finished ones, which the fixed order names."""
+        finished, count = done - 1, len(self._labels)
+        if finished >= 4 * count:
+            return MERGE_LABEL if finished == 4 * count else WRITE_LABEL
+        index, stage = divmod(finished, len(STAGE_LABELS))
+        who = self._labels[index] if count == 1 else "%s (%d of %d)" % (self._labels[index], index + 1, count)
+        return "%s: %s" % (who, STAGE_LABELS[stage])
+
+    def _set_done(self, done):
+        with self._lock:
+            self._stage = {"done": done, "total": 4 * len(self._labels) + 3, "label": self._label_for(done)}
+
+    def _record(self, stage):
+        """The default report handler: one more stage is done, whatever its name."""
+        with self._lock:
+            if self._stage is None:
+                return
+            done = min(self._stage["done"] + 1, 4 * len(self._labels) + 1)  # a stray line cannot pass the families
+            self._stage = {"done": done, "total": self._stage["total"], "label": self._label_for(done)}
+
+    # ------------------------------------------------------------------------------------------- the thread
+
+    def start(self):
+        threading.Thread(target=self._loop, name="treko-job-runner", daemon=True).start()
+
+    def wake(self):
+        self._wake.set()
+
+    def _loop(self):
+        while self._wake.wait():
+            self._wake.clear()  # before the work, so a wake that arrives during a job is not lost
+            if self._registry.closed:
+                return
+            try:
+                while self.run_next() is not None:
+                    pass
+            except Exception as error:  # noqa: BLE001 - one bad job must not end the thread
+                _stderr_line("server: runner error %s" % type(error).__name__)
+
+    # ----------------------------------------------------------------------------------------------- one job
+
+    def run_next(self):
+        """Section 5.4, steps 1 to 6, for the oldest waiting item; its id, or None when none ran."""
+        if self._registry.closed:
+            return None
+        item = self._claim()
+        if item is None:
+            return None
+        item_id, request = item["item"], item["request"]
+        with self._lock:
+            self._labels = []
+            self._stage = {"done": 0, "total": None, "label": "scanning " + ledger_state.run_dir(request["directory"])}
+        result = run_scan(self._registry, request, self._scan_secs, label="job " + item_id,
+                          program=self._scan_program)
+        error, scan = _scan_error(result)
+        if error is not None:
+            self._settle(item_id, error)
+            return item_id
+        families = scan["families"]
+        self._labels = [family["label"] for family in families]
+        self._set_done(1)
+        parts = [self._analyze(number, family) for number, family in enumerate(families)]
+        if all("run" not in part for part in parts):
+            self._settle(item_id, ANALYSIS_FAILED)
+            return item_id
+        import ledger_merge  # late: it imports analyze, and the server must start without importing the analyzer
+        run = ledger_merge.merge(request, parts, scan["questions"])
+        self._set_done(4 * len(parts) + 2)
+        store.emit_run(self._store_path, run)
+        self._settle(item_id, None)
+        return item_id
+
+    def _claim(self):
+        """Mark the oldest waiting item `running` (saved to ledger.json before this returns); a copy, or None."""
+        claimed = []
+
+        def change(state):
+            waiting = [item for item in state["queue"] if item["state"] == "waiting"]
+            if waiting:
+                oldest = min(waiting, key=lambda item: item["queuedAt"])
+                oldest["state"] = "running"
+                claimed.append(dict(oldest))
+            return state
+
+        if any(item["state"] == "waiting" for item in self._ledger.snapshot()["queue"]):
+            self._ledger.update(change)  # the choice is made inside the change, so it cannot go stale
+        return claimed[0] if claimed else None
+
+    def _settle(self, item_id, error):
+        """The job's last ledger write: the item leaves the queue (`error` None) or fails with `error`."""
+        def change(state):
+            if error is None:
+                state["queue"] = [item for item in state["queue"] if item["item"] != item_id]
+            for item in state["queue"]:
+                if item["item"] == item_id:
+                    item.update(state="failed", error=error, detail=None)
+            return state
+
+        self._ledger.update(change)
+        with self._lock:
+            self.last_job_end = time.monotonic()
+            self._stage = None
+
+    def _analyze(self, number, family):
+        """One family's part for `ledger_merge.merge`: its run, or the failure the run gets a question for."""
+        argv = [sys.executable, self._analyze_program, family["root"], "--progress"]
+        for card in family["cards"]:
+            argv += ["--card", card]
+        proc = self._registry.launch(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+        out, last, expired = [], "", threading.Event()  # `last`: the final stderr line that is not progress
+
+        def expire():
+            expired.set()
+            kill_process_group(proc)
+
+        drain = threading.Thread(target=lambda: out.append(proc.stdout.read()), daemon=True)
+        timer = threading.Timer(self._analyze_secs, expire)
+        timer.daemon = True
+        try:
+            drain.start()
+            timer.start()
+            for line in proc.stderr:
+                line = line.rstrip("\n")
+                if line.startswith(PROGRESS_PREFIX):
+                    self.report(line[len(PROGRESS_PREFIX):].strip())
+                elif line.strip():
+                    last = line
+            timer.cancel()
+            drain.join()
+            try:
+                proc.wait(timeout=REAP_WAIT_SECS)
+                self._registry.release(proc)
+            except subprocess.TimeoutExpired:
+                expired.set()  # it closed its output but did not exit: the same as running past the bound
+                self._registry.kill_and_reap(proc, "job analyzer")
+        except BaseException:
+            timer.cancel()
+            self._registry.kill_and_reap(proc, "job analyzer")  # an interrupt must not leave it running
+            raise
+        finally:
+            _close_streams(proc)
+        self._set_done(1 + 4 * (number + 1))  # the stages a failed family never reported count as done
+        part = {"root": family["root"], "label": family["label"], "questions": family["questions"]}
+        run = None if expired.is_set() or proc.returncode != 0 else _read_run(out[0] if out else "")
+        if run is not None:
+            return dict(part, run=run)
+        return dict(part, failure={"exit": proc.returncode, "timedOut": expired.is_set(), "stderr": last})
