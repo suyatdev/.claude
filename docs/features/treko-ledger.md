@@ -589,7 +589,7 @@ spec §11; a card decision is written "decision D10", and a round-2 fix "fix F4"
 - [x] 11 — Find every repository in and around a typed directory, each counted once (C1, C2, C3, C6) (done, red 5d78199, green e44336c; tests in treko/test_ledger_scan_more.py)
 - [x] 12 — Narrow the scan by repo, branch or worktree, and pick each card's live copy (C4, C5) (done, red 4c773c1, green 5eca0a6; tests in treko/test_ledger_scan_narrow.py)
 - [x] 13 — Start every scan and analyzer one safe way: protected, in its own group, time-limited, stoppable (C7) (done, red b4e4b82, green 2016075; names D43; tests in treko/test_ledger_jobs.py)
-- [ ] 14 — Serve the Ledger page and its status answer beside the unchanged board (A1, A7)
+- [x] 14 — Serve the Ledger page and its status answer beside the unchanged board (A1, A7) (done, red 9136105, green 8c627a6; built after 15 and 19 per D44; names D46; tests in treko/test_ledger_routes.py; server.py is 780 of its 780-line cap, so tasks that add to it must move code out first; whole treko directory 653 passed and 51 stopped at the Chrome version check, pinned 156.0.8078.79 against installed 157.0.8103.78, so the browser tests did not run)
 - [x] 15 — Keep the queue in a file that survives restarts, with one server per store folder (D5) (done, red e205adf, green d4e5ca3; built before 14 per D44; names D44; tests in treko/test_ledger_store.py)
 - [ ] 16 — Refuse every bad request to POST /ledger before it touches the disk or git (A3)
 - [ ] 17 — Accept an analysis: scan at once, then queue it, or refuse it with a reason (A5, G7)
