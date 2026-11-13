@@ -475,6 +475,20 @@ other failure codes are task 20's and the stop and restart cases are tasks 22 an
 them. The tests live in a new `treko/test_ledger_runner.py`, not in `test_ledger_jobs.py` (589 lines).
 Task 19 is otherwise as written.
 
+**D46 — Task 14 names its public functions; its tests go in a new file.** (user, 2026-11-13, asked before
+task 14's red tests were written.) The spec fixes what the routes answer (section 3.1, section 3.3) but no name a
+test could call. He approved: in a new `treko/ledger_routes.py`, `build_status(ledger, runner, store_dir)`, which
+returns section 3.3's payload as a plain dict (`ok`, the home-collapsed `storeDir`, `queue` with `stage` on the
+running item only, `runs` rows, `runsError`) and needs no server; and `check_status_request(headers, config)`,
+which returns `None` when `Host`, then `Origin` and `Sec-Fetch-Site` when present, then the token all pass, and
+otherwise the audit reason (`host_mismatch`, `origin_mismatch`, `bad_token`) while the wire answer stays the
+one collapsed `403 forbidden`. In `treko/server.py`, `ControlHandler._serve_page(file_name)` becomes the one
+function that serves both pages (both metas, the CSP, `no-store`, `nosniff`), `_serve_index` calls it so the
+board is served exactly as today, `check_index_injectable` checks both page files, and `build_config` gains
+`ledger` and `runner` entries that default to `None` so no existing board test changes. Its tests live in a new
+`treko/test_ledger_routes.py`. `server.py` is 764 lines against the card's 780 cap, so the edit has to fit in
+about 16 net lines; the proof line `wc -l treko/server.py` stays the check. Task 14 is otherwise as written.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
