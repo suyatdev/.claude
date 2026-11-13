@@ -1,12 +1,14 @@
-"""What GET /ledger/status checks and answers (docs/features/treko-ledger.spec.md sections 3.1 and 3.3; D46).
+"""What the Ledger routes check and answer (docs/features/treko-ledger.spec.md sections 3.1 and 3.3 to 3.8; D46, D47).
 
-Plain functions, no socket: `server.py` calls them and turns the result into a reply and an audit line. The
-checks mirror `_handle_command`'s, and task 16 will fold the token half of both into one shared function (3.8).
-An accepted poll writes no audit line (section 3.6: about 1,800 an hour would bury the state-changing ones); a
-refused one writes exactly one, with id=status.
+Plain functions, no socket: `server.py` calls them and turns the result into a reply and an audit line. The token
+check and the body reader are shared with `/command` (3.8). An accepted poll writes no audit line (section 3.6:
+about 1,800 an hour would bury the state-changing ones); a refused one writes exactly one, with id=status.
 """
 
 import hmac
+import json
+import os
+import re
 from pathlib import Path
 
 import store
@@ -15,6 +17,17 @@ from ledger_state import queue_label, run_rows
 STORE_FILE = "tracker-data.js"  # where runs live; server.py's FIRST_RUN_OPTIONAL names the same file
 TOKEN_HEADER = "X-Tracker-Token"
 STORE_UNREADABLE = "store_unreadable"
+LEDGER_MAX_BODY_BYTES = 4096  # a macOS path alone can be 1024 bytes and JSON quoting can double it (3.4 step 3)
+MAX_DIRECTORY_BYTES, MAX_NAME_BYTES, MAX_RUN_BYTES = 1024, 255, 255
+ITEM_PATTERN = re.compile(r"[0-9a-f]{16}")
+# op -> (required keys, optional keys); a key set outside required..required+optional is refused, never ignored
+OP_KEYS = {"analyze": ({"directory"}, {"repo", "branch", "worktree"}), "reanalyze": ({"run"}, set()),
+           "remove": ({"item"}, set()), "retry": ({"item"}, set()), "delete": ({"run"}, set())}
+# Task 17 replaces this. What the ops answer until then is not in the spec: a closed-table code that cannot read as
+# success (3.5 has no 501). It lives here, not as a literal in server.py, because test_server.py derives the board's
+# reason set from `_fail(` literals in server.py and internal_error is not a board reason.
+OP_STUB_REFUSAL = (500, "internal_error", "internal_error")
+TEXT_FIELDS = ("directory", "repo", "branch", "worktree")  # a bad value is 422 invalid_input; the rest are 400
 
 
 def _home_collapse(path):
@@ -38,11 +51,132 @@ def check_status_request(headers, config):
     fetch_site = headers.get("Sec-Fetch-Site")
     if fetch_site is not None and fetch_site != "same-origin":
         return "origin_mismatch"
-    presented = headers.get(TOKEN_HEADER, "")
-    # hmac.compare_digest raises TypeError on a str that is not ASCII (U10), so refuse it before comparing.
-    if not presented.isascii() or not hmac.compare_digest(presented, config["token"]):
+    if not token_ok(headers.get(TOKEN_HEADER, ""), config["token"]):
         return "bad_token"
     return None
+
+
+def token_ok(presented, expected):
+    """The one token comparison (3.8). hmac.compare_digest raises TypeError on a str that is not ASCII (U10),
+    and an unhandled error there drops the connection with no audit line, so refuse such a value first."""
+    return presented.isascii() and hmac.compare_digest(presented, expected)
+
+
+def read_json_body(headers, rfile, cap):
+    """The parsed JSON, or the refusal `(status, error, reason)`; it checks no shape, each route keeps its own.
+
+    Reads at most cap + 1 bytes: the cap is enforced on the read, not merely checked against a header the
+    caller controls. A tuple is never valid JSON output, so the two returns cannot be confused.
+    """
+    malformed = (400, "malformed", "malformed")
+    if headers.get("Transfer-Encoding"):
+        return malformed
+    declared = headers.get("Content-Length")
+    if declared is None:
+        return malformed
+    try:
+        length = int(declared)
+    except ValueError:
+        return malformed
+    if length < 0:
+        return malformed
+    too_large = (413, "too_large", "too_large")
+    if length > cap:
+        return too_large
+    raw = rfile.read(min(length, cap + 1))
+    if len(raw) > cap:
+        return too_large
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, RecursionError):  # RecursionError is a RuntimeError, not a ValueError (U10)
+        return malformed
+
+
+def _has_control(text):
+    return any(ord(char) < 0x20 or ord(char) == 0x7F for char in text)
+
+
+def _encodable(text):
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:  # a lone surrogate, which a JSON \ud800 escape produces from plain ASCII (U7)
+        return False
+    return True
+
+
+def _text_refusal(name, value):
+    """The pure rules of 3.4's field table for one text field, or None. Counts UTF-8 bytes, so run after `_encodable`."""
+    limit = MAX_DIRECTORY_BYTES if name in ("directory", "worktree") else MAX_NAME_BYTES
+    if len(value.encode("utf-8")) > limit or _has_control(value) or (name == "repo" and "/" in value):
+        return "invalid_input"
+    if name == "directory" and not os.path.isabs(os.path.expanduser(value)):
+        return "relative_path"
+    return None
+
+
+def _run_refusal(value, store_dir):
+    """`run`'s shape rule (400), then its store lookup (404); `item` is shape-only here, task 17 owns no_such_item."""
+    if not 1 <= len(value.encode("utf-8")) <= MAX_RUN_BYTES or _has_control(value):
+        return (400, "malformed", "malformed")
+    try:
+        runs = store.read_store(Path(store_dir) / STORE_FILE)["runs"]
+    except store.StoreError:
+        return (500, STORE_UNREADABLE, STORE_UNREADABLE)
+    if not any(run.get("id") == value for run in runs):
+        return (404, "no_such_run", "no_such_run")
+    return None
+
+
+def _field_refusal(fields, store_dir):
+    """Step 7, as `(status, error, reason)` or None. Every field passes the UTF-8 rule before any other rule."""
+    for name, value in fields.items():
+        if not _encodable(value):
+            return (422, "invalid_input", "invalid_input") if name in TEXT_FIELDS else (400, "malformed", "malformed")
+    for name in TEXT_FIELDS:
+        code = _text_refusal(name, fields[name]) if name in fields else None
+        if code:
+            return (422, code, code)
+    if "item" in fields and not ITEM_PATTERN.fullmatch(fields["item"]):
+        return (400, "malformed", "malformed")
+    if "directory" in fields:  # last of the text rules: it is the only one that touches the filesystem
+        if not os.path.isdir(os.path.realpath(os.path.expanduser(fields["directory"]))):
+            return (422, "no_such_directory", "no_such_directory")
+    if "run" in fields:
+        return _run_refusal(fields["run"], store_dir)
+    return None
+
+
+def check_ledger_post(headers, rfile, config):
+    """3.4 steps 1 to 7: `(op, fields, None)` when the request may reach its op, else `(None, None, refusal)`.
+
+    A refusal is `(status, error, reason, audit_id)`; the audit id is `-` until step 5 accepts the op, since an
+    unknown op is client text and the audit line does not escape it (3.6).
+    """
+    def refused(status, error, reason, audit_id="-"):
+        return None, None, (status, error, reason, audit_id)
+
+    if reason := check_status_request(headers, config):
+        return refused(403, "forbidden", reason)
+    media_type = headers.get("Content-Type", "").split(";")[0].strip().lower()
+    if media_type != "application/json":
+        return refused(415, "unsupported_media_type", "unsupported_media_type")
+    payload = read_json_body(headers, rfile, LEDGER_MAX_BODY_BYTES)
+    if isinstance(payload, tuple):
+        return refused(*payload)
+    if not isinstance(payload, dict) or not isinstance(payload.get("op"), str):
+        return refused(400, "malformed", "malformed")
+    op = payload["op"]
+    if op not in OP_KEYS:
+        return refused(403, "forbidden", "unknown_op")
+    required, optional = OP_KEYS[op]
+    fields = {key: value for key, value in payload.items() if key != "op"}
+    if not required <= set(fields) <= required | optional or not all(isinstance(v, str) for v in fields.values()):
+        return refused(400, "malformed", "malformed", op)
+    if code := _field_refusal(fields, config["store_dir"]):
+        return refused(*code, op)
+    if "directory" in fields:
+        fields["directory"] = os.path.realpath(os.path.expanduser(fields["directory"]))  # the canonical directory
+    return op, fields, None
 
 
 def _queue_row(item, stage):

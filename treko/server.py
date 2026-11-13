@@ -15,7 +15,6 @@ inert, which is why the launch shape is a contract and not a convenience.
 
 import argparse
 import errno
-import hmac
 import http.client
 import http.server
 import json
@@ -404,6 +403,8 @@ class ControlHandler(http.server.BaseHTTPRequestHandler):
         if not self._host_ok():
             return self._fail(403, "forbidden", "host_mismatch")
         path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
+        if path == "/ledger":
+            return self._handle_ledger()
         if path != "/command":
             if path in ("/", "/ledger/status") or path.lstrip("/") in STATIC_MANIFEST:
                 return self._method_not_allowed()
@@ -505,8 +506,7 @@ class ControlHandler(http.server.BaseHTTPRequestHandler):
         if fetch_site is not None and fetch_site != "same-origin":
             return self._fail(403, "forbidden", "origin_mismatch")
 
-        presented = self.headers.get(TOKEN_HEADER, "")
-        if not hmac.compare_digest(presented, self.config["token"]):
+        if not ledger_routes.token_ok(self.headers.get(TOKEN_HEADER, ""), self.config["token"]):
             return self._fail(403, "forbidden", "bad_token")
 
         media_type = self.headers.get("Content-Type", "").split(";")[0].strip().lower()
@@ -526,38 +526,10 @@ class ControlHandler(http.server.BaseHTTPRequestHandler):
         return self._run_send(command_id)
 
     def _read_body(self):
-        """Returns the parsed object, or None having already answered.
-
-        Reads at most 1 KiB + 1 byte: the cap is enforced on the read, not merely checked
-        against a header a caller controls.
-        """
-        if self.headers.get("Transfer-Encoding"):
-            self._fail(400, "malformed", "malformed")
-            return None
-        declared = self.headers.get("Content-Length")
-        if declared is None:
-            self._fail(400, "malformed", "malformed")
-            return None
-        try:
-            length = int(declared)
-        except ValueError:
-            self._fail(400, "malformed", "malformed")
-            return None
-        if length < 0:
-            self._fail(400, "malformed", "malformed")
-            return None
-        if length > MAX_BODY_BYTES:
-            self._fail(413, "too_large", "too_large")
-            return None
-
-        raw = self.rfile.read(min(length, MAX_BODY_BYTES + 1))
-        if len(raw) > MAX_BODY_BYTES:
-            self._fail(413, "too_large", "too_large")
-            return None
-        try:
-            payload = json.loads(raw.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
-            self._fail(400, "malformed", "malformed")
+        """Returns the parsed object, or None having already answered."""
+        payload = ledger_routes.read_json_body(self.headers, self.rfile, MAX_BODY_BYTES)
+        if isinstance(payload, tuple):
+            self._fail(*payload)
             return None
         # Exactly one key, `id`, a string. Unknown keys are a 400, never ignored: silent
         # tolerance is how an argument field gets smuggled in later, and commands take no
@@ -567,6 +539,14 @@ class ControlHandler(http.server.BaseHTTPRequestHandler):
             self._fail(400, "malformed", "malformed")
             return None
         return payload
+
+    def _handle_ledger(self):
+        """POST /ledger: every check of 3.4 steps 1 to 7 runs in ledger_routes before anything touches disk or git."""
+        op, fields, refusal = ledger_routes.check_ledger_post(self.headers, self.rfile, self.config)
+        if refusal:
+            status, error, reason, audit_id = refusal
+            return self._fail(status, error, reason, command_id=audit_id)
+        return self._fail(*ledger_routes.OP_STUB_REFUSAL, command_id=op)  # task 17 replaces this
 
     def _run_local(self, command_id):
         ok = run_reanalyze(self.config["repo_root"], self.config["store_path"],
