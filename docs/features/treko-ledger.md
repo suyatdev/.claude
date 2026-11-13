@@ -489,6 +489,23 @@ board is served exactly as today, `check_index_injectable` checks both page file
 `treko/test_ledger_routes.py`. `server.py` is 764 lines against the card's 780 cap, so the edit has to fit in
 about 16 net lines; the proof line `wc -l treko/server.py` stays the check. Task 14 is otherwise as written.
 
+**D47 — Task 16 names its public functions, puts the shared checks in `ledger_routes.py`, and its tests go in a
+new file.** (user, 2026-11-13, asked before task 16's red tests were written.) Spec section 3.8 says the shared
+token check and body reader are each "one function in `server.py`". He approved putting them in
+`treko/ledger_routes.py` instead, because `server.py` stands at its 780-line cap after task 14 and this way it
+shrinks. The names: `token_ok(presented, expected)` returns true or false and refuses a token that is not all
+ASCII without calling `hmac.compare_digest`; the command route, the status poll and `POST /ledger` all call it
+(task 14's `check_status_request` stops carrying its own copy). `read_json_body(headers, rfile, cap)` returns
+the parsed object, or a refusal `(status, error, reason)`; it carries `Transfer-Encoding`, `Content-Length`, the
+cap, the strict UTF-8 decode and `json.loads`, and catches `RecursionError` beside `ValueError` and
+`UnicodeDecodeError`; the cap is `MAX_BODY_BYTES = 1024` for `/command` and `LEDGER_MAX_BODY_BYTES = 4096` for
+`/ledger`. `check_ledger_post(headers, rfile, config)` runs section 3.4 steps 1 to 7 and returns
+`(op, fields, None)` or `(None, None, refusal)`, the refusal being `(status, error, reason, audit_id)` with
+`audit_id` `-` until step 5 accepts the op and then the op's name. In `server.py`, `ControlHandler._handle_ledger()`
+calls them and ends in a stub that task 17 replaces, and `_read_body` becomes a thin call to `read_json_body`
+that keeps `/command`'s exactly-one-key `id` check. The tests live in a new `treko/test_ledger_post.py`, not
+in `test_ledger_routes.py`, which holds 399 of its 400 lines. Task 16 is otherwise as written.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
