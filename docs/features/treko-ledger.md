@@ -580,7 +580,7 @@ spec §11; a card decision is written "decision D10", and a round-2 fix "fix F4"
 - [ ] 16 — Refuse every bad request to POST /ledger before it touches the disk or git (A3)
 - [ ] 17 — Accept an analysis: scan at once, then queue it, or refuse it with a reason (A5, G7)
 - [ ] 18 — Remove a waiting item, retry a failed one, hide a run (G5)
-- [ ] 19 — Run queued analyses one at a time, with progress that moves only on real stages (E4, D7)
+- [x] 19 — Run queued analyses one at a time, with progress that moves only on real stages (E4, D7) (done, red 804d849, green b1d3fa9; built before 14 per D44; names D45; tests in treko/test_ledger_runner.py; ledger_jobs.py is 390 of its 400-line cap)
 - [ ] 20 — Give each way a job can fail its own code and reason (D12, D13)
 - [ ] 21 — Make sure no job can stay "running" for ever (D14, D15)
 - [ ] 22 — After a restart, mark the interrupted job and start the waiting ones; polling alone never keeps the server awake (D3, D4, B2)
