@@ -506,6 +506,16 @@ calls them and ends in a stub that task 17 replaces, and `_read_body` becomes a 
 that keeps `/command`'s exactly-one-key `id` check. The tests live in a new `treko/test_ledger_post.py`, not
 in `test_ledger_routes.py`, which holds 399 of its 400 lines. Task 16 is otherwise as written.
 
+**D48 — Task 16 edits one existing check in `treko/test_server.py`.** (user, 2026-11-13, asked after the code was
+written and one old test failed.) The task's "§12 edits: none" assumed the body reader stays in `server.py`.
+Moving it (D47) took the `_fail(413, "too_large", ...)` literal out of that file, and
+`reasons_emitted_in_source`, which reads `server.py` as text to list every reason the board can give, then reported
+"only in the spec ['too_large']". He chose to edit that check so it also counts the 400 and 413 reasons the shared
+reader writes in `ledger_routes.py`, in its own commit before the code, over keeping a second copy of those two
+refusals in `server.py`. No assertion is loosened: the check still compares the source's reasons with the spec's
+table in both directions. The behaviour of the 413 refusal on `/command` is covered by the real-request rows of
+`test_ledger_post.py`.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
