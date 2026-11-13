@@ -34,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import store  # noqa: E402  (sibling module; the path insert above is what makes it importable)
 import store_location  # noqa: E402  (D1, D2 and D4 live there; see D5 for why)
+import ledger_routes  # noqa: E402  (D46: what /ledger/status checks and answers)
 from ledger_state import (  # noqa: E402  (D44: the saved queue and the one-server-per-folder lock)
     Ledger, LedgerStartupError, acquire_store_lock, load_ledger)
 from ledger_jobs import ChildRegistry, JobRunner  # noqa: E402  (D45: the job runner and its child registry)
@@ -69,6 +70,7 @@ PORT_PROBE_TIMEOUT_SECS = 2  # the spec pins this: "GET /, 2s timeout"
 MAX_BODY_BYTES = 1024  # 1 KiB; read at most this, never buffer an unbounded body
 TOKEN_HEADER = "X-Tracker-Token"
 INDEX_FILE = "Treko.dc.html"
+LEDGER_PAGE = "Ledger.dc.html"  # like INDEX_FILE, it carries the token, so it needs a <head> to take it
 
 # The three-row allowlist IS the authorization set (§Security). A fourth row is a spec
 # change plus a judge round, never an implementation call. `reanalyze` sends no keystroke.
@@ -201,18 +203,18 @@ def check_manifest_types(manifest=STATIC_MANIFEST, types=EXTENSION_TYPES):
 
 
 def check_index_injectable(root=SERVE_ROOT):
-    """The token reaches the page through <head>; no <head>, no token.
+    """The token reaches each page through <head>; no <head>, no token.
 
     Same posture as the manifest check: surface it at startup, not when a user first loads
     the page and silently gets an unauthenticated UI.
     """
-    index = root / INDEX_FILE
-    try:
-        text = index.read_text()
-    except OSError as exc:
-        raise StartupAbort("cannot read %s: %s" % (INDEX_FILE, exc.strerror))
-    if "<head>" not in text:
-        raise StartupAbort("%s has no <head> to inject the token into" % INDEX_FILE)
+    for name in (INDEX_FILE, LEDGER_PAGE):
+        try:
+            text = (root / name).read_text()
+        except OSError as exc:
+            raise StartupAbort("cannot read %s: %s" % (name, exc.strerror))
+        if "<head>" not in text:
+            raise StartupAbort("%s has no <head> to inject the token into" % name)
 
 
 def resolve_repo(explicit_repo, timeout=GIT_TIMEOUT_SECS):
@@ -373,11 +375,15 @@ class ControlHandler(http.server.BaseHTTPRequestHandler):
     # ------------------------------------------------------------- routes
 
     def do_GET(self):
+        path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
+        if path == "/ledger/status":
+            return self._serve_status()  # judges Host itself, so a refused poll is audited as id=status
         if not self._host_ok():
             return self._fail(403, "forbidden", "host_mismatch")
-        path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
         if path == "/":
             return self._serve_index()
+        if path == "/ledger":
+            return self._serve_page(LEDGER_PAGE)
         if path == "/command":
             return self._method_not_allowed()
         return self._serve_static(path)
@@ -386,7 +392,7 @@ class ControlHandler(http.server.BaseHTTPRequestHandler):
         if not self._host_ok():
             return self._fail(403, "forbidden", "host_mismatch")
         path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
-        if path != "/command":
+        if path not in ("/command", "/ledger", "/ledger/status"):
             return self._method_not_allowed()
         # 204 and no Access-Control-Allow-* header of any kind. The server never emits
         # CORS headers, so a genuine cross-origin preflight fails by construction -- there
@@ -399,23 +405,32 @@ class ControlHandler(http.server.BaseHTTPRequestHandler):
             return self._fail(403, "forbidden", "host_mismatch")
         path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
         if path != "/command":
-            if path == "/" or path.lstrip("/") in STATIC_MANIFEST:
+            if path in ("/", "/ledger/status") or path.lstrip("/") in STATIC_MANIFEST:
                 return self._method_not_allowed()
             return self._fail(404, "not_found", "not_found")
         return self._handle_command()
 
     def _serve_index(self):
-        """GET / -- the token-bearing response, so it carries the CSP and no-store.
+        return self._serve_page(INDEX_FILE)
+
+    def _serve_status(self):
+        if reason := ledger_routes.check_status_request(self.headers, self.config):
+            return self._fail(403, "forbidden", reason, command_id="status")
+        payload = ledger_routes.build_status(self.config["ledger"], self.config["runner"], self.config["store_dir"])
+        self._respond(200, json.dumps(payload).encode(), "application/json",
+                      extra_headers=(("Cache-Control", "no-store"), ("X-Content-Type-Options", "nosniff")))
+
+    def _serve_page(self, file_name):
+        """A token-bearing page, so it carries the CSP and no-store.
 
         no-store is not boilerplate: without it the browser may persist the token-bearing
         response into its own disk cache, which is a file on disk holding the credential,
         just not one this repo wrote.
         """
-        index = SERVE_ROOT / INDEX_FILE
         try:
-            text = index.read_text()
+            text = (SERVE_ROOT / file_name).read_text()
         except OSError as exc:
-            return self._fail(500, "asset_unreadable", "asset_unreadable", path=INDEX_FILE,
+            return self._fail(500, "asset_unreadable", "asset_unreadable", path=file_name,
                               errno_name=errno.errorcode.get(exc.errno, "-"), outcome="failed")
         meta = (
             '<meta name="tracker-token" content="%s">\n'
@@ -641,6 +656,7 @@ def build_config(surface, token, repo_root, port, analyze_secs, store_dir, chann
         "origin_host": "%s:%d" % (HOST, port),
         "analyze_secs": analyze_secs,
         "channel": channel,
+        "ledger": None, "runner": None,  # main() fills both once the lock is held (D44, D45)
     }
 
 
