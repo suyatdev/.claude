@@ -754,7 +754,8 @@ def test_a_hanging_analyzer_times_out_and_leaves_the_store_intact(launcher, tree
 
 
 def reasons_emitted_in_source():
-    """Every reason value server.py can emit — all three shapes, not just the literals.
+    """Every reason value server.py can emit — all three shapes, not just the literals, plus the 400 and 413
+    reasons the shared body reader in ledger_routes.py hands it (D48).
 
     §Tasks 9 supplies a two-grep derivation and warns it undercounts silently. It does:
     it returns 14 pairs against a 16-value enum, because `_run_send` passes
@@ -765,7 +766,11 @@ def reasons_emitted_in_source():
     source = (harness.REAL_TREE / "server.py").read_text()
     literal = set(re.findall(r'_fail\(\s*\d+,\s*"[a-z_]+",\s*"([a-z_]+)"', source))
     audited = set(re.findall(r'audit\(\s*"[a-z]+",\s*\d+,\s*reason="([a-z_]+)"', source))
-    return literal | audited | set(server.CONFIRM_REFUSAL_REASONS.values())
+    # D48: the body reader moved to ledger_routes.py (D47), so the 400 and 413 refusals it hands
+    # /command are written there, as (status, error, reason) tuples, not as _fail literals here.
+    routes = (harness.REAL_TREE / "ledger_routes.py").read_text()
+    shared = set(re.findall(r'\(\s*(?:400|413),\s*"[a-z_]+",\s*"([a-z_]+)"\s*\)', routes))
+    return literal | audited | shared | set(server.CONFIRM_REFUSAL_REASONS.values())
 
 
 def test_the_enum_and_the_status_table_cover_each_other():
