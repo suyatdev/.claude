@@ -537,6 +537,19 @@ describes what `main()` already does (it builds `ChildRegistry(dict(os.environ))
 `JobRunner`), so task 17 adds nothing there; the `test_server.py` and `server_harness.py` edits listed under its
 "§12 edits" are still due. Task 17 is otherwise as written.
 
+*D49 addendum (2026-11-14, recorded with the red tests; none of it changes a name above).* `enqueue` returns
+`(item_id, started, None)` on success and `(None, None, code)` on a refusal, the shape `check_ledger_post` already
+uses, so no new exception class is added. `accept_analysis` takes one trailing keyword, `program=None`, the scan
+script to run, as `JobRunner` takes `scan_program`. `handle_op` reads `config["ledger"]`, `config["registry"]`,
+`config["scan_secs"]`, `config["runner"]` and, optionally, `config["scan_program"]`, so `main()` must put
+`scan_secs` into `config` beside `registry`; and it fills the optional fields the form left out (`repo`, `branch`,
+`worktree`) with `""`, so the stored request and the run id match the form's. A closed registry (the server
+stopping) answers `500 internal_error`: the spec names no code for it, and a new code would be a spec change, which
+the implementation phase does not allow (my call, not asked of the user; the red test pins it). Where two refusals
+could both apply, a scan refusal wins over an enqueue refusal (spec 5.6: the scan is first), and `already_queued`
+wins over `queue_full`. `503 git_too_old` is task 29a's and is not tested here. The A5 check covers only the new
+test files, since the existing `/ledger` tests are not edited in this task.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
