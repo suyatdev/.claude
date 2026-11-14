@@ -16,9 +16,10 @@ Two rules govern this module:
 * **`cmux` is faked, and the fake records what it was handed.** A fake proves the
   server's decision and never that keystrokes arrived; §Tasks 9 says so at length. It
   records its full argv *and* its environment, because criterion 10 asks whether the
-  token reaches a child process and every child here inherits the server's environment
-  verbatim (`server.py` passes no `env=` to any `subprocess.run` — asserted in
-  `test_server.py`, not assumed here).
+  token reaches a child process and every cmux child here inherits the server's
+  environment verbatim (`server.py` and `channel.py` pass no `env=` to the `subprocess.run`
+  that starts cmux — asserted in `test_server.py`, not assumed here). The Ledger's scan and
+  analyzer children are not cmux children: they get `ledger_jobs.build_child_env`'s output.
 """
 
 import http.client
@@ -271,7 +272,7 @@ def server_env(tmp_path, tree, cmux_bin, cmux_log, *, surface=FAKE_SURFACE,
     })
     # Inherited overrides would leak a developer's own tuning into every test.
     for key in ("TREKO_PORT", "TREKO_IDLE_SECS", "TREKO_POLL_SECS",
-                "TREKO_ANALYZE_SECS"):
+                "TREKO_ANALYZE_SECS", "TREKO_SCAN_SECS"):
         env.pop(key, None)
     env.update(overrides or {})
     return env

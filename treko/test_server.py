@@ -316,8 +316,8 @@ def test_the_token_never_leaves_the_served_page(srv, tmp_path):
     assert cmdline.strip(), "ps reported no command line for the server"
     assert token not in cmdline
 
-    # (3) the environment of every child it spawns. server.py passes no `env=` to any
-    # subprocess, so a child's environment is the server's verbatim — asserted, not assumed.
+    # (3) the environment of every child it spawns. The cmux children inherit the server's own: neither file
+    # passes `env=` — asserted, not assumed. Ledger children get ledger_jobs.build_child_env's output, checked below.
     source = (srv.tree / "server.py").read_text()
     assert "env=" not in source, "server.py now passes env= somewhere; widen this check"
     # D6 moved the cmux probe into channel.py, so the same claim has to be asserted there
@@ -329,6 +329,8 @@ def test_the_token_never_leaves_the_served_page(srv, tmp_path):
     for call in children:
         for key, value in call["env"].items():
             assert token not in value, "token reached a child in %s" % key
+    import ledger_jobs  # the builder's output must not hold the token either (it reads only the base it is given)
+    assert all(token not in value for value in ledger_jobs.build_child_env(dict(os.environ)).values())
 
     # (4) the captured stderr for the whole test — §Out of scope bans a file, an env var
     # and argv, and a log stream is none of those three.
