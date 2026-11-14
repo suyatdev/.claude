@@ -11,8 +11,9 @@ import os
 import re
 from pathlib import Path
 
+import ledger_jobs
 import store
-from ledger_state import queue_label, run_rows
+from ledger_state import LedgerWriteError, enqueue, queue_label, run_rows
 
 STORE_FILE = "tracker-data.js"  # where runs live; server.py's FIRST_RUN_OPTIONAL names the same file
 TOKEN_HEADER = "X-Tracker-Token"
@@ -23,11 +24,18 @@ ITEM_PATTERN = re.compile(r"[0-9a-f]{16}")
 # op -> (required keys, optional keys); a key set outside required..required+optional is refused, never ignored
 OP_KEYS = {"analyze": ({"directory"}, {"repo", "branch", "worktree"}), "reanalyze": ({"run"}, set()),
            "remove": ({"item"}, set()), "retry": ({"item"}, set()), "delete": ({"run"}, set())}
-# Task 17 replaces this. What the ops answer until then is not in the spec: a closed-table code that cannot read as
-# success (3.5 has no 501). It lives here, not as a literal in server.py, because test_server.py derives the board's
-# reason set from `_fail(` literals in server.py and internal_error is not a board reason.
+# What the ops task 18 owns (and a reanalyze of a run with no recorded request, task 28's) answer until then: not in
+# the spec, a closed-table code that cannot read as success (3.5 has no 501). It lives here, not as a literal in
+# server.py, because test_server.py derives the board's reason set from `_fail(` literals in server.py and
+# internal_error is not a board reason.
 OP_STUB_REFUSAL = (500, "internal_error", "internal_error")
 TEXT_FIELDS = ("directory", "repo", "branch", "worktree")  # a bad value is 422 invalid_input; the rest are 400
+SCAN_REFUSALS_422 = ("no_repository", "no_matching_repository", "no_such_worktree", "nothing_matched")  # 3.5
+SCAN_REFUSALS_500 = (ledger_jobs.SCAN_TIMEOUT, ledger_jobs.SCAN_FAILED)
+INTERNAL_ERROR = (500, "internal_error", "internal_error")  # a closed registry: the server is stopping (D49)
+LAUNCH_FAILED = (500, "launch_failed", "launch_failed")
+LEDGER_WRITE_FAILED = (500, "ledger_write_failed", "ledger_write_failed")
+ENQUEUE_REFUSAL_STATUS = 409  # already_queued and queue_full
 
 
 def _home_collapse(path):
@@ -205,3 +213,74 @@ def build_status(ledger, runner, store_dir):
         runs, runs_error = None, STORE_UNREADABLE
     return {"ok": True, "storeDir": _home_collapse(store_dir), "queue": queue, "runs": runs,
             "runsError": runs_error}
+
+
+# ------------------------------------------------------------------------------ analyze and reanalyze (task 17)
+
+def _scan_refusal(result):
+    """The refusal `(status, error, reason)` for a finished scan, or None when it found work to queue."""
+    error, _ = ledger_jobs._scan_error(result)
+    if error is None:
+        return None
+    if error in SCAN_REFUSALS_422:
+        return (422, error, error)
+    if error in SCAN_REFUSALS_500:
+        return (500, error, error)
+    return (500, ledger_jobs.SCAN_FAILED, ledger_jobs.SCAN_FAILED)  # an outcome the spec does not name
+
+
+def _submit(op, ledger, registry, scan_secs, request, program):
+    """The scan, outside the ledger lock (5.6), then `enqueue`; the success body or a refusal tuple."""
+    try:
+        result = ledger_jobs.run_scan(registry, request, scan_secs, program=program)
+    except ledger_jobs.RegistryClosed:
+        return INTERNAL_ERROR
+    except OSError:
+        return LAUNCH_FAILED
+    if refusal := _scan_refusal(result):
+        return refusal
+    try:
+        item, started, code = enqueue(ledger, request)
+    except LedgerWriteError:
+        return LEDGER_WRITE_FAILED
+    if code:
+        return (ENQUEUE_REFUSAL_STATUS, code, code)
+    return (200, {"ok": True, "op": op, "item": item, "started": started})
+
+
+def accept_analysis(ledger, registry, scan_secs, request, *, program=None):
+    """Spec 3.4 step 8 for `analyze`: `(200, body)` once the request is queued, else `(status, error, reason)`."""
+    return _submit("analyze", ledger, registry, scan_secs, request, program)
+
+
+def reanalyze_request(ledger, run):
+    """The request recorded for `run` (5.1 `requests`), or None when there is none."""
+    return ledger.snapshot()["requests"].get(run)
+
+
+def _reanalyze(ledger, registry, scan_secs, run, program):
+    request = reanalyze_request(ledger, run)
+    if request is None:
+        return OP_STUB_REFUSAL  # a run from before the Ledger is task 28's
+    if not os.path.isdir(os.path.realpath(os.path.expanduser(request["directory"]))):
+        return (422, "no_such_directory", "no_such_directory")  # the field rules run again (3.4), before the scan
+    return _submit("reanalyze", ledger, registry, scan_secs, request, program)
+
+
+def handle_op(op, fields, config):
+    """What `server.py` answers for an accepted `/ledger` request: `(200, body)` or `(status, error, reason)`.
+
+    The runner is woken once, after an item exists, and never after a refusal.
+    """
+    ledger, registry, scan_secs = config["ledger"], config["registry"], config["scan_secs"]
+    program = config.get("scan_program")
+    if op == "analyze":
+        request = {name: fields.get(name, "") for name in TEXT_FIELDS}
+        answer = accept_analysis(ledger, registry, scan_secs, request, program=program)
+    elif op == "reanalyze":
+        answer = _reanalyze(ledger, registry, scan_secs, fields["run"], program)
+    else:
+        return OP_STUB_REFUSAL  # remove, retry and delete: task 18
+    if answer[0] == 200:
+        config["runner"].wake()
+    return answer

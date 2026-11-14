@@ -14,12 +14,15 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import sys
 import tempfile
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 
 from cards import NO_VALUE, UNPARSEABLE_META
+from store import TIMESTAMP_FORMAT
 
 LEDGER_VERSION = 1
 LEDGER_FILE = "ledger.json"
@@ -28,6 +31,9 @@ TEMP_PREFIX = ".ledger-"
 TEMP_SUFFIX = ".tmp"
 OWNER_ONLY = 0o600
 ITEM_STATES = ("waiting", "running", "interrupted", "failed")
+LIVE_STATES = ("waiting", "running")  # the states that block the same run and the next `started`
+MAX_QUEUE_ITEMS = 20  # any state counts (spec 3.5 `queue_full`)
+ITEM_ID_BYTES = 8  # secrets.token_hex(8) is the 16 lowercase hex digits of section 5.1
 NOT_AN_OS_ERROR = "UNEXPECTED"  # what a write failure that has no errno says instead of a value
 ID_PREFIX = "r"
 ID_HEX_DIGITS = 16
@@ -291,3 +297,40 @@ class Ledger:
                 write_ledger(self._store_dir, new_state)
             self._state = new_state
             return copy.deepcopy(self._state)
+
+
+class _Refused(Exception):
+    """Raised inside `enqueue`'s change so the Ledger leaves the state alone and writes nothing."""
+
+
+def enqueue(ledger, request):
+    """Add a waiting item for `request` and record `requests[run]`, in one save.
+
+    Returns `(item_id, started, None)`, or `(None, None, code)` when the run is already waiting or running
+    (`already_queued`, checked first) or the queue holds MAX_QUEUE_ITEMS items (`queue_full`); a refusal writes
+    nothing. `started` is true when no other item was running or waiting. A failed save raises
+    LedgerWriteError and the state is unchanged (the Ledger saves before it replaces its state).
+    """
+    run = run_id(request["directory"], request["repo"], request["branch"], request["worktree"])
+    added = []
+
+    def change(state):
+        queue = state["queue"]
+        live = [item for item in queue if item["state"] in LIVE_STATES]
+        if any(item["run"] == run for item in live):
+            raise _Refused("already_queued")
+        if len(queue) >= MAX_QUEUE_ITEMS:
+            raise _Refused("queue_full")
+        item_id = secrets.token_hex(ITEM_ID_BYTES)
+        queue.append({"item": item_id, "state": "waiting",
+                      "queuedAt": datetime.now(timezone.utc).strftime(TIMESTAMP_FORMAT),
+                      "request": request, "run": run, "error": None, "detail": None})
+        state["requests"][run] = request
+        added.append((item_id, not live))
+        return state
+
+    try:
+        ledger.update(change)
+    except _Refused as refusal:
+        return None, None, str(refusal)
+    return added[0][0], added[0][1], None

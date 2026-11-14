@@ -546,7 +546,11 @@ class ControlHandler(http.server.BaseHTTPRequestHandler):
         if refusal:
             status, error, reason, audit_id = refusal
             return self._fail(status, error, reason, command_id=audit_id)
-        return self._fail(*ledger_routes.OP_STUB_REFUSAL, command_id=op)  # task 17 replaces this
+        answer = ledger_routes.handle_op(op, fields, self.config)
+        if answer[0] != 200:
+            return self._fail(*answer, command_id=op)
+        self._respond(200, json.dumps(answer[1]).encode(), "application/json")
+        audit("accepted", 200, reason="-", command_id=op, sent="no")
 
     def _run_local(self, command_id):
         ok = run_reanalyze(self.config["repo_root"], self.config["store_path"],
@@ -713,7 +717,7 @@ def main(argv=None):
         httpd.server_close()
         return 2
     # The one place the real environment is read for children (a copy). No wake here: restart is task 22's.
-    config["registry"] = ChildRegistry(dict(os.environ))
+    config["registry"], config["scan_secs"] = ChildRegistry(dict(os.environ)), scan_secs
     config["runner"] = JobRunner(config["ledger"], config["registry"], config["store_path"], analyze_secs, scan_secs)
     config["runner"].start()
 
