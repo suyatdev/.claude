@@ -516,6 +516,27 @@ refusals in `server.py`. No assertion is loosened: the check still compares the 
 table in both directions. The behaviour of the 413 refusal on `/command` is covered by the real-request rows of
 `test_ledger_post.py`.
 
+**D49 — Task 17 names its public functions, and its tests go in a new file.** (user, 2026-11-14, asked before
+task 17's red tests were written.) Four functions. `enqueue(ledger, request)` in `treko/ledger_state.py` is the
+"get in line" step: under the ledger lock it refuses with `already_queued` (the same run is waiting or running) or
+`queue_full` (`MAX_QUEUE_ITEMS = 20`, any state), and otherwise adds the item and `requests[run]` in one
+all-or-nothing write, returning the new item's id and whether it can start at once (`started`); a failed write is
+the existing `LedgerWriteError`, which the route turns into `500 ledger_write_failed`.
+`accept_analysis(ledger, registry, scan_secs, request)` in `treko/ledger_routes.py` is the whole `analyze` path: the
+submit-time scan through task 13's launcher first, before the lock, a non-`ok` outcome answering its `422` or
+`500` code and queueing nothing, then `enqueue`; it returns the success body `{"ok", "op", "item", "started"}` or a
+refusal `(status, error, reason)`. `reanalyze_request(ledger, run)` in `treko/ledger_routes.py` reads the request
+recorded for a run and sends it through `accept_analysis`; a run with no recorded request stays task 28's.
+`handle_op(op, fields, config)` in `treko/ledger_routes.py` is what `ControlHandler._handle_ledger()` calls for an
+accepted request in place of the `OP_STUB_REFUSAL` stub, and wakes the runner after a successful enqueue; it takes
+the op dispatch out of `server.py`, which stands at 760 of its 780-line cap. The ops other than `analyze` and
+`reanalyze` keep the stub until task 18. The tests go in a new `treko/test_ledger_accept.py`, since
+`test_ledger_routes.py` holds 399 of 400 lines and `test_ledger_post.py` 395 of 400. The spec's line that `main()`
+reads the base environment once and `TREKO_SCAN_SECS` through `read_timeout` and passes both to `ledger_jobs`
+describes what `main()` already does (it builds `ChildRegistry(dict(os.environ))` and passes `scan_secs` to
+`JobRunner`), so task 17 adds nothing there; the `test_server.py` and `server_harness.py` edits listed under its
+"§12 edits" are still due. Task 17 is otherwise as written.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
