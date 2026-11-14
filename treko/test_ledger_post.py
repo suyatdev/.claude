@@ -28,7 +28,7 @@ TOKEN = "X-Tracker-Token"
 UNIT_TOKEN, UNIT_PORT = "unit-test-token-" + "a" * 27, 8422  # made-up values, not any server's
 SENT, SURR, E2 = "0123456789abcdef", "\ud800", "é"  # SURR: json.dumps writes it as the ASCII escape \ud800
 SETTLE_SECS, AUDIT_WAIT_SECS, SOCKET_SECS = 0.15, 5, 10
-STEP_STATUSES = (400, 403, 413, 415, 422)
+STEP_STATUSES = (400, 403, 413, 415)  # not 422 (D50): past step 7 an analyze can get the scan's 422; steps 1-7's are in STEP_ERRORS
 STEP_ERRORS = {"malformed", "forbidden", "unsupported_media_type", "too_large", "invalid_input", "relative_path",
                "no_such_directory", "no_such_run", "not_found", "method_not_allowed"}  # the last two: no route yet
 D, R = "{dir}", "{run}"  # placeholders filled per context: a real folder, a run id the store holds
