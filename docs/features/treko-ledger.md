@@ -550,6 +550,18 @@ could both apply, a scan refusal wins over an enqueue refusal (spec 5.6: the sca
 wins over `queue_full`. `503 git_too_old` is task 29a's and is not tested here. The A5 check covers only the new
 test files, since the existing `/ledger` tests are not edited in this task.
 
+**D50 — Task 17 edits one existing check in `treko/test_ledger_post.py`.** (user, 2026-11-14, asked after the code was
+written and nine old rows failed.) Task 17's "§12 edits" list did not include it. Task 16's
+`test_a_request_that_clears_steps_1_to_7_is_not_refused_and_is_audited_with_its_op` sends `analyze` for a folder that
+is not a git repository and counted every 422 as a step 1 to 7 refusal (`STEP_STATUSES` held 422). Task 17 made
+`analyze` really scan, so the nine `analyze-*` rows now get the scan's `422 no_repository`, which is what spec 3.5
+says. He chose to take 422 out of `STEP_STATUSES` (one line, with a comment) over giving the nine rows a real
+repository (that needs a new file, since the file holds 395 of 400 lines, and a request that queues really starts the
+analyzer in the background). The check keeps what it caught: it still refuses every name in `STEP_ERRORS`, which holds
+all three 422 codes steps 1 to 7 can give (`invalid_input`, `relative_path`, `no_such_directory`), and
+`STEP_STATUSES` is read in one place only. The test's own note that the `delete` and `reanalyze` rows must move to a
+fake store is left as it is: those rows still pass after task 17's code.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
