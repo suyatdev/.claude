@@ -581,6 +581,14 @@ recorded request keeps the stub until task 28. The tests go in a new `treko/test
 functions add about 60 lines: if they would pass 400, the helper stops and the user is asked before anything is moved.
 Task 18 is otherwise as written. `503 git_too_old` for `retry` is task 29a's and is not tested here.
 
+**D52 — Task 18 deletes one old check in `treko/test_ledger_accept_server.py`.** (user, 2026-11-20, asked before the
+red tests were written.) Task 18's "§12 edits" list says none, but
+`test_remove_retry_and_delete_still_answer_the_stub_until_task_18` (lines 93-100) was written to pin the
+`OP_STUB_REFUSAL` answer for `remove`, `retry` and `delete` only until this task, and fails by design once they work.
+He chose to delete that one check, in its own commit before the green commit, over rewriting it (the new
+`test_ledger_edits.py` drives the same three ops with their real answers, and the old file stands near its size
+limit). Its neighbour for `reanalyze` of a run with no recorded request is not touched: that stub stays until task 28.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
