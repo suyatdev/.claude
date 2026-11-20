@@ -90,15 +90,6 @@ def test_a_refused_op_does_not_wake_the_runner(tmp_path, fake, items, status, co
     assert runner.saw == []
 
 
-@pytest.mark.parametrize("op,fields", [("remove", {"item": "0" * 16}), ("retry", {"item": "0" * 16}), ("delete", {"run": "r1"})])
-def test_remove_retry_and_delete_still_answer_the_stub_until_task_18(tmp_path, op, fields):
-    """Catches a handle_op that sends every op through the analyze path, or answers 200 for the ops task 18 owns."""
-    ledger = make_ledger(tmp_path, [queued(req())])
-    before, runner = snap(ledger, tmp_path), Runner(ledger)
-    assert ledger_routes.handle_op(op, fields, config(ledger, runner, fake_scan(tmp_path, "ok"))) == ledger_routes.OP_STUB_REFUSAL
-    assert snap(ledger, tmp_path) == before and runner.saw == []
-
-
 def test_reanalyze_goes_through_the_analyze_path_and_answers_op_reanalyze(tmp_path):
     """Catches a body that says analyze, a request replaced by the form's, and a missing wake."""
     request = req(str(tmp_path), branch="feat-x")
