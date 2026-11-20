@@ -581,6 +581,21 @@ recorded request keeps the stub until task 28. The tests go in a new `treko/test
 functions add about 60 lines: if they would pass 400, the helper stops and the user is asked before anything is moved.
 Task 18 is otherwise as written. `503 git_too_old` for `retry` is task 29a's and is not tested here.
 
+*D51 addendum (2026-11-20, recorded with the red tests; none of it changes a name above).* `handle_op` reads
+`config["store_dir"]` (a `Path`; `server.py`'s config already has it) for `delete`'s run ids, from
+`<store_dir>/tracker-data.js`. The refusals answer 404 for `no_such_item` and 409 for `item_running`,
+`not_retryable`, `already_queued` and `last_run`, each as `(status, code, code)`; a success answers
+`{"ok": True, "op": <op>}`. `hide_run` appends the run after the entries already in `hidden`. The red tests are 46 in
+`treko/test_ledger_edits.py` (385 lines): 39 in process and 7 over real HTTP. All 46 fail today, 24 on the missing
+helper and 22 on the stub's `500 internal_error`. The 39 in-process ones were run against a throwaway reference kept
+outside the repo and all passed; the 7 HTTP rows were not run against any implementation, since they need the real
+server. `store_unreadable` for `delete` has no HTTP row here: step 7 of 3.4 (`_run_refusal`) already answers it before
+the op runs, so it is green today, and it is covered in process through `handle_op`. The spec is silent on, and the
+tests leave open: which code wins when an item is both not retryable and has a live twin, hiding a run that is
+already hidden, and a run id passed to `hide_run` that is not in `run_ids`. Task 22's title says it starts the waiting
+items on restart: two HTTP rows here (`not_retryable`, `already_queued`) seed a waiting item and rely on nothing waking
+the runner at boot, so task 22 must give those two rows a different seed.
+
 **D52 — Task 18 deletes one old check in `treko/test_ledger_accept_server.py`.** (user, 2026-11-20, asked before the
 red tests were written.) Task 18's "§12 edits" list says none, but
 `test_remove_retry_and_delete_still_answer_the_stub_until_task_18` (lines 93-100) was written to pin the
