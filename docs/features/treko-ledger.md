@@ -562,6 +562,25 @@ all three 422 codes steps 1 to 7 can give (`invalid_input`, `relative_path`, `no
 `STEP_STATUSES` is read in one place only. The test's own note that the `delete` and `reanalyze` rows must move to a
 fake store is left as it is: those rows still pass after task 17's code.
 
+**D51 — Task 18 names its public functions, and its tests go in a new file.** (user, 2026-11-20, asked before task
+18's red tests were written; he approved the names and the placement.) Three functions in `treko/ledger_state.py`,
+each a change made under the ledger lock with one all-or-nothing save (a failed save is the existing
+`LedgerWriteError`, which the route turns into `500 ledger_write_failed`; a refusal writes nothing).
+`remove_item(ledger, item_id)` takes a waiting, failed or interrupted item out of the queue; it refuses with
+`no_such_item` (no item with that id) or `item_running`. `retry_item(ledger, item_id)` puts a failed or interrupted
+item back to `waiting` where it already stands in the queue (so it runs next, D1) and clears its `error` and
+`detail`; it refuses with `no_such_item`, `not_retryable` (it is waiting or running) or `already_queued` (another
+item for the same run is waiting or running). `hide_run(ledger, run, run_ids)` adds the run to `hidden`, where
+`run_ids` are the ids of every run in the store; it refuses with `last_run` when no run would stay visible. Each
+returns `None` on success or the refusal code, the shape `enqueue` already uses for its refusals. `handle_op` in
+`treko/ledger_routes.py` calls them in place of the `OP_STUB_REFUSAL` stub for `remove`, `retry` and `delete`,
+answers `{"ok": true, "op": "<op>"}` (spec 3.5), reads the store's run ids for `delete` (a store that does not parse
+answers `500 store_unreadable`), and wakes the runner after a successful `retry` only. `reanalyze` of a run with no
+recorded request keeps the stub until task 28. The tests go in a new `treko/test_ledger_edits.py`, since
+`test_ledger_routes.py` holds 399 of 400 lines. `ledger_state.py` stands at 336 of its 400-line cap and the three
+functions add about 60 lines: if they would pass 400, the helper stops and the user is asked before anything is moved.
+Task 18 is otherwise as written. `503 git_too_old` for `retry` is task 29a's and is not tested here.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
