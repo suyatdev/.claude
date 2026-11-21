@@ -13,7 +13,7 @@ from pathlib import Path
 
 import ledger_jobs
 import store
-from ledger_state import LedgerWriteError, enqueue, queue_label, run_rows
+from ledger_state import LedgerWriteError, enqueue, hide_run, queue_label, remove_item, retry_item, run_rows
 
 STORE_FILE = "tracker-data.js"  # where runs live; server.py's FIRST_RUN_OPTIONAL names the same file
 TOKEN_HEADER = "X-Tracker-Token"
@@ -24,8 +24,8 @@ ITEM_PATTERN = re.compile(r"[0-9a-f]{16}")
 # op -> (required keys, optional keys); a key set outside required..required+optional is refused, never ignored
 OP_KEYS = {"analyze": ({"directory"}, {"repo", "branch", "worktree"}), "reanalyze": ({"run"}, set()),
            "remove": ({"item"}, set()), "retry": ({"item"}, set()), "delete": ({"run"}, set())}
-# What the ops task 18 owns (and a reanalyze of a run with no recorded request, task 28's) answer until then: not in
-# the spec, a closed-table code that cannot read as success (3.5 has no 501). It lives here, not as a literal in
+# What a reanalyze of a run with no recorded request (task 28's) answers until then: not in the spec, a
+# closed-table code that cannot read as success (3.5 has no 501). It lives here, not as a literal in
 # server.py, because test_server.py derives the board's reason set from `_fail(` literals in server.py and
 # internal_error is not a board reason.
 OP_STUB_REFUSAL = (500, "internal_error", "internal_error")
@@ -36,6 +36,9 @@ INTERNAL_ERROR = (500, "internal_error", "internal_error")  # a closed registry:
 LAUNCH_FAILED = (500, "launch_failed", "launch_failed")
 LEDGER_WRITE_FAILED = (500, "ledger_write_failed", "ledger_write_failed")
 ENQUEUE_REFUSAL_STATUS = 409  # already_queued and queue_full
+EDIT_REFUSAL_STATUS = {"no_such_item": 404, "item_running": 409, "not_retryable": 409, "already_queued": 409,
+                       "last_run": 409}  # what remove, retry and delete refuse with (3.5)
+WAKING_OPS = ("analyze", "reanalyze", "retry")  # the ops after which an item is waiting that was not before
 
 
 def _home_collapse(path):
@@ -267,10 +270,34 @@ def _reanalyze(ledger, registry, scan_secs, run, program):
     return _submit("reanalyze", ledger, registry, scan_secs, request, program)
 
 
+def _edit(op, fields, config):
+    """`remove`, `retry` and `delete` (task 18): `(200, {"ok": True, "op": op})` or a refusal tuple."""
+    ledger = config["ledger"]
+    try:
+        if op == "remove":
+            code = remove_item(ledger, fields["item"])
+        elif op == "retry":
+            code = retry_item(ledger, fields["item"])
+        else:
+            # Step 7 saw the store parse; `delete` reads it again for the ids it must leave one visible of.
+            runs = store.read_store(Path(config["store_dir"]) / STORE_FILE)["runs"]
+            code = hide_run(ledger, fields["run"], [run["id"] for run in runs])
+    except store.StoreError:
+        return (500, STORE_UNREADABLE, STORE_UNREADABLE)
+    except LedgerWriteError:
+        return LEDGER_WRITE_FAILED
+    if code:
+        return (EDIT_REFUSAL_STATUS[code], code, code)
+    return (200, {"ok": True, "op": op})
+
+
 def handle_op(op, fields, config):
     """What `server.py` answers for an accepted `/ledger` request: `(200, body)` or `(status, error, reason)`.
 
-    The runner is woken once, after an item exists, and never after a refusal.
+    `analyze` and `reanalyze` answer the queued item; `remove`, `retry` and `delete` answer `{"ok": True, "op": op}`
+    or their refusal (404 no_such_item; 409 item_running, not_retryable, already_queued, last_run; 500
+    store_unreadable, ledger_write_failed). A `reanalyze` of a run with no recorded request still answers the stub.
+    The runner is woken once, after an item is waiting that was not before (WAKING_OPS), and never after a refusal.
     """
     ledger, registry, scan_secs = config["ledger"], config["registry"], config["scan_secs"]
     program = config.get("scan_program")
@@ -280,7 +307,7 @@ def handle_op(op, fields, config):
     elif op == "reanalyze":
         answer = _reanalyze(ledger, registry, scan_secs, fields["run"], program)
     else:
-        return OP_STUB_REFUSAL  # remove, retry and delete: task 18
-    if answer[0] == 200:
+        answer = _edit(op, fields, config)
+    if answer[0] == 200 and op in WAKING_OPS:
         config["runner"].wake()
     return answer

@@ -300,7 +300,7 @@ class Ledger:
 
 
 class _Refused(Exception):
-    """Raised inside `enqueue`'s change so the Ledger leaves the state alone and writes nothing."""
+    """Raised inside a change (`enqueue`, `remove_item`, ...) so the Ledger leaves the state alone and writes nothing."""
 
 
 def enqueue(ledger, request):
@@ -334,3 +334,67 @@ def enqueue(ledger, request):
     except _Refused as refusal:
         return None, None, str(refusal)
     return added[0][0], added[0][1], None
+
+
+def _refusal_of(ledger, change):
+    """Run `change` and save; None, or the code of the `_Refused` it raised. A failed save (LedgerWriteError) is not caught."""
+    try:
+        ledger.update(change)
+    except _Refused as refusal:
+        return str(refusal)
+    return None
+
+
+def _find_item(queue, item_id):
+    return next((item for item in queue if item["item"] == item_id), None)
+
+
+def remove_item(ledger, item_id):
+    """Take a waiting, failed or interrupted item out of the queue; None, or `no_such_item` / `item_running`."""
+    def change(state):
+        target = _find_item(state["queue"], item_id)
+        if target is None:
+            raise _Refused("no_such_item")
+        if target["state"] == "running":
+            raise _Refused("item_running")
+        state["queue"] = [item for item in state["queue"] if item is not target]
+        return state
+
+    return _refusal_of(ledger, change)
+
+
+def retry_item(ledger, item_id):
+    """Put a failed or interrupted item back to waiting where it stands, clearing `error` and `detail`.
+
+    None, or `no_such_item`, `not_retryable` (it is waiting or running) or `already_queued` (another item
+    for its run is waiting or running; a failed or interrupted twin does not count).
+    """
+    def change(state):
+        queue = state["queue"]
+        target = _find_item(queue, item_id)
+        if target is None:
+            raise _Refused("no_such_item")
+        if target["state"] in LIVE_STATES:
+            raise _Refused("not_retryable")
+        if any(item is not target and item["run"] == target["run"] and item["state"] in LIVE_STATES
+               for item in queue):
+            raise _Refused("already_queued")
+        target.update(state="waiting", error=None, detail=None)
+        return state
+
+    return _refusal_of(ledger, change)
+
+
+def hide_run(ledger, run, run_ids):
+    """Append `run` to `hidden`; None, or `last_run` when that would leave no run of `run_ids` visible.
+
+    A hidden id that is not in `run_ids` is stale and hides nothing.
+    """
+    def change(state):
+        hidden = [*state["hidden"], run]
+        if all(run_id in hidden for run_id in run_ids):
+            raise _Refused("last_run")
+        state["hidden"] = hidden
+        return state
+
+    return _refusal_of(ledger, change)
