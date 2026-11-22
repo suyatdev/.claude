@@ -641,6 +641,22 @@ is silent on, and the tests leave open: the `stage`, `repo` and `exit` of an `an
 `JobFailure` are named after its constructor arguments (`.code`, `.stage`, `.repo`, `.exit`, `.timed_out`, `.errno`,
 `.cause`), and `run_next()` returns the failed item's id, as it does today for a failed scan.
 
+*D53 addendum 2 (2026-11-22, recorded with the green code, commit 41bc54b).* `treko/ledger_failures.py` (67 lines)
+holds the four approved names, plus three small helpers and the code and stage constants. `run_next` claims the
+item and calls a new `_run_job`, which raises a `JobFailure` at each failure point and catches nothing else; `run_next`
+settles the item once and writes the log line. **`ledger_jobs.py` ends at 419 lines, over the 400 guideline.** He chose
+to commit it as it stands and to split it in its own step before task 21: the child-process plumbing
+(`ChildRegistry`, `build_child_env`, `kill_process_group`, `run_scan`, `RegistryClosed`, `REAP_WAIT_SECS`, roughly 160
+lines) moves into a new `treko/ledger_children.py`, and `ledger_jobs.py` imports them back under the same names, so no
+test or route changes. Decided by the helper and NOT asked, on the card for him to overrule: an `analysis_failed`
+item's stage is the analyzer stage that was running when the first failed family ended (`worktrees`, `branches`,
+`cards` or `order`, counted from the `treko-progress` lines it sent, capped at `order`; none sent reads
+`worktrees`), and its `repo` is that family's label; each failed part's `failure` dict gains a `stage` key
+(`ledger_merge.py` reads only `exit`, `timedOut` and `stderr`, so it is unaffected); any `OSError` that `run_scan`
+raises at job time is read as a scan launch failure; an `OSError` with no symbolic errno name leaves `errno` `None`
+and uses the exception's class name as the log line's cause, as does a non-`OSError` from the save. The constant
+`ANALYSIS_FAILED` moved from `ledger_jobs.py` to `ledger_failures.py` (nothing else referenced it).
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
@@ -747,7 +763,7 @@ spec §11; a card decision is written "decision D10", and a round-2 fix "fix F4"
 - [x] 17 — Accept an analysis: scan at once, then queue it, or refuse it with a reason (A5, G7) (done, red 8dacc85, green f9eb67e; names D49, one old check edited, D50, 3f38b17; tests in treko/test_ledger_accept.py and treko/test_ledger_accept_server.py, plus the two section 12 edits in test_server.py and server_harness.py; server.py is 764 of its 780-line cap, ledger_routes.py 286 of 400, ledger_state.py 336 of 400; whole treko directory: 987 passed and 51 stopped at the Chrome version check; `remove`, `retry` and `delete`, and a `reanalyze` of a run with no recorded request, still answer the 500 internal_error stub until tasks 18 and 28; a closed registry answers 500 internal_error, my call, D49 addendum)
 - [x] 18 — Remove a waiting item, retry a failed one, hide a run (G5) (done, red da5c7fa, green 6302a2f; names D51, one old check deleted, D52, 1268d03; tests in treko/test_ledger_edits.py, not the spec's two named files, which were full; ledger_state.py is 400 of its 400-line cap, ledger_routes.py 313 of 400, server.py unchanged; whole treko directory on the second and third full runs: 1030 passed and 51 stopped at the Chrome version check, the same 51 as D44; the first of the three full runs had one extra failure that was not identified, since only its last lines were kept, and it did not come back; `reanalyze` of a run with no recorded request still answers the 500 internal_error stub until task 28; the `not_retryable` and `already_queued` HTTP rows seed a waiting item, so task 22 must re-seed them)
 - [x] 19 — Run queued analyses one at a time, with progress that moves only on real stages (E4, D7) (done, red 804d849, green b1d3fa9; built before 14 per D44; names D45; tests in treko/test_ledger_runner.py; ledger_jobs.py is 390 of its 400-line cap)
-- [ ] 20 — Give each way a job can fail its own code and reason (D12, D13)
+- [x] 20 — Give each way a job can fail its own code and reason (D12, D13) (done, red e57d9e2, green 41bc54b; names D53 and its two addenda; tests in treko/test_ledger_failures.py, not the spec's two named test files, which are full; ledger_jobs.py is 419 lines, over its 400 cap, and he chose to split it in its own step before task 21; whole treko directory: 1046 pass, the only red the 51 Chrome-pin tests of D44)
 - [ ] 21 — Make sure no job can stay "running" for ever (D14, D15)
 - [ ] 22 — After a restart, mark the interrupted job and start the waiting ones; polling alone never keeps the server awake (D3, D4, B2)
 - [ ] 23 — Stop cleanly: no new work, every process killed, the job marked interrupted (D6)
