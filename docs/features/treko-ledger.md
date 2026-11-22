@@ -625,6 +625,22 @@ over their caps. `ledger_jobs.py` stands at 390 of its 400-line cap and this kee
 edit to `ledger_jobs.py` alone would pass 400, the helper stops and the user is asked before anything is moved.
 Task 20 is otherwise as written.
 
+*D53 addendum (2026-11-22, recorded with the red tests; none of it changes a name above).* The red tests are 16 in
+`treko/test_ledger_failures.py` (315 lines, commit e57d9e2): 12 drive `JobRunner.run_next()` in process (merge,
+store write, scan exit 1, scan past its bound, the five scan outcomes against the real `ledger_scan.py`, an analyzer
+that cannot start, a scan that cannot start, and `analysis_failed` carrying a `detail`) and 4 call the new functions
+directly. All 16 fail today: 2 on the missing `merge=` and `emit_run=` arguments, 8 on a `detail` that is still
+`None`, 2 on a spawn `OSError` that escapes `run_next`, and 4 on the missing module. The 36 tests already in
+`test_ledger_runner.py` and `test_ledger_jobs.py` still pass beside them. The tests import `world` and their fakes from
+`test_ledger_runner.py` instead of copying them. The test helper reports it ran the in-process tests against a
+throwaway reference kept outside the repo and they passed, and that making every scan outcome `internal_error`, or
+putting the exception message in the log line, each failed the right rows; I did not re-run that reference. The spec
+is silent on, and the tests leave open: the `stage`, `repo` and `exit` of an `analysis_failed` item (the table says
+"the first failure's stage"); `repo` and `exit` for a scan outcome; `stage` and `exit` for `scan_timeout` (only
+`timedOut` is checked); an errno number with no symbolic name. Two readings the tests take: the attributes of
+`JobFailure` are named after its constructor arguments (`.code`, `.stage`, `.repo`, `.exit`, `.timed_out`, `.errno`,
+`.cause`), and `run_next()` returns the failed item's id, as it does today for a failed scan.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
