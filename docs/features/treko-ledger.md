@@ -604,6 +604,27 @@ He chose to delete that one check, in its own commit before the green commit, ov
 `test_ledger_edits.py` drives the same three ops with their real answers, and the old file stands near its size
 limit). Its neighbour for `reanalyze` of a run with no recorded request is not touched: that stub stays until task 28.
 
+**D53 — Task 20 names its public functions, puts the failure vocabulary in a new file, and its tests go in a new
+file.** (user, 2026-11-22, asked before task 20's red tests were written; he approved the names and the placement.)
+The spec fixes each code, stage and log rule (section 5.4 steps 3 to 5, the section 3.5 table, section 3.6) but no
+name a test could call. In a new `treko/ledger_failures.py`: `JobFailure(code, stage, repo=None, exit=None,
+timed_out=False, errno=None, cause=None)`, an exception, the one thing the job raises when it fails, where `cause`
+is the exception class name or the errno name the log line carries; `detail_of(failure)`, which returns the item's
+`detail` as section 5.1 shows it (`stage`, `repo`, `exit`, `timedOut`, `errno`); `job_failure_line(item_id, failure)`,
+which returns `server: job <item> <code> <cause> at <stage>` (the cause left out when there is none, as for a scan
+outcome), never an exception's message; and `errno_name(error)`, the symbolic name of an `OSError` (`ENOENT`), or
+`None`. `JobRunner` in `treko/ledger_jobs.py` gains two optional keyword arguments, `merge=None` and
+`emit_run=None`, which default to `ledger_merge.merge` (still imported late, so the server starts without the
+analyzer) and `store.emit_run`; tests pass a function that raises. A spawn failure is tested with a stand-in registry
+whose `launch` raises `OSError`, so it needs no new name. Task 20 fails the whole job on the first analyzer that
+cannot start (no second family is launched), and every failed item carries a `detail`, `analysis_failed` and the
+job-time scan outcomes included. The submit-time `500 launch_failed` is already green from task 17
+(`test_ledger_accept.py:313`), so task 20 adds no row for it there. The tests live in a new
+`treko/test_ledger_failures.py`, since `test_ledger_jobs.py` (589 lines) and `test_ledger_routes.py` (399) are at or
+over their caps. `ledger_jobs.py` stands at 390 of its 400-line cap and this keeps the new code out of it: if the
+edit to `ledger_jobs.py` alone would pass 400, the helper stops and the user is asked before anything is moved.
+Task 20 is otherwise as written.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
