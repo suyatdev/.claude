@@ -29,6 +29,9 @@ from pathlib import Path
 
 import ledger_state
 import store
+from ledger_failures import (FIRST_ANALYZER_STAGE, LAUNCH_FAILED, MERGE_FAILED, MERGE_STAGE, SCAN_STAGE,
+                             STORE_WRITE_FAILED, WRITE_STAGE, JobFailure, analysis_failure, detail_of,
+                             failure_from_error, job_failure_line, stage_reached)
 
 REAP_WAIT_SECS = 5  # section 5.4: the longest any one reap waits after a group kill
 SCAN_OK = "ok"
@@ -43,7 +46,6 @@ RUN_KEYS = frozenset({"id", "name", "dir", "analyzedAt", "features", "waves", "c
 STAGE_LABELS = ("reading worktrees", "reading branches", "reading cards", "deriving merge order")  # section 6.1
 MERGE_LABEL, WRITE_LABEL = "merging the runs", "writing the store"
 PROGRESS_PREFIX = "treko-progress "
-ANALYSIS_FAILED = "analysis_failed"
 SCAN_FAILED = "scan_failed"
 
 # Section 2 default 3's table. The variables of the git config family the builder owns end to end: the base's
@@ -218,14 +220,16 @@ class JobRunner:
     """Runs the oldest waiting item, one at a time (section 5.4). `report(stage)` receives each analyzer
     `treko-progress <stage>` line; the default moves the stage record on. `progress()` is that record: None when
     nothing runs, else {"done", "total" (None until the scan ends), "label"}. `last_job_end` is `time.monotonic()`
-    at the last job end, the clock the idle watchdog uses. `scan_program` and `analyze_program` swap the scripts."""
+    at the last job end, the clock the idle watchdog uses. `scan_program` and `analyze_program` swap the scripts;
+    `merge(request, parts, questions)` and `emit_run(store_path, run)` swap `ledger_merge.merge` and `store.emit_run`."""
 
     def __init__(self, ledger, registry, store_path, analyze_secs, scan_secs, report=None, scan_program=None,
-                 analyze_program=None):
+                 analyze_program=None, merge=None, emit_run=None):
         self._ledger, self._registry, self._store_path = ledger, registry, store_path
         self._analyze_secs, self._scan_secs = analyze_secs, scan_secs
         self._scan_program = scan_program
         self._analyze_program = str(ANALYZE_PROGRAM if analyze_program is None else analyze_program)
+        self._merge, self._emit_run = merge, emit_run
         self.report = report if report is not None else self._record
         self.last_job_end = None
         self._lock = threading.Lock()  # guards the stage record and last_job_end; never held across a call out
@@ -292,25 +296,44 @@ class JobRunner:
         with self._lock:
             self._labels = []
             self._stage = {"done": 0, "total": None, "label": "scanning " + ledger_state.run_dir(request["directory"])}
-        result = run_scan(self._registry, request, self._scan_secs, label="job " + item_id,
-                          program=self._scan_program)
+        try:
+            self._run_job(item_id, request)
+        except JobFailure as failure:
+            self._settle(item_id, failure.code, detail_of(failure))
+            _stderr_line(job_failure_line(item_id, failure))
+        return item_id
+
+    def _run_job(self, item_id, request):
+        """Steps 2 to 6 of section 5.4. Raises JobFailure for each way the job can fail, so the item is settled once."""
+        try:
+            result = run_scan(self._registry, request, self._scan_secs, label="job " + item_id,
+                              program=self._scan_program)
+        except OSError as error:
+            raise failure_from_error(LAUNCH_FAILED, SCAN_STAGE, error) from error
         error, scan = _scan_error(result)
         if error is not None:
-            self._settle(item_id, error)
-            return item_id
+            raise JobFailure(error, SCAN_STAGE, exit=result.returncode if error == SCAN_FAILED else None,
+                             timed_out=error == SCAN_TIMEOUT)
         families = scan["families"]
         self._labels = [family["label"] for family in families]
         self._set_done(1)
         parts = [self._analyze(number, family) for number, family in enumerate(families)]
         if all("run" not in part for part in parts):
-            self._settle(item_id, ANALYSIS_FAILED)
-            return item_id
-        import ledger_merge  # late: it imports analyze, and the server must start without importing the analyzer
-        run = ledger_merge.merge(request, parts, scan["questions"])
+            raise analysis_failure(parts)
+        merge = self._merge
+        if merge is None:
+            import ledger_merge  # late: it imports analyze, and the server must start without importing the analyzer
+            merge = ledger_merge.merge
+        try:
+            run = merge(request, parts, scan["questions"])
+        except Exception as error:  # noqa: BLE001 - step 4: any exception the merge raises is merge_failed
+            raise JobFailure(MERGE_FAILED, MERGE_STAGE, cause=type(error).__name__) from error
         self._set_done(4 * len(parts) + 2)
-        store.emit_run(self._store_path, run)
+        try:
+            (self._emit_run or store.emit_run)(self._store_path, run)
+        except Exception as error:  # noqa: BLE001 - step 5: whatever the write raises is store_write_failed
+            raise failure_from_error(STORE_WRITE_FAILED, WRITE_STAGE, error) from error
         self._settle(item_id, None)
-        return item_id
 
     def _claim(self):
         """Mark the oldest waiting item `running` (saved to ledger.json before this returns); a copy, or None."""
@@ -328,14 +351,14 @@ class JobRunner:
             self._ledger.update(change)  # the choice is made inside the change, so it cannot go stale
         return claimed[0] if claimed else None
 
-    def _settle(self, item_id, error):
-        """The job's last ledger write: the item leaves the queue (`error` None) or fails with `error`."""
+    def _settle(self, item_id, error, detail=None):
+        """The job's last ledger write: the item leaves the queue (`error` None) or fails with `error` and `detail`."""
         def change(state):
             if error is None:
                 state["queue"] = [item for item in state["queue"] if item["item"] != item_id]
             for item in state["queue"]:
                 if item["item"] == item_id:
-                    item.update(state="failed", error=error, detail=None)
+                    item.update(state="failed", error=error, detail=detail)
             return state
 
         self._ledger.update(change)
@@ -348,9 +371,13 @@ class JobRunner:
         argv = [sys.executable, self._analyze_program, family["root"], "--progress"]
         for card in family["cards"]:
             argv += ["--card", card]
-        proc = self._registry.launch(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                     stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+        try:
+            proc = self._registry.launch(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                         stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+        except OSError as error:  # not a family failure (OQ-2): it says nothing about the repository
+            raise failure_from_error(LAUNCH_FAILED, FIRST_ANALYZER_STAGE, error, repo=family["label"]) from error
         out, last, expired = [], "", threading.Event()  # `last`: the final stderr line that is not progress
+        reported = 0  # the stages this analyzer reported finished
 
         def expire():
             expired.set()
@@ -365,6 +392,7 @@ class JobRunner:
             for line in proc.stderr:
                 line = line.rstrip("\n")
                 if line.startswith(PROGRESS_PREFIX):
+                    reported += 1
                     self.report(line[len(PROGRESS_PREFIX):].strip())
                 elif line.strip():
                     last = line
@@ -387,4 +415,5 @@ class JobRunner:
         run = None if expired.is_set() or proc.returncode != 0 else _read_run(out[0] if out else "")
         if run is not None:
             return dict(part, run=run)
-        return dict(part, failure={"exit": proc.returncode, "timedOut": expired.is_set(), "stderr": last})
+        return dict(part, failure={"exit": proc.returncode, "timedOut": expired.is_set(), "stderr": last,
+                                   "stage": stage_reached(reported)})
