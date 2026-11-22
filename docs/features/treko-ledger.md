@@ -656,6 +656,13 @@ item's stage is the analyzer stage that was running when the first failed family
 raises at job time is read as a scan launch failure; an `OSError` with no symbolic errno name leaves `errno` `None`
 and uses the exception's class name as the log line's cause, as does a non-`OSError` from the save. The constant
 `ANALYSIS_FAILED` moved from `ledger_jobs.py` to `ledger_failures.py` (nothing else referenced it).
+**The split is done (commit 7d2dead):** `ledger_jobs.py` is 273 lines and `ledger_children.py` 172. It was proven by a
+sorted comparison of every non-blank line of the old file against the two new ones (nothing missing; the only new
+lines are the imports and docstring text), by importing `ledger_jobs` alone (it does not import the analyzer or
+`ledger_merge`), and by a whole-suite run with the same counts as before the move (1046 pass; the 51 Chrome-pin
+tests of D44 the only red). One thing for task 21 onward: the moved code reads its own module's names, so a test
+that patched `ledger_jobs.REAP_WAIT_SECS` (or any moved name) on the `ledger_jobs` module would no longer reach it.
+None does today (the one `setattr` near it targets `subprocess.Popen`), and D14 and D15 pass the reap wait in code.
 
 ## Decisions carried to the relations card (user, 2026-11-02)
 
@@ -763,7 +770,7 @@ spec §11; a card decision is written "decision D10", and a round-2 fix "fix F4"
 - [x] 17 — Accept an analysis: scan at once, then queue it, or refuse it with a reason (A5, G7) (done, red 8dacc85, green f9eb67e; names D49, one old check edited, D50, 3f38b17; tests in treko/test_ledger_accept.py and treko/test_ledger_accept_server.py, plus the two section 12 edits in test_server.py and server_harness.py; server.py is 764 of its 780-line cap, ledger_routes.py 286 of 400, ledger_state.py 336 of 400; whole treko directory: 987 passed and 51 stopped at the Chrome version check; `remove`, `retry` and `delete`, and a `reanalyze` of a run with no recorded request, still answer the 500 internal_error stub until tasks 18 and 28; a closed registry answers 500 internal_error, my call, D49 addendum)
 - [x] 18 — Remove a waiting item, retry a failed one, hide a run (G5) (done, red da5c7fa, green 6302a2f; names D51, one old check deleted, D52, 1268d03; tests in treko/test_ledger_edits.py, not the spec's two named files, which were full; ledger_state.py is 400 of its 400-line cap, ledger_routes.py 313 of 400, server.py unchanged; whole treko directory on the second and third full runs: 1030 passed and 51 stopped at the Chrome version check, the same 51 as D44; the first of the three full runs had one extra failure that was not identified, since only its last lines were kept, and it did not come back; `reanalyze` of a run with no recorded request still answers the 500 internal_error stub until task 28; the `not_retryable` and `already_queued` HTTP rows seed a waiting item, so task 22 must re-seed them)
 - [x] 19 — Run queued analyses one at a time, with progress that moves only on real stages (E4, D7) (done, red 804d849, green b1d3fa9; built before 14 per D44; names D45; tests in treko/test_ledger_runner.py; ledger_jobs.py is 390 of its 400-line cap)
-- [x] 20 — Give each way a job can fail its own code and reason (D12, D13) (done, red e57d9e2, green 41bc54b; names D53 and its two addenda; tests in treko/test_ledger_failures.py, not the spec's two named test files, which are full; ledger_jobs.py is 419 lines, over its 400 cap, and he chose to split it in its own step before task 21; whole treko directory: 1046 pass, the only red the 51 Chrome-pin tests of D44)
+- [x] 20 — Give each way a job can fail its own code and reason (D12, D13) (done, red e57d9e2, green 41bc54b; names D53 and its two addenda; tests in treko/test_ledger_failures.py, not the spec's two named test files, which are full; ledger_jobs.py is 419 lines, over its 400 cap, and he chose to split it in its own step before task 21 (done, 7d2dead: ledger_jobs.py 273 lines, ledger_children.py 172); whole treko directory: 1046 pass, the only red the 51 Chrome-pin tests of D44)
 - [ ] 21 — Make sure no job can stay "running" for ever (D14, D15)
 - [ ] 22 — After a restart, mark the interrupted job and start the waiting ones; polling alone never keeps the server awake (D3, D4, B2)
 - [ ] 23 — Stop cleanly: no new work, every process killed, the job marked interrupted (D6)
