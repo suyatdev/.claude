@@ -1,7 +1,7 @@
 ---
 phase: review
 model_tier: high
-branch: feat-statusline-quiet-indicator
+branch: none  # merged via PR #123 (3df73c9), 2026-10-29
 ---
 
 # Status line: git-guard quiet indicator
@@ -48,6 +48,13 @@ control byte or trailing newline inside a flagged id, path traversal, flag path 
     than 20–28 columns on its own. Ceiling is now max(cols, the no-session twin's widest line).
 - [x] Task 2 — segment in `statusline-command.sh`; full suite green (134/134)
   - Falsified: declaring width 1 fails the sweep; validating the stripped id fails 4 near-miss cases.
-- [ ] Task 3 — observability judge, then PR
+- [x] Task 3 — observability judge (risk=low, confidence=high), then PR #123, merged as 3df73c9
 
 ## Verification
+
+- Suite: `bash statusline-command.test.sh` 134/134 on the merged bytes.
+- Live: after the pull, the primary's `statusline-command.sh` is byte-identical (`cmp`) to the merged
+  one, and rendering it for a quiet session prints `git-guard: quiet`. A live `git-guard on` toggle was
+  not observed on screen by this session.
+- Open: the label reports the flag only; an unreadable `hooks/lib/git_guard_quiet.py` makes git-guard
+  ask while the bar says quiet (judge finding, accepted as documented).

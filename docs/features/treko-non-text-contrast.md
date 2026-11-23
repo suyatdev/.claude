@@ -864,7 +864,7 @@ Carried forward from `docs/features/treko-theme-and-layout.md` §"Pinned version
 |---|---|---|
 | Python | 3.9.6 | the interpreter this repo's suite runs under |
 | pytest | 8.4.2 | test runner |
-| Chrome | `152.0.7977.54` | `treko/cdp_harness.py:60`, `PINNED_VERSION`; asserted before launch |
+| Chrome | `156.0.8078.79` | `treko/cdp_harness.py`, `PINNED_VERSION`; asserted before launch. Moved from `152.0.7977.54` (via `152.0.7977.65`, recorded below) — latest re-pin approved 2026-10-31, record in `treko-chrome-156-repin.md` |
 
 **No new dependency.** The check needs `cdp_harness`, `server_harness` and the stdlib only.
 

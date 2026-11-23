@@ -11,10 +11,13 @@ file for it, and a reader following the spec should not conclude the clause went
 unwritten. What is here:
 
 * criterion 14, all three clauses — parent death, idle shutdown, audit-to-parent stderr;
-* the three surface-binding startup aborts (§Tasks 9's "seven of them");
 * the unmapped-extension abort, which keeps the manifest and the type map in lockstep;
 * the `<head>` abort, without which the page silently loads unauthenticated;
 * bind failure, which §Tasks 9 pins here because no criterion owns it.
+
+The three surface-binding startup aborts that used to live here moved to `test_degraded.py`
+as serving assertions — no cmux surface is a degraded launch now, not a refusal
+(`docs/features/treko-degraded-no-cmux.md` §D2/§D7).
 
 Every abort is asserted the same three ways: exit non-zero, name its cause, and serve
 **nothing** — the last proven by a connection the port refuses. A control that aborts
@@ -51,29 +54,6 @@ def assert_aborted(srv, *, expect):
     assert code != 0, "a misconfiguration exited 0"
     assert expect in srv.stderr, "stderr did not name the cause:\n%s" % srv.stderr
     assert harness.refuses_connection(srv.port), "aborted server served anyway"
-
-
-# --------------------------------------------------------------------------
-# the three surface-binding aborts
-# --------------------------------------------------------------------------
-
-
-def test_an_unset_surface_id_aborts_before_serving(launcher):
-    """The UUID is inherited, never deduced: a send with no target defaults to whatever
-    surface it inherits, which is how task 1's spike reached a different live session."""
-    srv = launcher(surface="", wait=False)
-    assert_aborted(srv, expect="CMUX_SURFACE_ID is unset or empty")
-
-
-def test_a_failing_read_screen_probe_aborts_before_serving(launcher):
-    srv = launcher(overrides={"FAKE_READ_SCREEN": "fail"}, wait=False)
-    assert_aborted(srv, expect="read-screen")
-
-
-def test_a_hanging_read_screen_probe_aborts_before_serving(launcher):
-    """An unbounded probe is a server that neither starts nor reports why."""
-    srv = launcher(overrides={"FAKE_READ_SCREEN": "hang"}, wait=False)
-    assert_aborted(srv, expect="exceeded 5s probing the surface")
 
 
 # --------------------------------------------------------------------------
