@@ -79,10 +79,10 @@ row -- an unquoted `#` truncating the shared lexer before a path -- was found
 the same day; see task 13 of docs/features/output-secret-redaction.md.
 
 One boundary matters when reading "a token in any segment matches" above.
-SEVEN of the eight patterns are anchored at BOTH ends -- `(^|/)` before the
-name and `$` after -- so for those the rule is "the path is a WHOLE TRAILING
-COMPONENT of a lexed token", which is narrower than "a suffix" in one direction
-and than "any mention" in the other. Both of these allow, measured:
+SEVEN of the ORIGINAL eight patterns are anchored at BOTH ends -- `(^|/)`
+before the name and `$` after -- so for those the rule is "the path is a WHOLE
+TRAILING COMPONENT of a lexed token", which is narrower than "a suffix" in one
+direction and than "any mention" in the other. Both of these allow, measured:
 
     cat foo.zshrc                      no `/` before the name -> not a component
     bash -c "cat ~/.zshrc | head -5"   token does not END at the name
@@ -91,10 +91,18 @@ while `cat ./foo/.zshrc` and `bash -c "cat ~/.zshrc"` both block. Pre-existing
 and deliberate -- widening it would mean matching paths inside arbitrary quoted
 program text, which is a different and much noisier problem.
 
-The EIGHTH -- `Application Support/[^/]*/credentials` -- is deliberately an
-unanchored substring match, so it is WIDER: it blocks a `.bak` suffix and a
-mid-string mention, both of which the anchored seven allow. Measured, and
-pinned by assertions. This is a momentum guardrail, not a security boundary.
+The ORIGINAL eighth -- `Application Support/[^/]*/credentials` -- is
+deliberately an unanchored substring match, so it is WIDER: it blocks a `.bak`
+suffix and a mid-string mention, both of which the anchored seven allow.
+Measured, and pinned by assertions. This is a momentum guardrail, not a
+security boundary.
+
+Two patterns were added later (docs/features/secret-guard-user-secrets-path.md):
+`.secrets` and a `.env/` folder. They are anchored only at the FRONT, with `(^|/)`,
+and match a WHOLE COMPONENT ANYWHERE in the token, so a file INSIDE such a
+folder blocks as well as the name itself (`cat ~/.secrets/key`,
+`cat .env/cloud.env`); `.secretsfoo`, `my.secrets` and `.envs/` still allow.
+`.secrets` has no template exemption; `.env/` shares the .env one.
 
 Segments come from shell_segments.segments(), the same lexer git-guard and
 doc-guard use, so a chained or piped command is judged per segment rather
@@ -132,9 +140,13 @@ ENV_DUMP_RE = re.compile(r"os\.environ|process\.env")
 
 EXEMPT_VAR = "SECRET_EXEMPT"
 
-# (regex, human label). Anchored on the basename so a longer, unrelated file
-# (".envrc" vs ".env") cannot false-positive.
+# (regex, human label). Anchored on a whole path component so a longer,
+# unrelated name (".envrc" vs ".env") cannot false-positive.
+# ORDER MATTERS: matches_dotfile returns on the first match, and an .env
+# template match returns None, so the .secrets entry must stay ahead of both
+# .env entries or `~/.secrets/.env.example` would be exempted.
 DOTFILE_PATTERNS = [
+    (r"(^|/)\.secrets(/|$)", "~/.secrets"),
     (r"(^|/)\.terminal_aliases$", "~/.terminal_aliases"),
     (r"(^|/)\.bash_profile$", "~/.bash_profile"),
     (r"(^|/)\.zshrc$", "~/.zshrc"),
@@ -143,13 +155,16 @@ DOTFILE_PATTERNS = [
     (r"(^|/)\.env(\.[^/]*)?$", ".env / .env.*"),
     (r"(^|/)credentials\.json$", "credentials.json"),
     (r"Application Support/[^/]*/credentials", "*/Application Support/*/credentials*"),
+    # Inside a folder named .env; the label is shared on purpose so the
+    # template exemption below applies to it too.
+    (r"(^|/)\.env/", ".env / .env.*"),
 ]
 FOLD_FLAGS = re.IGNORECASE          # single source; see Flag choice
 
 DOTFILE_RE = [(re.compile(p, FOLD_FLAGS), label) for p, label in DOTFILE_PATTERNS]
 
 # Conventionally committed, never carry a real value. Checked only against a
-# token the .env pattern already matched, so an unrelated "foo.sample" is
+# token an .env-labelled pattern already matched, so an unrelated "foo.sample" is
 # unaffected either way.
 ENV_EXEMPT_RE = re.compile(r"\.(example|template|sample)$", FOLD_FLAGS)
 ENV_LABEL = ".env / .env.*"

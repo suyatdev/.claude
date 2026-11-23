@@ -87,7 +87,19 @@ Scenario Outline: unrelated or example paths still pass
   - For Mark: "inside a folder named `.env`" also refuses a virtualenv of that name
     (`source .env/bin/activate`), and `.secrets/` / `.env/` with a trailing slash are treated
     as inside. All three are pinned as block rows.
-- [ ] 3. Add the patterns to `DOTFILE_PATTERNS` — separate step from task 2.
-- [ ] 4. Full `hooks/secret-command-guard.test.sh`, read the output, report counts.
+- [x] 3. Add the patterns to `DOTFILE_PATTERNS` — separate step from task 2.
+  - 2026-11-23: data-only edit, `matches_dotfile` and the original eight untouched. `.secrets`
+    is listed first (ordering trap); the folder pattern reuses the `.env` label so the template
+    exemption applies to it.
+- [x] 4. Full `hooks/secret-command-guard.test.sh`, read the output, report counts.
+  - 2026-11-23: 248 passed / 0 failed, rc 0. 14 deliberate breakages of the new entries and the
+    exemption, each run through the suite in a copy: all 14 made it fail.
+  - `secret-filename-fold-probe.py` rc 0, but its Table A row for the folder pattern is **vacuous**
+    (`flips=no (0/2)`): it builds `.ENV` with no trailing slash, which that pattern cannot match.
+    The fold on that pattern rests on the suite rows alone. Probe not edited (out of scope).
+  - For task 5, measured via the classifier, not pinned by a test: allowed —
+    `bash -c "cat ~/.secrets | head -5"`, `bash -c "cat .env/cloud.env | head -5"`,
+    `--file=.env/cloud.env`, `cat < .env/cloud.env`. Blocked as prose — a commit message
+    mentioning `~/.secrets/` or `config/.env/`.
 - [ ] 5. Docs: gates.md path list, Known-gaps table, ADR 0039 amendment line (per Q2).
 - [ ] 6. Observability judge, then PR (draft) from a worktree under `~/.worktrees/.claude/`.
