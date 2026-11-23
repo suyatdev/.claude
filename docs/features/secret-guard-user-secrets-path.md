@@ -78,7 +78,15 @@ Scenario Outline: unrelated or example paths still pass
 ## Checklist
 
 - [x] 1. Measure current verdicts (table above).
-- [ ] 2. Red tests first (new block + allow assertions) — run, watch the block rows fail.
+- [x] 2. Red tests first (new block + allow assertions) — run, watch the block rows fail.
+  - 2026-11-23, against unmodified code: baseline 212 passed / 0 failed; with 36 new rows
+    228 passed / 20 failed. The 20 failures are exactly the 20 rows tagged `user-secrets RED`,
+    each `got 0`. The other 16 (exemptions, near-misses, 2 GAP rows) already pass.
+  - Ordering trap for task 3: `matches_dotfile` returns `None` on a `.env` template match, so
+    `~/.secrets/.env.example` allows unless the `.secrets` pattern is consulted first (pinned).
+  - For Mark: "inside a folder named `.env`" also refuses a virtualenv of that name
+    (`source .env/bin/activate`), and `.secrets/` / `.env/` with a trailing slash are treated
+    as inside. All three are pinned as block rows.
 - [ ] 3. Add the patterns to `DOTFILE_PATTERNS` — separate step from task 2.
 - [ ] 4. Full `hooks/secret-command-guard.test.sh`, read the output, report counts.
 - [ ] 5. Docs: gates.md path list, Known-gaps table, ADR 0039 amendment line (per Q2).

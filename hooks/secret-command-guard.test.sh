@@ -1192,6 +1192,78 @@ run_case_decoy_difffile "filename-fold RED: .zprofİle (U+0130) accepted false r
 run_case "filename-fold: cat foo.zshrc -> allow (pre-existing gap, unaffected by the fold)" 0 'cat foo.zshrc'
 
 # =============================================================================
+# secret-guard-user-secrets-path (docs/features/secret-guard-user-secrets-path.md)
+# task 2 -- red tests, written before task 3 adds the patterns. Rows tagged RED
+# allowed when written and go green only with task 3; the rest are near-misses
+# and controls that must hold on BOTH sides of it.
+#
+# The label argument on a block row is deliberately loose ('.secrets', '.env'):
+# the exit code is what discriminates, and the label wording is task 3's.
+# =============================================================================
+
+# --- Scenario Outline: the new secrets paths are refused ---------------------
+run_case_msg "user-secrets RED: ~/.secrets -> block"                       2 '.secrets' 'cat ~/.secrets'
+run_case_msg "user-secrets RED: a file inside ~/.secrets -> block"         2 '.secrets' 'cat ~/.secrets/api_key'
+run_case_msg "user-secrets RED: a file inside .env/ -> block"              2 '.env'     'cat .env/cloud.env'
+
+# The same shapes off the happy path: relative, nested, quoted, in a later
+# segment, and with a trailing slash (`cp -r` copies the whole folder without
+# naming a file in it).
+run_case_msg "user-secrets RED: bare relative .secrets -> block"           2 '.secrets' 'cat .secrets'
+run_case_msg "user-secrets RED: .secrets as a real component -> block"     2 '.secrets' 'cat ./foo/.secrets'
+run_case_msg "user-secrets RED: nested inside .secrets -> block"           2 '.secrets' 'cat ~/.secrets/aws/key'
+run_case_msg "user-secrets RED: .secrets/ with a trailing slash -> block"  2 '.secrets' 'cp -r ~/.secrets/ /tmp/x'
+run_case_msg "user-secrets RED: quoted absolute .secrets path -> block"    2 '.secrets' 'cat "/Users/x/.secrets/api_key"'
+run_case_msg "user-secrets RED: .secrets in a later segment -> block"      2 '.secrets' 'true && cat ~/.secrets'
+run_case_msg "user-secrets RED: a .env/ folder below another -> block"     2 '.env'     'cat config/.env/cloud.env'
+run_case_msg "user-secrets RED: nested inside .env/ -> block"              2 '.env'     'cat .env/prod/cloud.env'
+run_case_msg "user-secrets RED: any file in .env/, not only *.env -> block" 2 '.env'    'cat .env/key.json'
+run_case_msg "user-secrets RED: .env/ with a trailing slash -> block"      2 '.env'     'cp -r .env/ /tmp/x'
+
+# The case fold (secret-filename-case-blindness) must reach the new patterns
+# too: on a case-insensitive volume each spelling opens the same file.
+run_case_msg "user-secrets RED: ~/.SECRETS -> block"                       2 '.secrets' 'cat ~/.SECRETS'
+run_case_msg "user-secrets RED: .ENV/cloud.env -> block"                   2 '.env'     'cat .ENV/cloud.env'
+run_case_decoy_samefile "user-secrets RED: .ſecrets (U+017F) same-file as .secrets -> block" \
+  2 '.ſecrets' '.secrets'
+
+# --- The template exemption: kept for .env/, NOT extended to .secrets --------
+run_case "user-secrets: .env/cloud.env.example -> allow"                   0 'cat .env/cloud.env.example'
+run_case "user-secrets: .env/cloud.env.template -> allow"                  0 'cat .env/cloud.env.template'
+run_case "user-secrets: .env/cloud.env.sample -> allow"                    0 'cat .env/cloud.env.sample'
+run_case "user-secrets: .env/cloud.env.EXAMPLE -> allow (fold)"            0 'cat .env/cloud.env.EXAMPLE'
+run_case "user-secrets: .env/.env.example -> allow (matches both .env shapes)" 0 'cat .env/.env.example'
+run_case_msg "user-secrets RED: an exempt suffix on a FOLDER does not exempt a file in it -> block" \
+  2 '.env' 'cat .env/old.example/cloud.env'
+run_case_msg "user-secrets RED: .secrets has no template exemption -> block" \
+  2 '.secrets' 'cat ~/.secrets/api_key.example'
+# matches_dotfile returns on the first match, so a .env template exemption
+# consulted before the .secrets pattern would exempt this one.
+run_case_msg "user-secrets RED: a .env template INSIDE .secrets -> block" \
+  2 '.secrets' 'cat ~/.secrets/.env.example'
+
+# --- Scenario Outline: unrelated paths still pass ----------------------------
+run_case "user-secrets: .secret -> allow (Q1: only .secrets is guarded)"   0 'cat .secret'
+run_case "user-secrets: .secretsfoo -> allow"                              0 'cat .secretsfoo'
+run_case "user-secrets: my.secrets -> allow"                               0 'cat my.secrets'
+run_case "user-secrets: .envrc -> allow"                                   0 'cat .envrc'
+run_case "user-secrets: a file inside .secretsfoo/ -> allow"               0 'cat .secretsfoo/api_key'
+run_case "user-secrets: a file inside my.secrets/ -> allow"                0 'cat my.secrets/api_key'
+run_case "user-secrets: a file inside .envs/ -> allow"                     0 'cat .envs/cloud.txt'
+run_case "user-secrets: a file inside my.env/ -> allow"                    0 'cat my.env/cloud.txt'
+run_case "user-secrets: a file inside .envrc/ -> allow"                    0 'cat .envrc/cloud.txt'
+
+# --- Left open, pinned so closing it is a deliberate edit --------------------
+run_case "GAP: a suffixed copy of the secrets file -> allow"               0 'cat ~/.secrets.bak'
+run_case "GAP: an input redirection hides ~/.secrets too"                  0 'cat < ~/.secrets'
+
+# --- Accepted false refusal --------------------------------------------------
+# A Python virtualenv is sometimes named .env; "inside a folder named .env" is
+# the rule the card states, so these block. Recorded so it is not a surprise.
+run_case_msg "user-secrets RED: a virtualenv named .env -> block (accepted false refusal)" \
+  2 '.env' 'source .env/bin/activate'
+
+# =============================================================================
 # Registration assertion: checked against the REAL repo settings.json, not a
 # fixture — that file is what Claude Code actually loads.
 # =============================================================================
