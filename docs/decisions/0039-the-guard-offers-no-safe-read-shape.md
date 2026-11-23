@@ -162,3 +162,17 @@ false because it is quoted somewhere new.
   amending session — 14 failures, then 0 — so the new assertions are known to discriminate.
 - Two `rules/gates.md` bullets change: the dormant list drops to three scripts and retracts its
   "passes its tests" claim, and a new bullet describes this guard with its gaps stated.
+
+## Amendment (2026-11-23) — two more paths on the guarded list
+
+The guarded path list was widened by two patterns in `hooks/lib/classify-secret-command.py`:
+`~/.secrets` (the name itself, and anything inside a folder of that name) and anything inside a
+folder named `.env/`. No design change: there is still no permitted read shape, the fail-open
+direction and the `SECRET_EXEMPT` approval gate are untouched, and the `.example` / `.template` /
+`.sample` exemption still applies to the `.env/` pattern. Mark chose this amendment over a new
+ADR. Scope, measurements and task record: `docs/features/secret-guard-user-secrets-path.md`; the
+pattern counts and the new Known-gaps row are in `docs/features/secret-command-guard.md`.
+
+Accepted cost, confirmed by Mark: a Python virtualenv named `.env` is refused
+(`source .env/bin/activate` blocks, measured 2026-11-23 with the classifier). Name the
+virtualenv `.venv` instead (`source .venv/bin/activate` allows, same measurement).

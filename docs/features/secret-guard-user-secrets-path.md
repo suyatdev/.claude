@@ -74,6 +74,7 @@ Scenario Outline: unrelated or example paths still pass
 - **Q1 — answered:** the file is `~/.secrets`. Guard that name only; `.secret` stays allowed.
 - **Q2 — unanswered, default adopted:** an amendment line on ADR 0039, no new ADR — it widens
   a path list and changes no design. Mark can overrule at review.
+  **Answered later on 2026-11-23:** Mark accepted the amendment line.
 
 ## Checklist
 
@@ -101,5 +102,10 @@ Scenario Outline: unrelated or example paths still pass
     `bash -c "cat ~/.secrets | head -5"`, `bash -c "cat .env/cloud.env | head -5"`,
     `--file=.env/cloud.env`, `cat < .env/cloud.env`. Blocked as prose — a commit message
     mentioning `~/.secrets/` or `config/.env/`.
-- [ ] 5. Docs: gates.md path list, Known-gaps table, ADR 0039 amendment line (per Q2).
+- [x] 5. Docs: gates.md path list, Known-gaps table, ADR 0039 amendment line (per Q2).
+  - 2026-11-23: ADR 0039 amendment appended (Q2 and the `.env` virtualenv cost confirmed by Mark);
+    Known-gaps table gains one row (a suffixed copy, `cat ~/.secrets.bak`). Verdicts quoted in the
+    new text were re-run through the classifier by the main session.
+  - Left alone: `docs/features/secret-filename-ligature-blindness.md` still says "eight protected
+    patterns" (another card's text). README Roadmap line lists example paths, so it is not wrong.
 - [ ] 6. Observability judge, then PR (draft) from a worktree under `~/.worktrees/.claude/`.

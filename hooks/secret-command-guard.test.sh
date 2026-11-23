@@ -869,6 +869,10 @@ run_case "GAP: \$'...' with an escaped quote is unparseable"            0 'echo 
 # The EIGHTH pattern is deliberately different: `Application Support/[^/]*/
 # credentials` is an unanchored substring match, so it is WIDER than this
 # paragraph describes and blocks shapes the others allow. Pinned below.
+#
+# Two later patterns (docs/features/secret-guard-user-secrets-path.md) anchor
+# at the FRONT only: the user secrets name and a dotenv folder match as a whole
+# component ANYWHERE in the token. Pinned in the user-secrets block below.
 # ---------------------------------------------------------------------------
 run_case_msg "control: path at the END of a -c string -> blocks"        2 '.zshrc' 'bash -c "cat ~/.zshrc"'
 run_case "GAP: anything after the path in a -c string -> allows"        0 'bash -c "cat ~/.zshrc | head -5"'
