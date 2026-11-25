@@ -1267,6 +1267,45 @@ run_case "GAP: an input redirection hides ~/.secrets too"                  0 'ca
 run_case_msg "user-secrets RED: a virtualenv named .env -> block (accepted false refusal)" \
   2 '.env' 'source .env/bin/activate'
 
+# --- Follow-up to the observability judge's findings (2026-11-24) -----------
+# No behaviour change: these pin what the guard already does. Each discriminates
+# a regex mutation (see the card): the first two stop a dropped backslash from
+# turning `.` into "any character", the third pins the folder pattern's reach.
+run_case "user-secrets: venv/ is not .env/ (an unescaped dot would refuse it) -> allow" \
+  0 'source venv/bin/activate'
+run_case "user-secrets: /secrets/ is not .secrets (an unescaped dot would refuse it) -> allow" \
+  0 'cat /secrets/x'
+# CURRENT BEHAVIOUR, not a decision: the folder pattern is `\.env/`, so a folder
+# named `.env.x` is not matched. Widening it to `\.env(\.[^/]*)?/` would block
+# this; if that is ever wanted, flip this row deliberately.
+run_case "user-secrets: a file inside .env.x/ -> allow (current behaviour, not a decision)" \
+  0 'cat .env.x/foo'
+# The folder pattern is listed after .secrets on purpose: matches_dotfile returns
+# on the first match, and a .env-labelled match on `x.example` returns None.
+run_case_msg "user-secrets RED: a .env/ template folder INSIDE .secrets -> block (folder pattern stays behind .secrets)" \
+  2 '.secrets' 'cat ~/.secrets/.env/x.example'
+
+# Accepted false refusals (Mark, 2026-11-24): a whole-component mention blocks
+# whatever the program does with it, exactly as `jq .env` already did. Pinned so
+# they are a recorded cost, not a surprise.
+run_case_msg "user-secrets: jq .secrets blocks (accepted false refusal, same kind as jq .env)" \
+  2 '.secrets' 'jq .secrets f.json'
+run_case_msg "user-secrets: gh api --jq '.secrets' blocks (accepted false refusal)" \
+  2 '.secrets' "gh api x --jq '.secrets'"
+run_case_msg "user-secrets: touch ~/.secrets blocks (accepted false refusal)" \
+  2 '.secrets' 'touch ~/.secrets'
+run_case_msg "user-secrets: chmod 600 ~/.secrets blocks (accepted false refusal)" \
+  2 '.secrets' 'chmod 600 ~/.secrets'
+run_case_msg "user-secrets: find -path './.env/*' blocks (accepted false refusal)" \
+  2 '.env' "find . -path './.env/*'"
+
+# The template exemption reads the END of the whole lexed token, not of a path
+# inside it, so a .env/ file followed by a template-looking tail in one -c string
+# is exempted. The exemption's reading is pre-existing: on origin/main
+# `bash -c "cat /a/.env.foo; cat x.example"` allows while the same with x.txt blocks.
+run_case "GAP: template exemption reads the end of the whole token -> allow" \
+  0 'bash -c "cat ./.env/cloud.env; cat x.example"'
+
 # =============================================================================
 # Registration assertion: checked against the REAL repo settings.json, not a
 # fixture — that file is what Claude Code actually loads.

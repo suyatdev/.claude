@@ -176,3 +176,10 @@ pattern counts and the new Known-gaps row are in `docs/features/secret-command-g
 Accepted cost, confirmed by Mark: a Python virtualenv named `.env` is refused
 (`source .env/bin/activate` blocks, measured 2026-11-23 with the classifier). Name the
 virtualenv `.venv` instead (`source .venv/bin/activate` allows, same measurement).
+Added 2026-11-24 (observability judge, accepted by Mark): the same whole-component rule also
+refuses commands that never read the file. `jq .secrets f.json`, `gh api x --jq '.secrets'`,
+`touch ~/.secrets`, `chmod 600 ~/.secrets` and `find . -path './.env/*'` all block (measured
+2026-11-24 with the classifier at this branch; each allowed on `origin/main` `fc08216`, where the
+`.secrets` name and `.env/` folder were not guarded). This is consistent with `jq .env f.json`,
+which `origin/main` already refused (measured 2026-11-24 against that file's copy). Each of the five is pinned as
+a block assertion in `hooks/secret-command-guard.test.sh`.

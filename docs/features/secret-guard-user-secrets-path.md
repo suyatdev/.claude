@@ -109,3 +109,18 @@ Scenario Outline: unrelated or example paths still pass
   - Left alone: `docs/features/secret-filename-ligature-blindness.md` still says "eight protected
     patterns" (another card's text). README Roadmap line lists example paths, so it is not wrong.
 - [ ] 6. Observability judge, then PR (draft) from a worktree under `~/.worktrees/.claude/`.
+  - Round 1 (`a44dfe5`, Opus 5.5 xhigh): risk low, confidence high, no fails; concerns on
+    regression, traceability, success_masking. Mark approved fixing them on 2026-11-24 and accepted
+    the new false refusals (`jq .secrets` and kin). No behaviour change in the fix: 10 test rows,
+    comments, docs. Suite 258 passed / 0 failed.
+  - Three mutants that round 1 found alive at 248/0 now fail one row each: `.env/` with an unescaped
+    dot, `.secrets` with an unescaped dot, the folder entry moved ahead of `.secrets`.
+  - The 14 from task 4, so they can be re-run. `.secrets` entry: dropped; moved last; `$` only; `/`
+    only; no end anchor; no front anchor; `secrets?`; given the `.env` label. Folder entry: dropped;
+    no front anchor; own label; `.env/.` (needs a file name); slash dropped. `ENV_EXEMPT_RE`: `$`
+    dropped.
+  - Still unpinned: listing the folder entry second (right after `.secrets`) leaves the suite green.
+    Reported by the implementer as reachable only through an `Application Support` path inside a
+    `.env/` folder ending in a template suffix; not re-measured by the main session.
+  - The fold probe now counts `.env` twice in its section 4 total, because two entries share that
+    literal (the round 1 judge's finding: it prints 2,699, its per-name rows add up to 2,594).

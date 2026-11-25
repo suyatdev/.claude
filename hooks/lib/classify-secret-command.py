@@ -144,7 +144,8 @@ EXEMPT_VAR = "SECRET_EXEMPT"
 # unrelated name (".envrc" vs ".env") cannot false-positive.
 # ORDER MATTERS: matches_dotfile returns on the first match, and an .env
 # template match returns None, so the .secrets entry must stay ahead of both
-# .env entries or `~/.secrets/.env.example` would be exempted.
+# .env entries or `~/.secrets/.env.example` (basename entry) and
+# `~/.secrets/.env/x.example` (folder entry) would be exempted.
 DOTFILE_PATTERNS = [
     (r"(^|/)\.secrets(/|$)", "~/.secrets"),
     (r"(^|/)\.terminal_aliases$", "~/.terminal_aliases"),
