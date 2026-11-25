@@ -108,7 +108,7 @@ Scenario Outline: unrelated or example paths still pass
     new text were re-run through the classifier by the main session.
   - Left alone: `docs/features/secret-filename-ligature-blindness.md` still says "eight protected
     patterns" (another card's text). README Roadmap line lists example paths, so it is not wrong.
-- [ ] 6. Observability judge, then PR (draft) from a worktree under `~/.worktrees/.claude/`.
+- [x] 6. Observability judge, then PR (draft) from a worktree under `~/.worktrees/.claude/`.
   - Round 1 (`a44dfe5`, Opus 5.5 xhigh): risk low, confidence high, no fails; concerns on
     regression, traceability, success_masking. Mark approved fixing them on 2026-11-24 and accepted
     the new false refusals (`jq .secrets` and kin). No behaviour change in the fix: 10 test rows,
@@ -124,3 +124,7 @@ Scenario Outline: unrelated or example paths still pass
     `.env/` folder ending in a template suffix; not re-measured by the main session.
   - The fold probe now counts `.env` twice in its section 4 total, because two entries share that
     literal (the round 1 judge's finding: it prints 2,699, its per-name rows add up to 2,594).
+  - Round 2 (`c150b28`, Opus 5.5, launched at xhigh): risk low, confidence high, no fails; concerns
+    on traceability and success_masking. Draft PR #129 opened at that commit. Its open findings are
+    listed in the PR body and are not fixed. One was re-measured by the main session: deleting the
+    leading dot of `ENV_EXEMPT_RE` leaves the suite at 258/0.
