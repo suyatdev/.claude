@@ -50,13 +50,15 @@
 # does not prove one was given. The typed phrase is the load-bearing control.
 #
 # NOT a security boundary, and this file must not imply otherwise: the card's
-# Known-gaps table lists NINE measured ALLOW shapes, incl. variable indirection,
+# Known-gaps table lists measured ALLOW shapes (NINE when this was written; count the rows in the card, not here), incl. variable indirection,
 # any read performed inside a script file, and -- the shortest of them -- an INPUT
 # REDIRECTION: `cat < ~/.zshrc` lexes to argv ['cat'], matches nothing, and is
 # allowed, because the lexer drops the redirection target. Note especially that "any
-# mention" means, for 7 of the 8 patterns, "the path is a WHOLE TRAILING
+# mention" means, for 7 of the 10 patterns, "the path is a WHOLE TRAILING
 # COMPONENT of a lexed token" (the Application Support pattern is an unanchored
-# substring match, and so is wider):
+# substring match, and so is wider; the `.secrets` and `.env/` folder patterns are
+# anchored at the front only and match a whole component ANYWHERE in the token, so
+# a file inside such a folder blocks too):
 # `bash -c "cat ~/.zshrc"` blocks but `bash -c "cat ~/.zshrc | head -5"` does
 # not (the token no longer ends there), and `cat foo.zshrc` does not either
 # (no `/` before the name).
