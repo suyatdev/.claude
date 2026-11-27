@@ -128,3 +128,7 @@ Scenario Outline: unrelated or example paths still pass
     on traceability and success_masking. Draft PR #129 opened at that commit. Its open findings are
     listed in the PR body and are not fixed. One was re-measured by the main session: deleting the
     leading dot of `ENV_EXEMPT_RE` leaves the suite at 258/0.
+  - 2026-11-27, Mark asked for round 2 findings 1 and 2 (no third judge round): two block rows pin the
+    leading dot of `ENV_EXEMPT_RE` (dropping it now fails 2 rows, measured by the main session);
+    the `.env.x/` folder shape added to the Known-gaps `cat config/prod.env` row, table still 13
+    rows. Suite 260 passed / 0 failed.

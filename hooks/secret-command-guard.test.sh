@@ -1306,6 +1306,15 @@ run_case_msg "user-secrets: find -path './.env/*' blocks (accepted false refusal
 run_case "GAP: template exemption reads the end of the whole token -> allow" \
   0 'bash -c "cat ./.env/cloud.env; cat x.example"'
 
+# The exemption's leading `\.` (ENV_EXEMPT_RE = `\.(example|template|sample)$`) is
+# what keeps a .env/ file whose name merely ENDS in a template word refused.
+# Without the dot, `mysample` and `prod-template` would be exempted. Round 2
+# observability finding 1: dropping the dot left the suite green.
+run_case_msg "user-secrets: .env/mysample blocks (the exemption needs its dot, not just a suffix)" \
+  2 '.env' 'cat .env/mysample'
+run_case_msg "user-secrets: .env/prod-template blocks (the exemption needs its dot, not just a suffix)" \
+  2 '.env' 'cat .env/prod-template'
+
 # =============================================================================
 # Registration assertion: checked against the REAL repo settings.json, not a
 # fixture — that file is what Claude Code actually loads.
