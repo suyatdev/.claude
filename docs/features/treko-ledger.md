@@ -691,6 +691,23 @@ analyzer's reap-timeout line reads `server: job <item> reap timeout <pid>` (it r
 wait, so D15 can pass one in code (today `_analyze` calls `proc.wait` directly at that point); (4) a loop exception
 writes `server: runner error <ExceptionClass>`, the line the loop already writes, and then pauses.
 
+*D54 addendum (2026-11-27, recorded with the green code, commits ce12df0 red and a17174b green; none of it changes a
+name above).* `treko/test_ledger_catchall.py` (383 lines) holds 13 tests. On arrival 11 failed for the intended
+reasons (an exception escaping `run_next`, `JobRunner.paused` missing, the analyzer's stuck reap writing no line, the
+three new names missing, a `None` stage crashing the log line) and 2 passed: D15 at submit time and at job time, which
+guard `run_scan`'s bounded reap that already existed. I re-ran the falsifier for those two on a throwaway copy with the
+reap wait handed no limit: both then fail at the test's 20-second hard limit. The helper reports it ran ten more wrong
+shortcuts on its own copy (a second sweep, a loop that logs but never pauses, a stage always `scan`, and so on); I did
+not re-run those. Green: `ledger_jobs.py` 295 lines, `ledger_failures.py` 74. Whole `treko` directory: 1059 passed, 37
+failed and 14 errors, all in the five Chrome-pin files of D44 (test_sidebar 8, test_theme 12, test_drawer 6,
+test_drawer_sections 11, test_nontext_contrast 14), counted per file from the run's output. Decided by the helper and
+NOT asked, on the card for him to overrule: a report with an empty stage name records `""`, not `None`, as the last
+stage; `_last_stage` has no lock (only the job thread touches it); `item["request"]` is read inside the new `try`, so a
+malformed claimed item is caught too. **Left for later tasks, on purpose:** if the failed item's own `_settle` raises,
+the exception leaves `run_next` and the loop pauses the runner (task 26 decides what a failed ledger write does); D14's
+clauses "the idle predicate turns true once the idle period passes" (task 22) and "the failure's own write is made to
+fail as well" (task 26) are not tested here; a paused runner has no way back until task 26.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
@@ -798,7 +815,7 @@ spec §11; a card decision is written "decision D10", and a round-2 fix "fix F4"
 - [x] 18 — Remove a waiting item, retry a failed one, hide a run (G5) (done, red da5c7fa, green 6302a2f; names D51, one old check deleted, D52, 1268d03; tests in treko/test_ledger_edits.py, not the spec's two named files, which were full; ledger_state.py is 400 of its 400-line cap, ledger_routes.py 313 of 400, server.py unchanged; whole treko directory on the second and third full runs: 1030 passed and 51 stopped at the Chrome version check, the same 51 as D44; the first of the three full runs had one extra failure that was not identified, since only its last lines were kept, and it did not come back; `reanalyze` of a run with no recorded request still answers the 500 internal_error stub until task 28; the `not_retryable` and `already_queued` HTTP rows seed a waiting item, so task 22 must re-seed them)
 - [x] 19 — Run queued analyses one at a time, with progress that moves only on real stages (E4, D7) (done, red 804d849, green b1d3fa9; built before 14 per D44; names D45; tests in treko/test_ledger_runner.py; ledger_jobs.py is 390 of its 400-line cap)
 - [x] 20 — Give each way a job can fail its own code and reason (D12, D13) (done, red e57d9e2, green 41bc54b; names D53 and its two addenda; tests in treko/test_ledger_failures.py, not the spec's two named test files, which are full; ledger_jobs.py is 419 lines, over its 400 cap, and he chose to split it in its own step before task 21 (done, 7d2dead: ledger_jobs.py 273 lines, ledger_children.py 172); whole treko directory: 1046 pass, the only red the 51 Chrome-pin tests of D44)
-- [ ] 21 — Make sure no job can stay "running" for ever (D14, D15)
+- [x] 21 — Make sure no job can stay "running" for ever (D14, D15) (done, red ce12df0, green a17174b; names D54 and its addendum; tests in treko/test_ledger_catchall.py, not the spec's test_ledger_jobs.py, which is full; no sweep of the child registry, he chose to skip it; whole treko directory: 1059 pass, the only red the 51 Chrome-pin tests of D44)
 - [ ] 22 — After a restart, mark the interrupted job and start the waiting ones; polling alone never keeps the server awake (D3, D4, B2)
 - [ ] 23 — Stop cleanly: no new work, every process killed, the job marked interrupted (D6)
 - [ ] 24 — Shut down as tidily on a stop request or a closed terminal as on Ctrl-C (B3)
