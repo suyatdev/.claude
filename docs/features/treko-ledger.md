@@ -664,6 +664,33 @@ tests of D44 the only red). One thing for task 21 onward: the moved code reads i
 that patched `ledger_jobs.REAP_WAIT_SECS` (or any moved name) on the `ledger_jobs` module would no longer reach it.
 None does today (the one `setattr` near it targets `subprocess.Popen`), and D14 and D15 pass the reap wait in code.
 
+**D54 — Task 21 names its public functions and does not build the spec's sweep of leftover helper programs.** (user,
+2026-11-27, asked before task 21's red tests were written; he chose "skip the sweep" over building it as written.)
+Section 5.4's catch-all, step 1, kills every process the job has in the child registry and waits for each. Each place
+that starts a job's helper already does that on any exception, bounded by `REAP_WAIT_SECS`: `run_scan`
+(`ledger_children.py`: its time-limit path and its `except BaseException`) and `_analyze` (`ledger_jobs.py`: its
+`except BaseException`). By the time the catch-all runs, each job process has had its one kill and one bounded reap, so
+a second sweep would find nothing, and for a process stuck past the bound it would log the reap-timeout line a second
+time (D14 wants exactly one). **Not built:** an owner tag on `ChildRegistry` (`launch(..., owner=)`,
+`kill_owned(owner, label)`). This is a deliberate difference from the spec's wording; a later task that adds a launch
+site which does not clean up after itself brings the sweep back. **New names:** in `treko/ledger_failures.py`,
+`INTERNAL_ERROR = "internal_error"` and `internal_failure(error, stage)`, which returns a `JobFailure` with that code,
+that `stage` (or `None`) and, as `cause`, the exception's class name, never its message; in `treko/ledger_jobs.py`,
+`JobRunner.paused()`, True once an exception in the runner loop outside any item has paused the runner (§5.4). Nothing
+resumes a paused runner until task 26 (§5.6 write 1) adds the way back. The catch-all is an `except Exception` in
+`run_next`, after the existing `except JobFailure`, and it covers steps 1 to 6, so the stage-record setup that follows
+the claim moves inside it. The tests go in a NEW file, `treko/test_ledger_catchall.py`: `test_ledger_jobs.py` is 589
+lines and `test_ledger_failures.py` 315 of 400, and task 21's own Files line names the first.
+**Decided by me and NOT asked, on the card for him to overrule:** (1) when the job had reached no stage, `detail.stage`
+is `None` and the log line reads `at none` (the spec says `null` for the detail and is silent on the line); (2) the
+stage an `internal_error` records is the job's last reached one: `scan` once the scan is launched, the stage a
+`treko-progress` report names once one arrives (so a report handler that raises on the `cards` report records `cards`,
+D14), `merge` before the merge and `write` before the write, and `None` before the scan is launched; (3) an
+analyzer's reap-timeout line reads `server: job <item> reap timeout <pid>` (it reads `job analyzer` today,
+`ledger_jobs.py:260` and `:263`), and the wait after an analyzer's time-limit kill goes through the registry's reap
+wait, so D15 can pass one in code (today `_analyze` calls `proc.wait` directly at that point); (4) a loop exception
+writes `server: runner error <ExceptionClass>`, the line the loop already writes, and then pauses.
+
 ## Decisions carried to the relations card (user, 2026-11-02)
 
 Recorded here so the relations card inherits them. **Not in this card's scope.**
