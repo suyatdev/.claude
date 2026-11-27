@@ -31,7 +31,7 @@ from ledger_children import (REAP_WAIT_SECS, SCAN_OK, SCAN_TIMEOUT, _close_strea
 from ledger_children import ChildRegistry, RegistryClosed, ScanResult, build_child_env  # noqa: F401 - re-exported: tests and routes reach these through ledger_jobs
 from ledger_failures import (FIRST_ANALYZER_STAGE, LAUNCH_FAILED, MERGE_FAILED, MERGE_STAGE, SCAN_STAGE,
                              STORE_WRITE_FAILED, WRITE_STAGE, JobFailure, analysis_failure, detail_of,
-                             failure_from_error, job_failure_line, stage_reached)
+                             failure_from_error, internal_failure, job_failure_line, stage_reached)
 
 ANALYZE_PROGRAM = Path(__file__).resolve().with_name("analyze.py")
 
@@ -89,6 +89,8 @@ class JobRunner:
         self._lock = threading.Lock()  # guards the stage record and last_job_end; never held across a call out
         self._stage = None
         self._labels = []  # the families' labels, known once the scan has ended
+        self._last_stage = None  # the last stage the running job reached; the catch-all records it (job thread only)
+        self._paused = False  # set by the loop when an exception escapes outside any item; nothing clears it yet
         self._wake = threading.Event()
 
     # ------------------------------------------------------------------------------ stage record (section 6.2)
@@ -126,16 +128,22 @@ class JobRunner:
     def wake(self):
         self._wake.set()
 
+    def paused(self):
+        return self._paused
+
     def _loop(self):
         while self._wake.wait():
             self._wake.clear()  # before the work, so a wake that arrives during a job is not lost
             if self._registry.closed:
                 return
+            if self._paused:
+                continue
             try:
                 while self.run_next() is not None:
                     pass
-            except Exception as error:  # noqa: BLE001 - one bad job must not end the thread
+            except Exception as error:  # noqa: BLE001 - outside any item: log and stop, so a loop that keeps raising cannot spin
                 _stderr_line("server: runner error %s" % type(error).__name__)
+                self._paused = True
 
     # ----------------------------------------------------------------------------------------------- one job
 
@@ -146,19 +154,27 @@ class JobRunner:
         item = self._claim()
         if item is None:
             return None
-        item_id, request = item["item"], item["request"]
-        with self._lock:
-            self._labels = []
-            self._stage = {"done": 0, "total": None, "label": "scanning " + ledger_state.run_dir(request["directory"])}
+        item_id = item["item"]
+        self._last_stage = None
         try:
+            request = item["request"]
+            with self._lock:
+                self._labels = []
+                self._stage = {"done": 0, "total": None,
+                               "label": "scanning " + ledger_state.run_dir(request["directory"])}
             self._run_job(item_id, request)
         except JobFailure as failure:
+            self._settle(item_id, failure.code, detail_of(failure))
+            _stderr_line(job_failure_line(item_id, failure))
+        except Exception as error:  # noqa: BLE001 - section 5.4's catch-all; KeyboardInterrupt and SystemExit are not Exceptions
+            failure = internal_failure(error, self._last_stage)
             self._settle(item_id, failure.code, detail_of(failure))
             _stderr_line(job_failure_line(item_id, failure))
         return item_id
 
     def _run_job(self, item_id, request):
         """Steps 2 to 6 of section 5.4. Raises JobFailure for each way the job can fail, so the item is settled once."""
+        self._last_stage = SCAN_STAGE
         try:
             result = run_scan(self._registry, request, self._scan_secs, label="job " + item_id,
                               program=self._scan_program)
@@ -171,9 +187,10 @@ class JobRunner:
         families = scan["families"]
         self._labels = [family["label"] for family in families]
         self._set_done(1)
-        parts = [self._analyze(number, family) for number, family in enumerate(families)]
+        parts = [self._analyze(number, family, "job " + item_id) for number, family in enumerate(families)]
         if all("run" not in part for part in parts):
             raise analysis_failure(parts)
+        self._last_stage = MERGE_STAGE
         merge = self._merge
         if merge is None:
             import ledger_merge  # late: it imports analyze, and the server must start without importing the analyzer
@@ -183,6 +200,7 @@ class JobRunner:
         except Exception as error:  # noqa: BLE001 - step 4: any exception the merge raises is merge_failed
             raise JobFailure(MERGE_FAILED, MERGE_STAGE, cause=type(error).__name__) from error
         self._set_done(4 * len(parts) + 2)
+        self._last_stage = WRITE_STAGE
         try:
             (self._emit_run or store.emit_run)(self._store_path, run)
         except Exception as error:  # noqa: BLE001 - step 5: whatever the write raises is store_write_failed
@@ -220,7 +238,7 @@ class JobRunner:
             self.last_job_end = time.monotonic()
             self._stage = None
 
-    def _analyze(self, number, family):
+    def _analyze(self, number, family, label):
         """One family's part for `ledger_merge.merge`: its run, or the failure the run gets a question for."""
         argv = [sys.executable, self._analyze_program, family["root"], "--progress"]
         for card in family["cards"]:
@@ -247,20 +265,24 @@ class JobRunner:
                 line = line.rstrip("\n")
                 if line.startswith(PROGRESS_PREFIX):
                     reported += 1
-                    self.report(line[len(PROGRESS_PREFIX):].strip())
+                    self._last_stage = line[len(PROGRESS_PREFIX):].strip()  # before the handler, so a raising one still counts
+                    self.report(self._last_stage)
                 elif line.strip():
                     last = line
             timer.cancel()
             drain.join()
-            try:
-                proc.wait(timeout=REAP_WAIT_SECS)
-                self._registry.release(proc)
-            except subprocess.TimeoutExpired:
-                expired.set()  # it closed its output but did not exit: the same as running past the bound
-                self._registry.kill_and_reap(proc, "job analyzer")
+            if expired.is_set():
+                self._registry.kill_and_reap(proc, label)  # killed at its limit: the registry's bounded wait, one line
+            else:
+                try:
+                    proc.wait(timeout=REAP_WAIT_SECS)
+                    self._registry.release(proc)
+                except subprocess.TimeoutExpired:
+                    expired.set()  # it closed its output but did not exit: the same as running past the bound
+                    self._registry.kill_and_reap(proc, label)
         except BaseException:
             timer.cancel()
-            self._registry.kill_and_reap(proc, "job analyzer")  # an interrupt must not leave it running
+            self._registry.kill_and_reap(proc, label)  # an interrupt must not leave it running
             raise
         finally:
             _close_streams(proc)

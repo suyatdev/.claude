@@ -12,6 +12,7 @@ LAUNCH_FAILED = "launch_failed"
 ANALYSIS_FAILED = "analysis_failed"
 MERGE_FAILED = "merge_failed"
 STORE_WRITE_FAILED = "store_write_failed"
+INTERNAL_ERROR = "internal_error"
 SCAN_STAGE, MERGE_STAGE, WRITE_STAGE = "scan", "merge", "write"
 ANALYZER_STAGES = ("worktrees", "branches", "cards", "order")  # section 6.1, in the order the analyzer reports them
 FIRST_ANALYZER_STAGE = ANALYZER_STAGES[0]
@@ -42,7 +43,7 @@ def job_failure_line(item_id, failure):
     words = ["server: job", item_id, failure.code]
     if failure.cause is not None:
         words.append(failure.cause)
-    return " ".join(words + ["at", failure.stage])
+    return " ".join(words + ["at", "none" if failure.stage is None else failure.stage])
 
 
 def failure_from_error(code, stage, error, repo=None):
@@ -50,6 +51,12 @@ def failure_from_error(code, stage, error, repo=None):
     other exception has no errno, so its class name is the cause."""
     name = errno_name(error)
     return JobFailure(code, stage, repo=repo, errno=name, cause=name or type(error).__name__)
+
+
+def internal_failure(error, stage):
+    """The failure for an exception nothing else classified: the class name only, never the message, and `stage` is
+    the last one the job reached (None when it had reached none)."""
+    return JobFailure(INTERNAL_ERROR, stage, cause=type(error).__name__)
 
 
 def stage_reached(reported):
